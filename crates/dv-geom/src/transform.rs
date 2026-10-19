@@ -68,6 +68,19 @@ pub fn hit_local(node: &Node, p: Point) -> bool {
     }
 }
 
+/// The four corners of the node's own outline in page space, clockwise from the top-left of
+/// the unrotated shape: the rotated rectangle the user actually sees.
+pub fn world_corners(page: &Page, id: NodeId) -> Option<[Point; 4]> {
+    let g = page.node(id)?.geom;
+    let m = world_affine(page, id);
+    Some([
+        m * Point::new(0.0, 0.0),
+        m * Point::new(g.w, 0.0),
+        m * Point::new(g.w, g.h),
+        m * Point::new(0.0, g.h),
+    ])
+}
+
 /// Union of the bounds of `ids` (unknown ids are skipped).
 pub fn selection_bounds(page: &Page, ids: &[NodeId]) -> Option<Rect> {
     ids.iter()
@@ -136,6 +149,18 @@ mod tests {
         assert!(near(r.x0, -5.0) && near(r.x1, 15.0) && near(r.y0, 5.0) && near(r.y1, 15.0));
     }
 
+    #[test]
+    fn corners_follow_the_rotated_outline() {
+        let mut doc = Document::default();
+        let a = add(&mut doc, None, g(0.0, 0.0, 200.0, 100.0, 90.0));
+        let c = world_corners(doc.page(), a).unwrap();
+        // A 200 x 100 box turned 90 degrees around its center (100, 50).
+        let expect = [(150.0, -50.0), (150.0, 150.0), (50.0, 150.0), (50.0, -50.0)];
+        for (p, (x, y)) in c.iter().zip(expect) {
+            assert!(near(p.x, x) && near(p.y, y), "{p:?} vs ({x}, {y})");
+        }
+        assert!(world_corners(doc.page(), NodeId(99)).is_none());
+    }
     #[test]
     fn page_level_delta_is_unchanged() {
         let mut doc = Document::default();

@@ -75,7 +75,11 @@ pub fn field_value(ed: &Editor, i: usize) -> Option<f64> {
     selection_info(ed)?.fields.get(i)?.2
 }
 
-fn field(cx: &mut Cx, r: Rect, label: &str, value: &str) {
+/// Where the value text starts inside a property field (px from its left edge).
+pub const VALUE_X: f64 = 28.0;
+
+/// The background and label of a property field.
+fn field_box(cx: &mut Cx, r: Rect, label: &str) {
     cx.fill(r, R_FIELD, hex(bg_raised()));
     cx.text(
         label,
@@ -84,10 +88,14 @@ fn field(cx: &mut Cx, r: Rect, label: &str, value: &str) {
         r.y0 + 18.0,
         hex(text_disabled()),
     );
+}
+
+fn field(cx: &mut Cx, r: Rect, label: &str, value: &str) {
+    field_box(cx, r, label);
     cx.text(
         value,
         FONT_UI,
-        r.x0 + 28.0,
+        r.x0 + VALUE_X,
         r.y0 + 18.0,
         hex(text_primary()),
     );
@@ -261,7 +269,13 @@ pub fn right_panel(cx: &mut Cx, r: Rect, ed: &Editor) {
     for (i, (label, value, _)) in info.fields.iter().enumerate() {
         let rect = field_rect(r, i);
         match &ed.prop_edit {
-            Some(edit) if edit.field.index() == i => edit.input.draw(cx, rect, ""),
+            Some(edit) if edit.field.index() == i => {
+                // Same field, same size and font: only the outline shows that it is being typed into.
+                field_box(cx, rect, label);
+                edit.input
+                    .draw_inline(cx, rect, rect.x0 + VALUE_X, rect.y0 + 18.0);
+                cx.stroke(rect, R_FIELD, 1.5, hex(accent()));
+            }
             _ => field(cx, rect, label, value),
         }
     }

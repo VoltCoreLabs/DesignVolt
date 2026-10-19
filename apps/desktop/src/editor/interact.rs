@@ -6,7 +6,7 @@ use dv_ui::input::Mods;
 use kurbo::{Point, Rect, Vec2};
 
 use super::canvas::frame_label_at;
-use super::handles::{Handle, MIN_SIZE, handle_at, rotate_zone_at};
+use super::handles::{Handle, MIN_SIZE, handle_at_quad, rotate_zone_at_quad};
 use super::ops;
 use super::panels;
 use super::state::{Editor, Tool};
@@ -17,6 +17,16 @@ use crate::input::Cursor;
 pub(super) const DRAG_START_PX: f64 = 3.0;
 /// Wheel sensitivity of the zoom (per logical px of scroll).
 const ZOOM_PER_PX: f64 = 0.0016;
+/// A drag of a resize handle of a single rotated shape.
+#[derive(Clone, Copy)]
+pub struct ResizeOneDrag {
+    pub handle: Handle,
+    pub id: NodeId,
+    /// Geometry and page transform of the shape when the drag started.
+    pub geom: Geometry,
+    pub world: kurbo::Affine,
+    pub key: u64,
+}
 
 pub enum Interaction {
     Pan {
@@ -50,6 +60,8 @@ pub enum Interaction {
         snap_to: Vec<Rect>,
         key: u64,
     },
+    /// One rotated shape resized along its own axes.
+    ResizeOne(ResizeOneDrag),
     Rotate {
         /// Rotation center (page space): the middle of the selection.
         center: Point,
@@ -159,17 +171,15 @@ impl Editor {
     }
 
     fn press_select(&mut self, mods: Mods, world: Point, cp: Point) {
-        if let Some(b) = self.selection_screen_bounds()
-            && let Some(h) = handle_at(b, cp)
-        {
-            self.start_resize(h);
-            return;
-        }
-        if let Some(b) = self.selection_screen_bounds()
-            && rotate_zone_at(b, cp)
-        {
-            self.start_rotate(world);
-            return;
+        if let Some(f) = self.selection_frame() {
+            if let Some(h) = handle_at_quad(&f.quad, cp) {
+                self.start_resize(h, &f);
+                return;
+            }
+            if rotate_zone_at_quad(&f.quad, cp) {
+                self.start_rotate(world);
+                return;
+            }
         }
         if let Some(id) = frame_label_at(self, cp) {
             let toggle = self.apply_pick(id, mods.shift);
@@ -252,7 +262,13 @@ impl Editor {
         });
     }
 
-    fn start_resize(&mut self, handle: Handle) {
+    fn start_resize(&mut self, handle: Handle, frame: &super::state::SelFrame) {
+        if let Some(id) = frame.node
+            && frame.rotation.abs() > 0.01
+        {
+            self.start_resize_one(handle, id);
+            return;
+        }
         let (orig, originals) = {
             let s = self.session.borrow();
             let page = s.exec.doc().page();
@@ -275,6 +291,24 @@ impl Editor {
             key,
             snap_to,
         });
+    }
+
+    /// Resizing one rotated shape: the drag works in the shape's own, turned axes.
+    fn start_resize_one(&mut self, handle: Handle, id: NodeId) {
+        let drag = {
+            let s = self.session.borrow();
+            let page = s.exec.doc().page();
+            let Some(n) = page.node(id) else { return };
+            ResizeOneDrag {
+                handle,
+                id,
+                geom: n.geom,
+                world: dv_geom::world_affine(page, id),
+                key: 0,
+            }
+        };
+        let key = self.next_drag_key();
+        self.interaction = Some(Interaction::ResizeOne(ResizeOneDrag { key, ..drag }));
     }
 
     fn start_rotate(&mut self, world: Point) {
@@ -346,7 +380,7 @@ impl Editor {
                 }
                 self.session.borrow_mut().exec.break_merge();
             }
-            Interaction::Resize { .. } | Interaction::Rotate { .. } => {
+            Interaction::Resize { .. } | Interaction::ResizeOne(_) | Interaction::Rotate { .. } => {
                 self.session.borrow_mut().exec.break_merge();
             }
             Interaction::Pan { .. } | Interaction::Marquee { .. } => {}
@@ -425,6 +459,10 @@ impl Editor {
                 Interaction::Pan { .. } => Cursor::Grabbing,
                 Interaction::Move { .. } => Cursor::Move,
                 Interaction::Resize { handle, .. } => handle.cursor(),
+                Interaction::ResizeOne(d) => {
+                    let rotation = self.selection_frame().map_or(0.0, |f| f.rotation);
+                    d.handle.cursor_rotated(rotation)
+                }
                 Interaction::Rotate { .. } => Cursor::Crosshair,
                 Interaction::Create { .. } => Cursor::Crosshair,
                 Interaction::Marquee { .. } => Cursor::Default,
@@ -454,10 +492,10 @@ impl Editor {
             return Cursor::Crosshair;
         }
         let cp = self.canvas_point();
-        match self.selection_screen_bounds() {
-            Some(b) => match handle_at(b, cp) {
-                Some(h) => h.cursor(),
-                None if rotate_zone_at(b, cp) => Cursor::Crosshair,
+        match self.selection_frame() {
+            Some(f) => match handle_at_quad(&f.quad, cp) {
+                Some(h) => h.cursor_rotated(f.rotation),
+                None if rotate_zone_at_quad(&f.quad, cp) => Cursor::Crosshair,
                 None => Cursor::Default,
             },
             None => Cursor::Default,

@@ -52,6 +52,7 @@ impl Handle {
     }
 
     /// Where the handle sits on `r`.
+    #[cfg(test)]
     pub fn position(self, r: Rect) -> Point {
         let x = if self.left() {
             r.x0
@@ -80,6 +81,39 @@ impl Handle {
         }
     }
 
+    /// Where the handle sits on a frame given by its corners (top-left, top-right,
+    /// bottom-right, bottom-left), which may be rotated.
+    pub fn position_on(self, q: &Quad) -> Point {
+        let mid = |a: Point, b: Point| Point::new((a.x + b.x) / 2.0, (a.y + b.y) / 2.0);
+        match self {
+            Handle::Nw => q[0],
+            Handle::Ne => q[1],
+            Handle::Se => q[2],
+            Handle::Sw => q[3],
+            Handle::N => mid(q[0], q[1]),
+            Handle::E => mid(q[1], q[2]),
+            Handle::S => mid(q[2], q[3]),
+            Handle::W => mid(q[3], q[0]),
+        }
+    }
+
+    /// The resize cursor for this handle on a frame turned by `rotation` degrees.
+    pub fn cursor_rotated(self, rotation: f64) -> Cursor {
+        let base = match self {
+            Handle::E | Handle::W => 0.0,
+            Handle::Se | Handle::Nw => 45.0,
+            Handle::S | Handle::N => 90.0,
+            Handle::Sw | Handle::Ne => 135.0,
+        };
+        let axis = (base + rotation).rem_euclid(180.0);
+        match ((axis / 45.0).round() as i64) % 4 {
+            0 => Cursor::ResizeEw,
+            1 => Cursor::ResizeNwse,
+            2 => Cursor::ResizeNs,
+            _ => Cursor::ResizeNesw,
+        }
+    }
+
     pub fn cursor(self) -> Cursor {
         match self {
             Handle::Nw | Handle::Se => Cursor::ResizeNwse,
@@ -90,8 +124,51 @@ impl Handle {
     }
 }
 
+/// Corners of a selection frame in screen space: top-left, top-right, bottom-right,
+/// bottom-left. The frame may be rotated.
+pub type Quad = [Point; 4];
+
+pub fn rect_quad(r: Rect) -> Quad {
+    [
+        Point::new(r.x0, r.y0),
+        Point::new(r.x1, r.y0),
+        Point::new(r.x1, r.y1),
+        Point::new(r.x0, r.y1),
+    ]
+}
+
+/// Whether `p` lies inside the convex quad.
+pub fn inside_quad(q: &Quad, p: Point) -> bool {
+    let side = |a: Point, b: Point| (b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x);
+    let signs: Vec<f64> = (0..4).map(|i| side(q[i], q[(i + 1) % 4])).collect();
+    signs.iter().all(|s| *s >= 0.0) || signs.iter().all(|s| *s <= 0.0)
+}
+
+/// Distance from `p` to the nearest edge of the quad.
+pub fn distance_to_quad(q: &Quad, p: Point) -> f64 {
+    (0..4)
+        .map(|i| {
+            let (a, b) = (q[i], q[(i + 1) % 4]);
+            let (dx, dy) = (b.x - a.x, b.y - a.y);
+            let len2 = dx * dx + dy * dy;
+            let t = if len2 < 1e-12 {
+                0.0
+            } else {
+                (((p.x - a.x) * dx + (p.y - a.y) * dy) / len2).clamp(0.0, 1.0)
+            };
+            (p.x - (a.x + t * dx)).hypot(p.y - (a.y + t * dy))
+        })
+        .fold(f64::MAX, f64::min)
+}
+
 /// The handle under the screen point `p` for a selection box `bounds` (screen space).
+#[cfg(test)]
 pub fn handle_at(bounds: Rect, p: Point) -> Option<Handle> {
+    handle_at_quad(&rect_quad(bounds), p)
+}
+
+/// The handle under the screen point `p` for a (possibly rotated) selection frame `q`.
+pub fn handle_at_quad(q: &Quad, p: Point) -> Option<Handle> {
     let reach = HANDLE_PX / 2.0 + HIT_SLOP;
     // Corners first: on tiny boxes they win over the edge handles.
     let order = [
@@ -105,7 +182,7 @@ pub fn handle_at(bounds: Rect, p: Point) -> Option<Handle> {
         Handle::W,
     ];
     order.into_iter().find(|h| {
-        let c = h.position(bounds);
+        let c = h.position_on(q);
         (p.x - c.x).abs() <= reach && (p.y - c.y).abs() <= reach
     })
 }
@@ -199,20 +276,23 @@ pub fn scale(old: Rect, new: Rect) -> (f64, f64) {
 /// How far outside a corner (px) the pointer still grabs the rotation.
 pub const ROTATE_ZONE_PX: f64 = 24.0;
 
-/// Whether the screen point `p` is just outside a corner of the selection box `b`, where
-/// dragging rotates (as in Figma). Resize handles keep priority: callers test them first.
+/// Whether the screen point `p` is just outside a corner of the selection box `b`.
+#[cfg(test)]
 pub fn rotate_zone_at(b: Rect, p: Point) -> bool {
-    if b.inflate(HANDLE_PX / 2.0, HANDLE_PX / 2.0).contains(p) {
+    rotate_zone_at_quad(&rect_quad(b), p)
+}
+
+/// Whether `p` is just outside a corner of the (possibly rotated) selection frame `q`, where
+/// dragging rotates (as in Figma). Resize handles keep priority: callers test them first.
+pub fn rotate_zone_at_quad(q: &Quad, p: Point) -> bool {
+    if !q
+        .iter()
+        .any(|c| (p.x - c.x).hypot(p.y - c.y) <= ROTATE_ZONE_PX)
+    {
         return false;
     }
-    [
-        Point::new(b.x0, b.y0),
-        Point::new(b.x1, b.y0),
-        Point::new(b.x1, b.y1),
-        Point::new(b.x0, b.y1),
-    ]
-    .iter()
-    .any(|c| (p.x - c.x).hypot(p.y - c.y) <= ROTATE_ZONE_PX)
+    // On or right next to the shape itself the resize handles and edges win.
+    !(inside_quad(q, p) || distance_to_quad(q, p) <= HANDLE_PX / 2.0)
 }
 
 /// Signed angle (degrees, clockwise on screen) that turns the direction `center → from`

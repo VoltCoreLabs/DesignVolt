@@ -88,6 +88,15 @@ impl Entry<'_> {
     }
 }
 
+/// Result of copying a folder: the new folder and every project copied inside it (old id, new id).pub struct FolderCopy {    pub folder: u64,    pub projects: Vec<(u64, u64)>,}
+/// Result of copying a folder: the new folder and every project copied inside it
+/// (old id, new id).
+#[cfg_attr(not(test), allow(dead_code))]
+pub struct FolderCopy {
+    pub folder: u64,
+    pub projects: Vec<(u64, u64)>,
+}
+
 #[derive(Default, Clone)]
 pub struct Library {
     pub projects: Vec<Project>,
@@ -352,14 +361,18 @@ impl Library {
     }
 
     /// Copies a folder with everything inside it (trashed content is not copied).
-    pub fn duplicate_folder(&mut self, id: u64, now: u64, suffix: &str) -> Option<u64> {
+    pub fn duplicate_folder(&mut self, id: u64, now: u64, suffix: &str) -> Option<FolderCopy> {
         let src = self.folder(id)?.clone();
         let name = self.copy_name(&src.name, suffix, |s| {
             self.folders.iter().any(|f| f.name == s)
         });
         let new_id = self.create_folder_named(name, now, src.parent);
-        self.copy_children(id, new_id, now);
-        Some(new_id)
+        let mut projects = Vec::new();
+        self.copy_children(id, new_id, now, &mut projects);
+        Some(FolderCopy {
+            folder: new_id,
+            projects,
+        })
     }
 
     fn create_folder_named(&mut self, name: String, now: u64, parent: Option<u64>) -> u64 {
@@ -374,7 +387,7 @@ impl Library {
         id
     }
 
-    fn copy_children(&mut self, from: u64, to: u64, now: u64) {
+    fn copy_children(&mut self, from: u64, to: u64, now: u64, copies: &mut Vec<(u64, u64)>) {
         let projects: Vec<Project> = self
             .projects
             .iter()
@@ -382,7 +395,8 @@ impl Library {
             .cloned()
             .collect();
         for p in projects {
-            let id = self.next_id();
+            let (old, id) = (p.id, self.next_id());
+            copies.push((old, id));
             self.projects.push(Project {
                 id,
                 folder: Some(to),
@@ -400,7 +414,7 @@ impl Library {
         for f in folders {
             let old = f.id;
             let new = self.create_folder_named(f.name, now, Some(to));
-            self.copy_children(old, new, now);
+            self.copy_children(old, new, now, copies);
         }
     }
 
@@ -449,6 +463,28 @@ impl Library {
                     parent.is_some_and(|p| self.is_inside(p, *f)) && Item::Folder(*f) != *i
                 })
             })
+            .collect()
+    }
+
+    /// Ids of the projects inside `item`: the project itself, or everything in a folder.
+    pub fn projects_in(&self, item: Item) -> Vec<u64> {
+        match item {
+            Item::Project(id) => self.project(id).map(|p| p.id).into_iter().collect(),
+            Item::Folder(id) => self
+                .projects
+                .iter()
+                .filter(|p| p.folder.is_some_and(|f| self.is_inside(f, id)))
+                .map(|p| p.id)
+                .collect(),
+        }
+    }
+
+    /// Ids of all projects in the trash, including those inside trashed folders.
+    pub fn trashed_projects(&self) -> Vec<u64> {
+        self.projects
+            .iter()
+            .filter(|p| self.is_hidden(Item::Project(p.id)))
+            .map(|p| p.id)
             .collect()
     }
 
@@ -803,7 +839,7 @@ mod tests {
         let q = l.create_project(4, "q", Some(b));
         let gone = l.create_project(5, "gone", Some(a));
         l.trash(Item::Project(gone), 9);
-        let copy = l.duplicate_folder(a, 100, "copy").unwrap();
+        let copy = l.duplicate_folder(a, 100, "copy").unwrap().folder;
         assert_ne!(copy, a);
         assert_eq!(l.folder(copy).unwrap().name, "A 1 (copy)");
         // Copy has one project and one sub-folder with one project; the trashed one stays out.
@@ -873,5 +909,47 @@ mod tests {
             assert_eq!(SortKey::from_code(k.code()), Some(k));
         }
         assert_eq!(SortKey::from_code("size"), None);
+    }
+
+    #[test]
+    fn projects_in_lists_everything_below_a_folder() {
+        let mut l = lib();
+        let a = l.create_folder(1, "A", None);
+        let b = l.create_folder(2, "B", Some(a));
+        let p1 = l.create_project(3, "p", Some(a));
+        let p2 = l.create_project(4, "q", Some(b));
+        let other = l.create_project(5, "o", None);
+        let mut inside = l.projects_in(Item::Folder(a));
+        inside.sort();
+        assert_eq!(inside, vec![p1, p2]);
+        assert_eq!(l.projects_in(Item::Project(other)), vec![other]);
+        assert!(l.projects_in(Item::Project(999)).is_empty());
+    }
+
+    #[test]
+    fn trashed_projects_include_those_inside_trashed_folders() {
+        let mut l = lib();
+        let f = l.create_folder(1, "F", None);
+        let inside = l.create_project(2, "in", Some(f));
+        let loose = l.create_project(3, "loose", None);
+        let keep = l.create_project(4, "keep", None);
+        l.trash(Item::Folder(f), 5);
+        l.trash(Item::Project(loose), 6);
+        let mut t = l.trashed_projects();
+        t.sort();
+        assert_eq!(t, vec![inside, loose]);
+        assert!(!t.contains(&keep));
+    }
+
+    #[test]
+    fn duplicating_a_folder_reports_the_copied_projects() {
+        let mut l = lib();
+        let f = l.create_folder(1, "F", None);
+        let p = l.create_project(2, "p", Some(f));
+        let copy = l.duplicate_folder(f, 9, "copy").unwrap();
+        assert_eq!(copy.projects.len(), 1);
+        assert_eq!(copy.projects[0].0, p);
+        assert_ne!(copy.projects[0].1, p);
+        assert!(l.project(copy.projects[0].1).is_some());
     }
 }

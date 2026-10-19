@@ -3,8 +3,10 @@
 
 #![forbid(unsafe_code)]
 
+mod grid;
 mod paint;
 mod viewport;
 
+pub use grid::{GridDots, grid_dots, grid_step, paint_dots};
 pub use paint::{PaintStats, paint_page};
 pub use viewport::{MAX_ZOOM, MIN_ZOOM, Viewport};

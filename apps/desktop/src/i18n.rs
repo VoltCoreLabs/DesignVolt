@@ -93,6 +93,7 @@ pub enum Msg {
     ThemeDark,
     SettingsLanguage,
     Saved,
+    Unsaved,
     // Editor
     Share,
     MenuFile,
@@ -184,6 +185,7 @@ pub fn tr(m: Msg) -> &'static str {
         Msg::ThemeDark => pick("Тёмная", "Dark"),
         Msg::SettingsLanguage => pick("Язык", "Language"),
         Msg::Saved => pick("Сохранено", "Saved"),
+        Msg::Unsaved => pick("Не сохранено", "Unsaved"),
         Msg::Share => pick("Поделиться", "Share"),
         Msg::MenuFile => pick("Файл", "File"),
         Msg::MenuEdit => pick("Правка", "Edit"),

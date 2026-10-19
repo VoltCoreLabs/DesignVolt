@@ -133,12 +133,38 @@ order={order}
         }
     }
 
+    /// Folder with the document files, one `<project id>.dvd` per project.
+    pub fn documents_dir(&self) -> PathBuf {
+        self.dir.join("documents")
+    }
+
+    pub fn document_path(&self, id: u64) -> PathBuf {
+        self.documents_dir().join(format!("{id}.dvd"))
+    }
+
+    /// Copies the saved document of project `from` for project `to` (if `from` has one).
+    pub fn copy_document(&self, from: u64, to: u64) {
+        let (src, dst) = (self.document_path(from), self.document_path(to));
+        if src.exists() {
+            let _ = fs::create_dir_all(self.documents_dir());
+            if let Err(e) = fs::copy(&src, &dst) {
+                eprintln!("could not copy document {from} to {to}: {e}");
+            }
+        }
+    }
+
+    /// Removes the saved document of a deleted project.
+    pub fn delete_document(&self, id: u64) {
+        let _ = fs::remove_file(self.document_path(id));
+    }
+
     pub fn set_name(&mut self, raw: &str) {
         self.name = Some(sanitize_name(raw));
     }
 }
 
-fn write_atomic(path: &Path, content: &str) -> std::io::Result<()> {
+/// Writes a file through a temporary file, so a crash never leaves it half written.
+pub fn write_atomic(path: &Path, content: &str) -> std::io::Result<()> {
     let tmp = path.with_extension("tmp");
     fs::write(&tmp, content)?;
     fs::rename(&tmp, path)
@@ -263,6 +289,26 @@ mod tests {
         let s = Store::load(&dir);
         assert_eq!(s.sort_key, SortKey::Modified);
         assert!(!s.sort_asc);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn documents_are_copied_and_deleted_by_project_id() {
+        let dir = temp_dir("docs");
+        let s = Store::blank(&dir);
+        fs::create_dir_all(s.documents_dir()).unwrap();
+        fs::write(s.document_path(1), "content").unwrap();
+        s.copy_document(1, 2);
+        assert_eq!(fs::read_to_string(s.document_path(2)).unwrap(), "content");
+        s.copy_document(99, 3);
+        assert!(
+            !s.document_path(3).exists(),
+            "nothing to copy from a missing document"
+        );
+        s.delete_document(1);
+        assert!(!s.document_path(1).exists());
+        assert!(s.document_path(2).exists());
+        s.delete_document(1);
         let _ = fs::remove_dir_all(&dir);
     }
 }

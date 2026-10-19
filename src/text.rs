@@ -1,23 +1,64 @@
 //! Single-line text shaping on top of skrifa (no kerning/ligatures yet).
+//!
+//! The font is a variable font with a `wght` axis. Text of at least `STRONG_FROM` px is drawn
+//! semibold (headings), smaller text regular; `layout` and `coords` apply the same rule, so the
+//! measured widths always match what is drawn.
 
 use std::sync::Arc;
 
-use skrifa::instance::{LocationRef, Size};
+use skrifa::instance::{Location, Size};
 use skrifa::{FontRef, MetadataProvider};
-use vello::Glyph;
 use vello::peniko::{Blob, FontData};
+use vello::{Glyph, NormalizedCoord};
+
+pub const REGULAR: f32 = 400.0;
+pub const STRONG: f32 = 600.0;
+/// Text at least this big (px) is drawn in the strong weight.
+pub const STRONG_FROM: f32 = 17.0;
 
 pub struct Font {
     pub data: FontData,
+    regular: Location,
+    strong: Location,
+    regular_coords: Vec<NormalizedCoord>,
+    strong_coords: Vec<NormalizedCoord>,
+}
+
+fn coords_of(location: &Location) -> Vec<NormalizedCoord> {
+    location.coords().iter().map(|c| c.to_bits()).collect()
 }
 
 impl Font {
     pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
-        FontRef::from_index(bytes, 0).ok()?;
+        let font = FontRef::from_index(bytes, 0).ok()?;
+        let at = |w: f32| font.axes().location([("wght", w)]);
+        let (regular, strong) = (at(REGULAR), at(STRONG));
+        let (regular_coords, strong_coords) = (coords_of(&regular), coords_of(&strong));
         let blob = Blob::new(Arc::new(bytes.to_vec()));
         Some(Self {
             data: FontData::new(blob, 0),
+            regular,
+            strong,
+            regular_coords,
+            strong_coords,
         })
+    }
+
+    fn location(&self, size: f32) -> &Location {
+        if size >= STRONG_FROM {
+            &self.strong
+        } else {
+            &self.regular
+        }
+    }
+
+    /// Variable-font coordinates for drawing text of `size` px.
+    pub fn coords(&self, size: f32) -> &[NormalizedCoord] {
+        if size >= STRONG_FROM {
+            &self.strong_coords
+        } else {
+            &self.regular_coords
+        }
     }
 
     /// Returns positioned glyphs (baseline at y = 0) and the total advance width.
@@ -25,11 +66,10 @@ impl Font {
         let Ok(font) = FontRef::from_index(self.data.data.data(), 0) else {
             return (Vec::new(), 0.0);
         };
+        let location = self.location(size);
         let charmap = font.charmap();
-        let metrics = font.glyph_metrics(Size::unscaled(), LocationRef::default());
-        let upem = font
-            .metrics(Size::unscaled(), LocationRef::default())
-            .units_per_em as f32;
+        let metrics = font.glyph_metrics(Size::unscaled(), location);
+        let upem = font.metrics(Size::unscaled(), location).units_per_em as f32;
         let scale = size / upem;
         let mut x = 0.0;
         let mut glyphs = Vec::new();
@@ -74,7 +114,7 @@ mod tests {
     use super::*;
 
     fn font() -> Font {
-        Font::from_bytes(include_bytes!("../assets/fonts/Inter.ttf")).expect("font")
+        Font::from_bytes(include_bytes!("../assets/fonts/GolosText.ttf")).expect("font")
     }
 
     #[test]
@@ -90,6 +130,18 @@ mod tests {
         assert_eq!(lines.join(" "), text);
     }
 
+    #[test]
+    fn golos_covers_cyrillic_and_the_strong_weight_is_wider() {
+        let f = font();
+        let (glyphs, _) = f.layout("Привет, мир! ёЁ", 13.0);
+        assert!(glyphs.iter().all(|g| g.id != 0), "missing Cyrillic glyph");
+        let per_px = |size: f32| f.layout("Все проекты", size).1 / size;
+        assert!(
+            per_px(20.0) > per_px(16.0),
+            "semibold text should be wider per px"
+        );
+        assert_ne!(f.coords(20.0), f.coords(13.0));
+    }
     #[test]
     fn wrap_handles_empty_and_long_words() {
         let f = font();

@@ -61,6 +61,7 @@ impl Cx<'_> {
         self.scene
             .draw_glyphs(&self.font.data)
             .font_size(size)
+            .normalized_coords(self.font.coords(size))
             .transform(self.xf * Affine::translate((x, y)))
             .brush(c)
             .draw(Fill::NonZero, glyphs.into_iter());

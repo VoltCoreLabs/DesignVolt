@@ -7,6 +7,8 @@ mod editor;
 mod i18n;
 mod icons;
 mod input;
+mod library;
+mod library_io;
 mod screens;
 mod store;
 mod text;

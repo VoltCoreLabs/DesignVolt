@@ -24,6 +24,15 @@ pub enum Icon {
     Sun,
     Moon,
     Gear,
+    Star,
+    StarFill,
+    Folder,
+    FolderPlus,
+    Pencil,
+    Trash,
+    Undo,
+    CaretRight,
+    OpenOut,
 }
 
 const SOURCES: &[(Icon, &str)] = &[
@@ -97,6 +106,42 @@ const SOURCES: &[(Icon, &str)] = &[
     (
         Icon::Gear,
         include_str!("../assets/icons/phosphor/gear.svg"),
+    ),
+    (
+        Icon::Star,
+        include_str!("../assets/icons/phosphor/star.svg"),
+    ),
+    (
+        Icon::StarFill,
+        include_str!("../assets/icons/phosphor/star-fill.svg"),
+    ),
+    (
+        Icon::Folder,
+        include_str!("../assets/icons/phosphor/folder-simple.svg"),
+    ),
+    (
+        Icon::FolderPlus,
+        include_str!("../assets/icons/phosphor/folder-simple-plus.svg"),
+    ),
+    (
+        Icon::Pencil,
+        include_str!("../assets/icons/phosphor/pencil-simple.svg"),
+    ),
+    (
+        Icon::Trash,
+        include_str!("../assets/icons/phosphor/trash.svg"),
+    ),
+    (
+        Icon::Undo,
+        include_str!("../assets/icons/phosphor/arrow-counter-clockwise.svg"),
+    ),
+    (
+        Icon::CaretRight,
+        include_str!("../assets/icons/phosphor/caret-right.svg"),
+    ),
+    (
+        Icon::OpenOut,
+        include_str!("../assets/icons/phosphor/arrow-square-out.svg"),
     ),
 ];
 

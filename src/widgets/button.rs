@@ -41,6 +41,23 @@ impl Button {
     }
 
     pub fn draw(&self, cx: &mut Cx, r: Rect, label: &str, icon: Option<Icon>, enabled: bool) {
+        self.draw_styled(cx, r, label, icon, enabled, false);
+    }
+
+    /// Quiet button: raised background and border instead of the accent gradient.
+    pub fn draw_secondary(&self, cx: &mut Cx, r: Rect, label: &str, icon: Option<Icon>) {
+        self.draw_styled(cx, r, label, icon, true, true);
+    }
+
+    fn draw_styled(
+        &self,
+        cx: &mut Cx,
+        r: Rect,
+        label: &str,
+        icon: Option<Icon>,
+        enabled: bool,
+        secondary: bool,
+    ) {
         let (h, p) = if enabled {
             (self.hover.pos as f64, self.press.pos as f64)
         } else {
@@ -55,22 +72,27 @@ impl Button {
             * Affine::translate(Vec2::new(-c.x, -c.y));
 
         let a = if enabled { 1.0 } else { 0.35 };
-        if enabled {
-            cx.shadow(
-                r,
-                R_BUTTON,
-                alpha(accent(), (0.30 + 0.30 * h as f32).min(0.7)),
-                14.0 + 8.0 * h,
-                6.0,
-            );
+        if secondary {
+            cx.fill(r, R_BUTTON, hex(bg_raised()));
+            cx.fill(r, R_BUTTON, alpha(accent(), 0.10 * h as f32));
+            cx.stroke(r, R_BUTTON, 1.0, alpha(overlay(), 0.12 + 0.2 * h as f32));
+        } else {
+            if enabled {
+                let glow = alpha(accent(), (0.30 + 0.30 * h as f32).min(0.7));
+                cx.shadow(r, R_BUTTON, glow, 14.0 + 8.0 * h, 6.0);
+            }
+            cx.fill_grad(r, R_BUTTON, alpha(accent_from(), a), alpha(accent_to(), a));
+            cx.fill(r, R_BUTTON, alpha(WHITE, 0.10 * h as f32));
         }
-        cx.fill_grad(r, R_BUTTON, alpha(accent_from(), a), alpha(accent_to(), a));
-        cx.fill(r, R_BUTTON, alpha(WHITE, 0.10 * h as f32));
 
         let text_w = cx.text_width(label, FONT_MD);
         let icon_w = if icon.is_some() { 22.0 } else { 0.0 };
         let mut x = r.center().x - (text_w + icon_w) / 2.0;
-        let color = alpha(WHITE, a);
+        let color = if secondary {
+            hex(text_primary())
+        } else {
+            alpha(WHITE, a)
+        };
         if let Some(i) = icon {
             cx.icon(i, x, r.center().y - 8.0, 16.0, color);
             x += icon_w;

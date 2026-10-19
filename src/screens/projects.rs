@@ -1,16 +1,18 @@
-//! Projects screen: state, input handling and layout. Painting lives in `projects_paint.rs`.
+//! Projects screen: state, layout and actions.
+//! Input handling lives in `projects_input.rs`, painting in `projects_paint.rs`,
+//! the context menu in `projects_menu.rs`.
 
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use vello::Scene;
 use vello::kurbo::{Point, Rect};
 
 use crate::anim::Spring;
 use crate::i18n::{Msg, tr};
-use crate::input::{Key, Mods, Screen, SharedAssets, Transition, Viewport};
-use crate::store::{SortKey, Store, now_secs};
+use crate::input::{SharedAssets, Transition, Viewport};
+use crate::library::{Item, Location, SortKey};
+use crate::store::{Store, now_secs};
 use crate::theme::motion::*;
 use crate::widgets::button::Button;
 use crate::widgets::text_input::TextInput;
@@ -20,11 +22,18 @@ pub const CARD_W: f64 = 224.0;
 pub const CARD_H: f64 = 180.0;
 pub const CARD_GAP: f64 = 20.0;
 pub const MARGIN: f64 = 32.0;
-pub const GRID_TOP: f64 = 112.0;
+pub const GRID_TOP: f64 = 148.0;
+pub const DRAG_THRESHOLD: f64 = 6.0;
 pub const SORT_OPTIONS: [(SortKey, Msg); 3] = [
     (SortKey::Name, Msg::SortName),
     (SortKey::Modified, Msg::SortModified),
     (SortKey::Created, Msg::SortCreated),
+];
+pub const NAV: [(Location, Msg); 4] = [
+    (Location::All(None), Msg::NavAll),
+    (Location::Recent, Msg::NavRecent),
+    (Location::Favorites, Msg::NavFavorites),
+    (Location::Trash, Msg::NavTrash),
 ];
 
 pub struct CardAnim {
@@ -33,93 +42,134 @@ pub struct CardAnim {
     pub age: f32,
 }
 
+pub struct Press {
+    pub item: Item,
+    pub at: Point,
+}
+
+pub struct MenuState {
+    pub item: Item,
+    pub pos: Point,
+    /// "Delete forever" was clicked once and waits for the second click.
+    pub confirm: bool,
+}
+
+pub struct Crumb {
+    pub folder: Option<u64>,
+    pub label: String,
+    pub rect: Rect,
+}
+
 pub struct Projects {
     pub assets: SharedAssets,
     pub store: Rc<RefCell<Store>>,
     pub vp: Viewport,
     pub time: f32,
-    pub mouse: (f64, f64),
+    pub mouse: Point,
     pub search: TextInput,
-    pub new_button: Button,
+    pub new_project: Button,
+    pub new_folder: Button,
     pub sort_key: SortKey,
     pub ascending: bool,
-    pub menu_open: bool,
+    pub sort_open: bool,
+    pub loc: Location,
     pub scroll: Spring,
-    pub cards: HashMap<u64, CardAnim>,
-    next: Option<Transition>,
+    pub cards: HashMap<Item, CardAnim>,
+    pub press: Option<Press>,
+    pub drag: Option<Item>,
+    pub menu: Option<MenuState>,
+    pub rename: Option<(Item, TextInput)>,
+    pub next: Option<Transition>,
 }
 
 pub struct Layout {
-    pub new_button: Rect,
-    pub sort_button: Rect,
+    pub new_project: Rect,
+    pub new_folder: Rect,
     pub search: Rect,
-    pub menu: Rect,
+    pub sort_button: Rect,
+    pub sort_menu: Rect,
+}
+
+pub fn hover_spring() -> Spring {
+    Spring::new(0.0, HOVER_STIFFNESS, HOVER_DAMPING)
 }
 
 impl Projects {
     pub fn new(assets: SharedAssets, store: Rc<RefCell<Store>>) -> Self {
-        let cards = store
-            .borrow()
-            .projects
-            .iter()
-            .map(|p| {
-                (
-                    p.id,
-                    CardAnim {
-                        hover: hover_spring(),
-                        age: 10.0,
-                    },
-                )
-            })
-            .collect();
+        let cards = {
+            let s = store.borrow();
+            let projects = s.lib.projects.iter().map(|p| Item::Project(p.id));
+            let folders = s.lib.folders.iter().map(|f| Item::Folder(f.id));
+            projects
+                .chain(folders)
+                .map(|i| {
+                    (
+                        i,
+                        CardAnim {
+                            hover: hover_spring(),
+                            age: 10.0,
+                        },
+                    )
+                })
+                .collect()
+        };
         Self {
             assets,
             store,
             vp: Viewport::new(),
             time: 0.0,
-            mouse: (-1.0, -1.0),
+            mouse: Point::new(-1.0, -1.0),
             search: TextInput::new(40, Msg::SearchProjects, false),
-            new_button: Button::new(),
+            new_project: Button::new(),
+            new_folder: Button::new(),
             sort_key: SortKey::Modified,
             ascending: false,
-            menu_open: false,
+            sort_open: false,
+            loc: Location::All(None),
             scroll: Spring::new(0.0, MOVE_STIFFNESS, MOVE_DAMPING),
             cards,
+            press: None,
+            drag: None,
+            menu: None,
+            rename: None,
             next: None,
         }
     }
 
     pub fn layout(&self) -> Layout {
         let end = self.vp.w - MARGIN;
-        let new_button = Rect::new(end - 148.0, 26.0, end, 62.0);
-        let sort_button = Rect::new(
-            new_button.x0 - 12.0 - 190.0,
-            26.0,
-            new_button.x0 - 12.0,
-            62.0,
+        let new_project = Rect::new(end - 168.0, 24.0, end, 60.0);
+        let new_folder = Rect::new(
+            new_project.x0 - 12.0 - 156.0,
+            24.0,
+            new_project.x0 - 12.0,
+            60.0,
         );
-        let search = Rect::new(
-            sort_button.x0 - 12.0 - 240.0,
-            26.0,
-            sort_button.x0 - 12.0,
-            62.0,
-        );
-        let menu = Rect::new(
+        let x = SIDEBAR_W + MARGIN;
+        let search = Rect::new(x, 76.0, x + 260.0, 112.0);
+        let sort_button = Rect::new(search.x1 + 12.0, 76.0, search.x1 + 12.0 + 190.0, 112.0);
+        let sort_menu = Rect::new(
             sort_button.x0,
-            68.0,
+            118.0,
             sort_button.x1,
-            68.0 + 8.0 + 3.0 * 32.0 + 8.0,
+            118.0 + 8.0 + 3.0 * 32.0 + 8.0,
         );
         Layout {
-            new_button,
-            sort_button,
+            new_project,
+            new_folder,
             search,
-            menu,
+            sort_button,
+            sort_menu,
         }
     }
 
-    pub fn at(&self, r: Rect) -> bool {
-        r.contains(Point::new(self.mouse.0, self.mouse.1))
+    pub fn nav_row(&self, i: usize) -> Rect {
+        Rect::new(
+            12.0,
+            24.0 + i as f64 * 36.0,
+            SIDEBAR_W - 12.0,
+            24.0 + i as f64 * 36.0 + 32.0,
+        )
     }
 
     /// Profile chip at the bottom of the sidebar; opens settings.
@@ -127,12 +177,55 @@ impl Projects {
         Rect::new(12.0, self.vp.h - 68.0, SIDEBAR_W - 12.0, self.vp.h - 12.0)
     }
 
-    pub fn columns(&self) -> usize {
-        let room = self.vp.w - SIDEBAR_W - 2.0 * MARGIN + CARD_GAP;
-        ((room / (CARD_W + CARD_GAP)).floor() as usize).max(1)
+    pub fn at(&self, r: Rect) -> bool {
+        r.contains(self.mouse)
     }
 
-    /// Card rectangle for the `i`-th visible project (before scrolling).
+    /// Folder shown now (`None` = root or a non-folder location).
+    pub fn current_folder(&self) -> Option<u64> {
+        match self.loc {
+            Location::All(f) => f,
+            _ => None,
+        }
+    }
+
+    /// Breadcrumb segments (only in "All projects"): root, then each nested folder.
+    pub fn crumbs(&self) -> Vec<Crumb> {
+        let Location::All(folder) = self.loc else {
+            return Vec::new();
+        };
+        let store = self.store.borrow();
+        let mut parts: Vec<(Option<u64>, String)> = vec![(None, tr(Msg::NavAll).to_string())];
+        for f in store.lib.breadcrumb(folder) {
+            parts.push((Some(f.id), short(&f.name)));
+        }
+        let mut x = SIDEBAR_W + MARGIN;
+        let mut out = Vec::new();
+        for (i, (id, label)) in parts.into_iter().enumerate() {
+            if i > 0 {
+                x += 22.0;
+            }
+            let w = self.assets.font.layout(&label, 20.0).1 as f64;
+            out.push(Crumb {
+                folder: id,
+                rect: Rect::new(x - 6.0, 22.0, x + w + 6.0, 62.0),
+                label,
+            });
+            x += w;
+        }
+        out
+    }
+
+    pub fn items(&self) -> Vec<Item> {
+        let s = self.store.borrow();
+        s.lib
+            .view(self.loc, self.sort_key, self.ascending, self.search.text())
+            .iter()
+            .map(|e| e.item())
+            .collect()
+    }
+
+    /// Card rectangle for the `i`-th visible item (with scrolling applied).
     pub fn card_rect(&self, i: usize) -> Rect {
         let cols = self.columns();
         let x = SIDEBAR_W + MARGIN + (i % cols) as f64 * (CARD_W + CARD_GAP);
@@ -140,41 +233,83 @@ impl Projects {
         Rect::new(x, y, x + CARD_W, y + CARD_H)
     }
 
-    pub fn visible_ids(&self) -> Vec<u64> {
-        let s = self.store.borrow();
-        s.view(self.sort_key, self.ascending, self.search.text())
-            .iter()
-            .map(|p| p.id)
-            .collect()
+    pub fn columns(&self) -> usize {
+        let room = self.vp.w - SIDEBAR_W - 2.0 * MARGIN + CARD_GAP;
+        ((room / (CARD_W + CARD_GAP)).floor() as usize).max(1)
     }
 
-    fn max_scroll(&self, count: usize) -> f32 {
+    pub fn max_scroll(&self, count: usize) -> f32 {
         let rows = count.div_ceil(self.columns()) as f64;
-        let content = GRID_TOP + rows * (CARD_H + CARD_GAP);
-        (content - self.vp.h).max(0.0) as f32
+        ((GRID_TOP + rows * (CARD_H + CARD_GAP)) - self.vp.h).max(0.0) as f32
     }
 
-    fn hovered_card(&self) -> Option<u64> {
-        if self.menu_open || self.mouse.1 < GRID_TOP - CARD_GAP {
+    pub fn item_at(&self, p: Point) -> Option<Item> {
+        if p.y < GRID_TOP - CARD_GAP / 2.0 || p.x < SIDEBAR_W {
             return None;
         }
-        let ids = self.visible_ids();
-        ids.iter()
+        self.items()
+            .into_iter()
             .enumerate()
-            .find(|(i, _)| self.at(self.card_rect(*i)))
-            .map(|(_, id)| *id)
+            .find(|(i, _)| self.card_rect(*i).contains(p))
+            .map(|(_, item)| item)
     }
 
-    fn create_project(&mut self) {
-        let id = self
-            .store
-            .borrow_mut()
-            .create_project(now_secs(), tr(Msg::UntitledProject));
-        if let Err(e) = self.store.borrow().save() {
-            eprintln!("could not save projects: {e}");
+    pub fn card_of(&self, item: Item) -> Option<Rect> {
+        self.items()
+            .iter()
+            .position(|i| *i == item)
+            .map(|i| self.card_rect(i))
+    }
+
+    /// Where the dragged item would land: a folder card or a breadcrumb segment.
+    pub fn drop_target(&self, item: Item) -> Option<Option<u64>> {
+        let store = self.store.borrow();
+        for c in self.crumbs() {
+            if c.rect.contains(self.mouse) && store.lib.can_move(item, c.folder) {
+                return Some(c.folder);
+            }
         }
+        if let Some(Item::Folder(id)) = self.item_at(self.mouse)
+            && store.lib.can_move(item, Some(id))
+        {
+            return Some(Some(id));
+        }
+        None
+    }
+
+    fn save(&self) {
+        self.store.borrow().save_logged();
+    }
+
+    pub fn open_item(&mut self, item: Item) {
+        match item {
+            Item::Project(id) => {
+                self.store.borrow_mut().lib.touch(id, now_secs());
+                self.save();
+                self.next = Some(Transition::OpenProject(id));
+            }
+            Item::Folder(id) => self.go(Location::All(Some(id))),
+        }
+    }
+
+    pub fn go(&mut self, loc: Location) {
+        self.loc = loc;
+        self.scroll.pos = 0.0;
+        self.scroll.target = 0.0;
+        self.sort_open = false;
+        self.menu = None;
+    }
+
+    pub fn create_project(&mut self) {
+        let folder = self.current_folder();
+        let id = self.store.borrow_mut().lib.create_project(
+            now_secs(),
+            tr(Msg::UntitledProject),
+            folder,
+        );
+        self.save();
         self.cards.insert(
-            id,
+            Item::Project(id),
             CardAnim {
                 hover: hover_spring(),
                 age: 0.0,
@@ -186,124 +321,92 @@ impl Projects {
         self.scroll.target = 0.0;
     }
 
-    fn pick_sort(&mut self, key: SortKey) {
+    pub fn create_folder(&mut self) {
+        let parent = self.current_folder();
+        let id =
+            self.store
+                .borrow_mut()
+                .lib
+                .create_folder(now_secs(), tr(Msg::UntitledFolder), parent);
+        self.save();
+        self.cards.insert(
+            Item::Folder(id),
+            CardAnim {
+                hover: hover_spring(),
+                age: 0.0,
+            },
+        );
+        self.search.focused = false;
+        self.scroll.target = 0.0;
+        self.start_rename(Item::Folder(id));
+    }
+
+    pub fn start_rename(&mut self, item: Item) {
+        let current = self.store.borrow().lib.name_of(item).map(str::to_string);
+        let Some(name) = current else { return };
+        let mut input = TextInput::new(crate::library::NAME_MAX, Msg::UntitledProject, false);
+        input.insert(&name);
+        input.select_all();
+        input.focused = true;
+        self.rename = Some((item, input));
+        self.menu = None;
+    }
+
+    pub fn commit_rename(&mut self) {
+        let Some((item, input)) = self.rename.take() else {
+            return;
+        };
+        let changed = self.store.borrow_mut().lib.rename(item, input.text());
+        if changed {
+            self.save();
+        }
+    }
+
+    pub fn drop_item(&mut self, item: Item, target: Option<u64>) {
+        if self.store.borrow_mut().lib.move_to(item, target) {
+            self.save();
+        }
+    }
+
+    pub fn toggle_favorite(&mut self, id: u64) {
+        self.store.borrow_mut().lib.toggle_favorite(id);
+        self.save();
+    }
+
+    pub fn trash(&mut self, item: Item) {
+        self.store.borrow_mut().lib.trash(item, now_secs());
+        self.save();
+    }
+
+    pub fn restore(&mut self, item: Item) {
+        self.store.borrow_mut().lib.restore(item);
+        self.save();
+    }
+
+    pub fn purge(&mut self, item: Item) {
+        self.store.borrow_mut().lib.purge(item);
+        self.cards.remove(&item);
+        self.save();
+    }
+
+    pub fn pick_sort(&mut self, key: SortKey) {
         if key == self.sort_key {
             self.ascending = !self.ascending;
         } else {
             self.sort_key = key;
             self.ascending = key == SortKey::Name;
         }
-        self.menu_open = false;
+        self.sort_open = false;
         self.scroll.target = 0.0;
     }
 }
 
-fn hover_spring() -> Spring {
-    Spring::new(0.0, HOVER_STIFFNESS, HOVER_DAMPING)
-}
-
-impl Screen for Projects {
-    fn set_viewport(&mut self, w: u32, h: u32, scale: f64) {
-        self.vp.set(w, h, scale);
+/// Cuts long names for the breadcrumb.
+fn short(name: &str) -> String {
+    const MAX: usize = 18;
+    if name.chars().count() <= MAX {
+        return name.to_string();
     }
-
-    fn update(&mut self, dt: f32) -> bool {
-        self.time += dt;
-        let l = self.layout();
-        let hovered = self.hovered_card();
-        let mut busy = self.search.update(dt);
-        busy |= self.new_button.update(dt, self.at(l.new_button));
-        for (id, c) in self.cards.iter_mut() {
-            c.age += dt;
-            c.hover.target = if hovered == Some(*id) { 1.0 } else { 0.0 };
-            c.hover.step(dt);
-            busy |= !c.hover.settled() || c.age < PANEL_INTRO + 0.1;
-        }
-        let max = self.max_scroll(self.visible_ids().len());
-        self.scroll.target = self.scroll.target.clamp(0.0, max);
-        self.scroll.step(dt);
-        busy | !self.scroll.settled() | (self.time < PANEL_INTRO + 4.0 * STAGGER)
-    }
-
-    fn draw(&self, scene: &mut Scene) {
-        self.paint(scene);
-    }
-
-    fn mouse_moved(&mut self, x: f64, y: f64) {
-        self.mouse = (x / self.vp.scale, y / self.vp.scale);
-        let left = self.layout().search.x0;
-        self.search.drag_to(&self.assets.font, self.mouse.0 - left);
-    }
-
-    fn mouse_up(&mut self) {
-        self.search.dragging = false;
-    }
-
-    fn mouse_left(&mut self) {
-        self.mouse = (-1.0, -1.0);
-    }
-
-    fn click(&mut self, mods: Mods) {
-        let l = self.layout();
-        if self.menu_open {
-            let row = (self.mouse.1 - l.menu.y0 - 8.0) / 32.0;
-            if self.at(l.menu) && (0.0..3.0).contains(&row) {
-                self.pick_sort(SORT_OPTIONS[row as usize].0);
-            } else {
-                self.menu_open = false;
-            }
-            return;
-        }
-        if self.at(self.profile_chip()) {
-            self.next = Some(Transition::OpenSettings);
-        } else if self.at(l.new_button) {
-            self.new_button.press();
-            self.create_project();
-        } else if self.at(l.sort_button) {
-            self.menu_open = true;
-            self.search.focused = false;
-        } else if self.at(l.search) {
-            self.search
-                .press_at(&self.assets.font, self.mouse.0 - l.search.x0, mods.shift);
-        } else if let Some(id) = self.hovered_card() {
-            self.next = Some(Transition::OpenProject(id));
-        } else {
-            self.search.focused = false;
-        }
-    }
-
-    fn scroll(&mut self, dy: f64) {
-        self.scroll.target -= dy as f32;
-    }
-
-    fn key(&mut self, key: Key, mods: Mods) {
-        if key == Key::Escape {
-            self.menu_open = false;
-            self.search.focused = false;
-        } else if self.search.focused {
-            self.search.key(key, mods);
-            self.scroll.target = 0.0;
-        }
-    }
-
-    fn text(&mut self, s: &str) {
-        if self.search.focused {
-            self.search.insert(s);
-            self.scroll.target = 0.0;
-        }
-    }
-
-    fn pointer_hand(&self) -> bool {
-        let l = self.layout();
-        self.at(l.new_button)
-            || self.at(self.profile_chip())
-            || self.at(l.sort_button)
-            || self.at(l.search)
-            || (self.menu_open && self.at(l.menu))
-            || self.hovered_card().is_some()
-    }
-
-    fn take_transition(&mut self) -> Option<Transition> {
-        self.next.take()
-    }
+    let cut: String = name.chars().take(MAX - 1).collect();
+    format!("{cut}…")
 }

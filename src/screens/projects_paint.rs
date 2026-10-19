@@ -1,28 +1,20 @@
-//! Projects screen painting: sidebar, header, card grid, sort menu and empty state.
+//! Projects screen painting: sidebar, header, card grid, drag ghost, sort menu, empty states.
 
 use vello::Scene;
 use vello::kurbo::{Affine, Rect};
 
 use super::backdrop;
 use super::projects::*;
+use super::projects_cards::{CardLook, folder_card, ghost, project_card, rename_area};
 use crate::anim::{ease_out_cubic, progress};
 use crate::draw::Cx;
-use crate::i18n::{Msg, edited, projects_count, tr};
+use crate::i18n::{Msg, items_count, tr};
 use crate::icons::Icon;
-use crate::store::{Project, now_secs};
+use crate::library::{Item, Location};
+use crate::store::now_secs;
 use crate::theme::colors::*;
 use crate::theme::metrics::*;
 use crate::theme::motion::{PANEL_INTRO, STAGGER};
-
-/// Preview gradients, picked by project id.
-const PALETTE: [(u32, u32); 6] = [
-    (0x6366F1, 0xA855F7),
-    (0x22D3EE, 0x6366F1),
-    (0xF472B6, 0xA855F7),
-    (0x34D399, 0x22D3EE),
-    (0xFBBF24, 0xF472B6),
-    (0x818CF8, 0x34D399),
-];
 
 impl Projects {
     fn intro(&self, i: f32) -> f32 {
@@ -52,9 +44,24 @@ impl Projects {
         let p = self.intro(2.0);
         cx.layer(full, p, (0.0, 0.0), |cx| self.grid(cx));
 
-        if self.menu_open {
+        if self.sort_open {
             self.sort_menu(&mut cx, &l);
         }
+        if let Some(item) = self.drag {
+            let store = self.store.borrow();
+            let name = store.lib.name_of(item).unwrap_or("");
+            ghost(
+                &mut cx,
+                (self.mouse.x, self.mouse.y),
+                name,
+                matches!(item, Item::Folder(_)),
+            );
+        }
+        self.paint_menu(&mut cx);
+    }
+
+    fn nav_active(&self, loc: Location) -> bool {
+        matches!((self.loc, loc), (Location::All(_), Location::All(_))) || self.loc == loc
     }
 
     fn sidebar(&self, cx: &mut Cx) {
@@ -66,43 +73,49 @@ impl Projects {
             alpha(overlay(), 0.08),
         );
 
-        for (i, name) in [
-            Msg::NavAll,
-            Msg::NavRecent,
-            Msg::NavFavorites,
-            Msg::NavTrash,
-        ]
-        .iter()
-        .enumerate()
-        {
-            let row = Rect::new(
-                12.0,
-                24.0 + i as f64 * 36.0,
-                SIDEBAR_W - 12.0,
-                24.0 + i as f64 * 36.0 + 32.0,
-            );
-            let active = i == 0;
+        let trash = self.store.borrow().lib.trash_count();
+        for (i, (loc, msg)) in NAV.iter().enumerate() {
+            let row = self.nav_row(i);
+            let active = self.nav_active(*loc);
             if active {
-                cx.fill(row, R_BUTTON, alpha(accent(), 0.22));
+                cx.fill(row, R_BUTTON, alpha(accent(), 0.16));
+            } else if self.at(row) {
+                cx.fill(row, R_BUTTON, alpha(bg_hover(), 0.8));
             }
             let c = if active {
                 hex(text_primary())
             } else {
-                hex(text_disabled())
+                hex(text_secondary())
             };
-            cx.text(tr(*name), FONT_MD, row.x0 + 14.0, row.center().y + 4.5, c);
+            cx.text(tr(*msg), FONT_MD, row.x0 + 14.0, row.center().y + 4.5, c);
+            if *loc == Location::Trash && trash > 0 {
+                let n = trash.to_string();
+                let w = cx.text_width(&n, FONT_SM);
+                cx.text(
+                    &n,
+                    FONT_SM,
+                    row.x1 - 14.0 - w,
+                    row.center().y + 4.0,
+                    hex(text_disabled()),
+                );
+            }
         }
 
         let name = self.store.borrow().name.clone().unwrap_or_default();
         let chip = self.profile_chip();
-        cx.fill(chip, R_CARD, hex(bg_raised()));
-        let (ax, ay) = (chip.x0 + 28.0, chip.center().y);
-        cx.fill_grad(
-            Rect::new(ax - 16.0, ay - 16.0, ax + 16.0, ay + 16.0),
-            16.0,
-            hex(accent_from()),
-            hex(accent_to()),
+        let hot = self.at(chip);
+        cx.fill(
+            chip,
+            R_CARD,
+            if hot {
+                hex(bg_hover())
+            } else {
+                hex(bg_raised())
+            },
         );
+        let (ax, ay) = (chip.x0 + 28.0, chip.center().y);
+        let avatar = Rect::new(ax - 16.0, ay - 16.0, ax + 16.0, ay + 16.0);
+        cx.fill_grad(avatar, 16.0, hex(accent_from()), hex(accent_to()));
         let initial: String = name
             .chars()
             .next()
@@ -110,8 +123,9 @@ impl Projects {
             .unwrap_or_default();
         let w = cx.text_width(&initial, 14.0);
         cx.text(&initial, 14.0, ax - w / 2.0, ay + 5.0, hex(WHITE));
+        let shown = cx.fit(&name, FONT_MD, chip.width() - 64.0);
         cx.text(
-            &name,
+            &shown,
             FONT_MD,
             chip.x0 + 52.0,
             ay + 4.5,
@@ -121,10 +135,26 @@ impl Projects {
 
     fn header(&self, cx: &mut Cx, l: &Layout) {
         let x = SIDEBAR_W + MARGIN;
-        cx.text(tr(Msg::NavAll), 22.0, x, 54.0, hex(text_primary()));
-        let n = self.store.borrow().projects.len();
-        let sub = projects_count(n as u64);
-        cx.text(&sub, FONT_UI, x, 76.0, hex(text_secondary()));
+        let all = matches!(self.loc, Location::All(_));
+        if all {
+            self.breadcrumbs(cx);
+        } else {
+            let title = NAV
+                .iter()
+                .find(|(loc, _)| *loc == self.loc)
+                .map_or("", |(_, m)| tr(*m));
+            cx.text(title, 22.0, x, 50.0, hex(text_primary()));
+        }
+        let n = self.items().len() as u64;
+        let sub = items_count(n);
+        let w = cx.text_width(&sub, FONT_UI);
+        cx.text(
+            &sub,
+            FONT_UI,
+            self.vp.w - MARGIN - w,
+            100.0,
+            hex(text_secondary()),
+        );
 
         self.search.draw(cx, l.search);
         let label = SORT_OPTIONS
@@ -137,7 +167,7 @@ impl Projects {
             "\u{2193}"
         };
         let sb = l.sort_button;
-        let hot = self.menu_open || self.at(sb);
+        let hot = self.sort_open || self.at(sb);
         cx.fill(
             sb,
             R_BUTTON,
@@ -162,76 +192,143 @@ impl Projects {
             14.0,
             hex(text_secondary()),
         );
-        self.new_button.draw(
-            cx,
-            l.new_button,
-            tr(Msg::NewProject),
-            Some(Icon::Plus),
-            true,
-        );
+        if all {
+            self.new_folder.draw_secondary(
+                cx,
+                l.new_folder,
+                tr(Msg::NewFolder),
+                Some(Icon::FolderPlus),
+            );
+            self.new_project.draw(
+                cx,
+                l.new_project,
+                tr(Msg::NewProject),
+                Some(Icon::Plus),
+                true,
+            );
+        }
+    }
+
+    fn breadcrumbs(&self, cx: &mut Cx) {
+        let crumbs = self.crumbs();
+        let last = crumbs.len().saturating_sub(1);
+        let target = self.drag.and_then(|d| self.drop_target(d));
+        for (i, c) in crumbs.iter().enumerate() {
+            if self.drag.is_some() && target == Some(c.folder) {
+                cx.fill(c.rect, R_BUTTON, alpha(accent(), 0.16));
+                cx.stroke(c.rect, R_BUTTON, 1.5, hex(accent()));
+            } else if self.at(c.rect) && crumbs.len() > 1 {
+                cx.fill(c.rect, R_BUTTON, alpha(bg_hover(), 0.8));
+            }
+            let color = if i == last {
+                hex(text_primary())
+            } else {
+                hex(text_secondary())
+            };
+            cx.text(&c.label, 20.0, c.rect.x0 + 6.0, 50.0, color);
+            if i < last {
+                cx.icon(
+                    Icon::CaretRight,
+                    c.rect.x1 + 2.0,
+                    34.0,
+                    14.0,
+                    hex(text_disabled()),
+                );
+            }
+        }
     }
 
     fn grid(&self, cx: &mut Cx) {
-        let ids = self.visible_ids();
+        let items = self.items();
         let area = Rect::new(SIDEBAR_W, GRID_TOP - 16.0, self.vp.w, self.vp.h);
-        if ids.is_empty() {
+        if items.is_empty() {
             return self.empty_state(cx, area);
         }
         let store = self.store.borrow();
         let now = now_secs();
+        let target = self.drag.and_then(|d| self.drop_target(d));
         cx.clip(area, |cx| {
-            for (i, id) in ids.iter().enumerate() {
-                let (Some(p), Some(anim)) = (store.project(*id), self.cards.get(id)) else {
+            for (i, item) in items.iter().enumerate() {
+                let Some(anim) = self.cards.get(item) else {
                     continue;
                 };
                 let r = self.card_rect(i);
                 if r.y1 < area.y0 || r.y0 > area.y1 {
                     continue;
                 }
-                let born = ease_out_cubic(progress(anim.age, 0.0, PANEL_INTRO)) as f64;
-                let lift = -5.0 * anim.hover.pos.clamp(0.0, 1.0) as f64 + 18.0 * (1.0 - born);
-                cx.layer(r.inflate(24.0, 24.0), born as f32, (0.0, lift), |cx| {
-                    card(cx, r, p, anim.hover.pos.clamp(0.0, 1.0), now)
+                let hover = anim.hover.pos.clamp(0.0, 1.0);
+                let born = ease_out_cubic(progress(anim.age, 0.0, PANEL_INTRO));
+                let lifted = self.drag == Some(*item);
+                let look = CardLook {
+                    hover,
+                    drop: matches!((item, target), (Item::Folder(id), Some(Some(t))) if *id == t),
+                    renaming: self.rename.as_ref().is_some_and(|(it, _)| it == item),
+                    in_trash: self.loc == Location::Trash,
+                };
+                let alpha_k = born
+                    * if lifted {
+                        0.35
+                    } else if look.in_trash {
+                        0.8
+                    } else {
+                        1.0
+                    };
+                let dy = -5.0 * hover as f64 + 18.0 * (1.0 - born as f64);
+                cx.layer(r.inflate(24.0, 24.0), alpha_k, (0.0, dy), |cx| match item {
+                    Item::Project(id) => {
+                        if let Some(p) = store.lib.project(*id) {
+                            project_card(cx, r, p, now, &look);
+                        }
+                    }
+                    Item::Folder(id) => {
+                        if let Some(f) = store.lib.folder(*id) {
+                            folder_card(cx, r, f, store.lib.child_count(*id), &look);
+                        }
+                    }
                 });
+                if let Some((it, input)) = &self.rename
+                    && it == item
+                {
+                    input.draw(cx, rename_area(r));
+                }
             }
         });
     }
 
     fn empty_state(&self, cx: &mut Cx, area: Rect) {
-        let c = area.center();
-        let filtered = !self.search.is_blank();
-        let (title, sub) = if filtered {
-            (tr(Msg::NoMatchTitle), tr(Msg::NoMatchSub))
-        } else {
-            (tr(Msg::EmptyTitle), tr(Msg::EmptySub))
+        let searching = !self.search.is_blank();
+        let (icon, title, sub) = match (self.loc, searching) {
+            (_, true) => (Icon::Search, Msg::NoMatchTitle, Some(Msg::NoMatchSub)),
+            (Location::All(None), _) => (Icon::Plus, Msg::EmptyTitle, Some(Msg::EmptySub)),
+            (Location::All(Some(_)), _) => (Icon::Folder, Msg::FolderEmpty, None),
+            (Location::Recent, _) => (Icon::Plus, Msg::RecentEmptyTitle, Some(Msg::RecentEmptySub)),
+            (Location::Favorites, _) => (Icon::Star, Msg::FavEmptyTitle, Some(Msg::FavEmptySub)),
+            (Location::Trash, _) => (Icon::Trash, Msg::TrashEmptyTitle, Some(Msg::TrashEmptySub)),
         };
+        let c = area.center();
         let badge = Rect::new(c.x - 32.0, c.y - 96.0, c.x + 32.0, c.y - 32.0);
         cx.shadow(badge, 20.0, alpha(accent(), 0.45), 18.0, 8.0);
         cx.fill_grad(badge, 20.0, hex(accent_from()), hex(accent_to()));
-        cx.icon(
-            if filtered { Icon::Search } else { Icon::Plus },
-            c.x - 14.0,
-            c.y - 78.0,
-            28.0,
-            hex(WHITE),
-        );
-        for (s, size, dy, col) in [
-            (title, 18.0, 0.0, text_primary()),
-            (sub, FONT_MD, 26.0, text_secondary()),
-        ] {
+        cx.icon(icon, c.x - 14.0, c.y - 78.0, 28.0, hex(WHITE));
+        let mut lines = vec![(tr(title), 18.0, 0.0, text_primary())];
+        if let Some(s) = sub {
+            lines.push((tr(s), FONT_MD, 26.0, text_secondary()));
+        }
+        for (s, size, dy, col) in lines {
             let w = cx.text_width(s, size);
             cx.text(s, size, c.x - w / 2.0, c.y + 4.0 + dy, hex(col));
         }
     }
 
     fn sort_menu(&self, cx: &mut Cx, l: &Layout) {
-        cx.glass(l.menu, R_CARD);
-        for (i, (key, label)) in SORT_OPTIONS.iter().enumerate() {
+        cx.glass(l.sort_menu, R_CARD);
+        for (i, (key, msg)) in SORT_OPTIONS.iter().enumerate() {
+            let m = l.sort_menu;
             let row = Rect::new(
-                l.menu.x0 + 6.0,
-                l.menu.y0 + 8.0 + i as f64 * 32.0,
-                l.menu.x1 - 6.0,
-                l.menu.y0 + 8.0 + (i + 1) as f64 * 32.0,
+                m.x0 + 6.0,
+                m.y0 + 8.0 + i as f64 * 32.0,
+                m.x1 - 6.0,
+                m.y0 + 8.0 + (i + 1) as f64 * 32.0,
             );
             let selected = *key == self.sort_key;
             if self.at(row) {
@@ -242,7 +339,7 @@ impl Projects {
             } else {
                 hex(text_secondary())
             };
-            cx.text(tr(*label), FONT_UI, row.x0 + 12.0, row.center().y + 4.3, c);
+            cx.text(tr(*msg), FONT_UI, row.x0 + 12.0, row.center().y + 4.3, c);
             if selected {
                 let arrow = if self.ascending {
                     "\u{2191}"
@@ -259,45 +356,4 @@ impl Projects {
             }
         }
     }
-}
-
-fn card(cx: &mut Cx, r: Rect, p: &Project, hover: f32, now: u64) {
-    let (a, b) = PALETTE[(p.id as usize) % PALETTE.len()];
-    cx.shadow(
-        r,
-        R_CARD,
-        alpha(0x000000, 0.25 + 0.2 * hover),
-        14.0 + 8.0 * hover as f64,
-        6.0,
-    );
-    cx.fill(r, R_CARD, hex(bg_panel()));
-    let preview = Rect::new(r.x0 + 8.0, r.y0 + 8.0, r.x1 - 8.0, r.y0 + 124.0);
-    cx.fill_grad(preview, R_BUTTON + 2.0, alpha(a, 0.85), alpha(b, 0.85));
-    let mark = Rect::new(
-        preview.center().x - 44.0,
-        preview.center().y - 28.0,
-        preview.center().x + 44.0,
-        preview.center().y + 28.0,
-    );
-    cx.fill(mark, 10.0, alpha(WHITE, 0.22));
-    cx.stroke(
-        r,
-        R_CARD,
-        1.0 + hover as f64,
-        alpha(accent(), 0.12 + 0.7 * hover),
-    );
-    cx.text(
-        &p.name,
-        FONT_MD,
-        r.x0 + 14.0,
-        r.y0 + 148.0,
-        hex(text_primary()),
-    );
-    cx.text(
-        &edited(now, p.modified),
-        FONT_SM,
-        r.x0 + 14.0,
-        r.y0 + 166.0,
-        hex(text_secondary()),
-    );
 }

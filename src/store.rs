@@ -1,35 +1,22 @@
-//! Local profile and project list, saved as small text files (no serde: not in the stack).
+//! Local profile, settings and library, saved as small text files in the user data directory.
 //!
-//! `profile.txt`: one line, the display name. `projects.txt`: one project per line,
-//! tab-separated `id, created, modified, name`, with `\\`, `\t`, `\n` escaped in the name.
+//! `profile.txt`: one line, the display name. `settings.txt`: `theme=light|dark`, `lang=ru|en`.
+//! Projects and folders: see `library_io.rs`.
 
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::i18n::Lang;
+use crate::library::Library;
+use crate::library_io::{folders_text, parse_folders, parse_projects, projects_text};
 
 pub const NAME_MAX_CHARS: usize = 20;
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Project {
-    pub id: u64,
-    pub name: String,
-    pub created: u64,
-    pub modified: u64,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum SortKey {
-    Name,
-    Modified,
-    Created,
-}
 
 pub struct Store {
     dir: PathBuf,
     pub name: Option<String>,
-    pub projects: Vec<Project>,
+    pub lib: Library,
     pub dark: bool,
     pub lang: Lang,
 }
@@ -59,55 +46,16 @@ pub fn default_dir() -> PathBuf {
     base.join("DesignVolt")
 }
 
-fn escape(s: &str) -> String {
-    s.replace('\\', "\\\\")
-        .replace('\t', "\\t")
-        .replace('\n', "\\n")
-}
-
-fn unescape(s: &str) -> String {
-    let mut out = String::new();
-    let mut chars = s.chars();
-    while let Some(c) = chars.next() {
-        if c != '\\' {
-            out.push(c);
-            continue;
-        }
-        match chars.next() {
-            Some('t') => out.push('\t'),
-            Some('n') => out.push('\n'),
-            Some(other) => out.push(other),
-            None => {}
-        }
-    }
-    out
-}
-
-fn parse_project(line: &str) -> Option<Project> {
-    let mut parts = line.splitn(4, '\t');
-    Some(Project {
-        id: parts.next()?.parse().ok()?,
-        created: parts.next()?.parse().ok()?,
-        modified: parts.next()?.parse().ok()?,
-        name: unescape(parts.next()?),
-    })
-}
-
 impl Store {
     pub fn load(dir: &Path) -> Self {
-        let name = fs::read_to_string(dir.join("profile.txt"))
-            .ok()
+        let read = |file: &str| fs::read_to_string(dir.join(file)).unwrap_or_default();
+        let mut store = Self::blank(dir);
+        store.name = Some(read("profile.txt"))
             .map(|s| sanitize_name(s.trim_end_matches(['\r', '\n'])))
             .filter(|s| !s.trim().is_empty());
-        let projects = fs::read_to_string(dir.join("projects.txt"))
-            .map(|s| s.lines().filter_map(parse_project).collect())
-            .unwrap_or_default();
-        let mut store = Self::blank(dir);
-        store.name = name;
-        store.projects = projects;
-        if let Ok(s) = fs::read_to_string(dir.join("settings.txt")) {
-            store.apply_settings(&s);
-        }
+        store.lib.projects = parse_projects(&read("projects.txt"));
+        store.lib.folders = parse_folders(&read("folders.txt"));
+        store.apply_settings(&read("settings.txt"));
         store
     }
 
@@ -116,7 +64,7 @@ impl Store {
         Self {
             dir: dir.to_path_buf(),
             name: None,
-            projects: Vec::new(),
+            lib: Library::default(),
             dark: false,
             lang: Lang::Ru,
         }
@@ -145,72 +93,29 @@ impl Store {
     pub fn save(&self) -> std::io::Result<()> {
         fs::create_dir_all(&self.dir)?;
         write_atomic(&self.dir.join("settings.txt"), &self.settings_text())?;
-        let name = self.name.as_deref().unwrap_or("");
-        write_atomic(&self.dir.join("profile.txt"), name)?;
-        let body: String = self
-            .projects
-            .iter()
-            .map(|p| {
-                format!(
-                    "{}\t{}\t{}\t{}\n",
-                    p.id,
-                    p.created,
-                    p.modified,
-                    escape(&p.name)
-                )
-            })
-            .collect();
-        write_atomic(&self.dir.join("projects.txt"), &body)
+        write_atomic(
+            &self.dir.join("profile.txt"),
+            self.name.as_deref().unwrap_or(""),
+        )?;
+        write_atomic(
+            &self.dir.join("projects.txt"),
+            &projects_text(&self.lib.projects),
+        )?;
+        write_atomic(
+            &self.dir.join("folders.txt"),
+            &folders_text(&self.lib.folders),
+        )
+    }
+
+    /// Saves and reports failures on stderr (the UI keeps working with in-memory data).
+    pub fn save_logged(&self) {
+        if let Err(e) = self.save() {
+            eprintln!("could not save data: {e}");
+        }
     }
 
     pub fn set_name(&mut self, raw: &str) {
         self.name = Some(sanitize_name(raw));
-    }
-
-    /// Adds "<base> N" with the lowest free N and returns its id.
-    pub fn create_project(&mut self, now: u64, base: &str) -> u64 {
-        let id = self.projects.iter().map(|p| p.id).max().unwrap_or(0) + 1;
-        let mut n = 1;
-        while self
-            .projects
-            .iter()
-            .any(|p| p.name == format!("{base} {n}"))
-        {
-            n += 1;
-        }
-        self.projects.push(Project {
-            id,
-            name: format!("{base} {n}"),
-            created: now,
-            modified: now,
-        });
-        id
-    }
-
-    pub fn project(&self, id: u64) -> Option<&Project> {
-        self.projects.iter().find(|p| p.id == id)
-    }
-
-    /// Projects whose name contains `filter` (case-insensitive), sorted.
-    pub fn view(&self, key: SortKey, ascending: bool, filter: &str) -> Vec<&Project> {
-        let needle = filter.trim().to_lowercase();
-        let mut list: Vec<&Project> = self
-            .projects
-            .iter()
-            .filter(|p| needle.is_empty() || p.name.to_lowercase().contains(&needle))
-            .collect();
-        list.sort_by(|a, b| {
-            match key {
-                SortKey::Name => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
-                SortKey::Modified => a.modified.cmp(&b.modified),
-                SortKey::Created => a.created.cmp(&b.created),
-            }
-            .then(a.id.cmp(&b.id))
-        });
-        if !ascending {
-            list.reverse();
-        }
-        list
     }
 }
 
@@ -223,6 +128,7 @@ fn write_atomic(path: &Path, content: &str) -> std::io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::library::Item;
 
     fn temp_dir(tag: &str) -> PathBuf {
         let d = std::env::temp_dir().join(format!("designvolt-test-{tag}-{}", std::process::id()));
@@ -239,18 +145,33 @@ mod tests {
     }
 
     #[test]
-    fn roundtrip_keeps_unicode_and_escapes() {
+    fn library_and_profile_roundtrip() {
         let dir = temp_dir("roundtrip");
         let mut s = Store::load(&dir);
         s.set_name("Вадим 🎨");
-        let id = s.create_project(100, "Untitled");
-        s.projects[0].name = "tab\there\\and\nnewline Ж".to_string();
+        let f = s.lib.create_folder(50, "Папка", None);
+        let p = s.lib.create_project(100, "Проект", Some(f));
+        s.lib.toggle_favorite(p);
+        s.lib.trash(Item::Project(p), 7);
         s.save().unwrap();
 
         let back = Store::load(&dir);
         assert_eq!(back.name.as_deref(), Some("Вадим 🎨"));
-        assert_eq!(back.projects, s.projects);
-        assert_eq!(back.project(id).unwrap().created, 100);
+        assert_eq!(back.lib.projects, s.lib.projects);
+        assert_eq!(back.lib.folders, s.lib.folders);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn old_projects_file_is_migrated_on_load() {
+        let dir = temp_dir("migrate");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("projects.txt"), "1\t10\t20\tЛегаси\n").unwrap();
+        let s = Store::load(&dir);
+        assert_eq!(s.lib.projects.len(), 1);
+        assert_eq!(s.lib.projects[0].name, "Легаси");
+        s.save().unwrap();
+        assert_eq!(Store::load(&dir).lib.projects, s.lib.projects);
         let _ = fs::remove_dir_all(&dir);
     }
 
@@ -262,41 +183,6 @@ mod tests {
         fs::write(dir.join("profile.txt"), "   \n").unwrap();
         assert!(Store::load(&dir).name.is_none());
         let _ = fs::remove_dir_all(&dir);
-    }
-
-    #[test]
-    fn create_picks_free_untitled_number() {
-        let mut s = Store::blank(&PathBuf::new());
-        s.create_project(1, "Untitled");
-        s.create_project(2, "Untitled");
-        s.projects.remove(0);
-        s.create_project(3, "Untitled");
-        let names: Vec<_> = s.projects.iter().map(|p| p.name.as_str()).collect();
-        assert_eq!(names, ["Untitled 2", "Untitled 1"]);
-    }
-
-    #[test]
-    fn view_sorts_and_filters() {
-        let mut s = Store::blank(&PathBuf::new());
-        for (n, c, m) in [("beta", 1, 30), ("Alpha", 2, 10), ("gamma", 3, 20)] {
-            let id = s.create_project(0, "Untitled");
-            let p = s.projects.iter_mut().find(|p| p.id == id).unwrap();
-            (p.name, p.created, p.modified) = (n.to_string(), c, m);
-        }
-        let names = |v: Vec<&Project>| v.iter().map(|p| p.name.clone()).collect::<Vec<_>>();
-        assert_eq!(
-            names(s.view(SortKey::Name, true, "")),
-            ["Alpha", "beta", "gamma"]
-        );
-        assert_eq!(
-            names(s.view(SortKey::Modified, false, "")),
-            ["beta", "gamma", "Alpha"]
-        );
-        assert_eq!(
-            names(s.view(SortKey::Created, true, "")),
-            ["beta", "Alpha", "gamma"]
-        );
-        assert_eq!(names(s.view(SortKey::Name, true, " AL ")), ["Alpha"]);
     }
 
     #[test]
@@ -333,14 +219,5 @@ mod tests {
         assert!(s.dark);
         assert_eq!(s.lang, Lang::Ru);
         let _ = fs::remove_dir_all(&dir);
-    }
-
-    #[test]
-    fn new_projects_use_the_given_base_name() {
-        let mut s = Store::blank(&PathBuf::new());
-        s.create_project(1, "Без названия");
-        s.create_project(2, "Без названия");
-        let names: Vec<_> = s.projects.iter().map(|p| p.name.as_str()).collect();
-        assert_eq!(names, ["Без названия 1", "Без названия 2"]);
     }
 }

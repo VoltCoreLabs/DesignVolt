@@ -82,6 +82,7 @@ pub trait Screen {
     fn mouse_moved(&mut self, x: f64, y: f64);
     fn mouse_left(&mut self);
     fn click(&mut self, mods: Mods);
+    fn right_click(&mut self, _mods: Mods) {}
     fn scroll(&mut self, _dy: f64) {}
     fn key(&mut self, _key: Key, _mods: Mods) {}
     fn mouse_up(&mut self) {}

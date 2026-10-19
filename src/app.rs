@@ -156,7 +156,7 @@ impl App {
                 self.show_projects();
             }
             Transition::OpenProject(id) => {
-                let name = self.store.borrow().project(id).map(|p| p.name.clone());
+                let name = self.store.borrow().lib.project(id).map(|p| p.name.clone());
                 self.place = Place::Editor(name.unwrap_or_default());
                 self.screen = Box::new(Editor::new(self.assets.clone()));
             }
@@ -463,6 +463,15 @@ impl ApplicationHandler for App {
             } => {
                 if !self.chrome_click(event_loop) {
                     self.screen.click(self.mods);
+                }
+            }
+            WindowEvent::MouseInput {
+                state: ElementState::Pressed,
+                button: MouseButton::Right,
+                ..
+            } => {
+                if self.bar.hit(self.logical_width(), true).is_none() {
+                    self.screen.right_click(self.mods);
                 }
             }
             WindowEvent::MouseWheel { delta, .. } => {

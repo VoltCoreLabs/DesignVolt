@@ -61,6 +61,23 @@ pub enum Msg {
     EmptyTitle,
     EmptySub,
     UntitledProject,
+    NewFolder,
+    UntitledFolder,
+    MenuOpen,
+    MenuRename,
+    MenuFavorite,
+    MenuUnfavorite,
+    MenuDelete,
+    MenuRestore,
+    MenuDeleteForever,
+    MenuConfirmDelete,
+    TrashEmptyTitle,
+    TrashEmptySub,
+    FavEmptyTitle,
+    FavEmptySub,
+    RecentEmptyTitle,
+    RecentEmptySub,
+    FolderEmpty,
     // Settings
     Settings,
     SettingsProfile,
@@ -122,6 +139,35 @@ pub fn tr(m: Msg) -> &'static str {
             "Your projects will show up here.",
         ),
         Msg::UntitledProject => pick("Без названия", "Untitled"),
+        Msg::NewFolder => pick("Новая папка", "New folder"),
+        Msg::UntitledFolder => pick("Папка", "Folder"),
+        Msg::MenuOpen => pick("Открыть", "Open"),
+        Msg::MenuRename => pick("Переименовать", "Rename"),
+        Msg::MenuFavorite => pick("В избранное", "Add to favorites"),
+        Msg::MenuUnfavorite => pick("Убрать из избранного", "Remove from favorites"),
+        Msg::MenuDelete => pick("Удалить", "Delete"),
+        Msg::MenuRestore => pick("Восстановить", "Restore"),
+        Msg::MenuDeleteForever => pick("Удалить навсегда", "Delete forever"),
+        Msg::MenuConfirmDelete => pick("Точно удалить?", "Really delete?"),
+        Msg::TrashEmptyTitle => pick("Корзина пуста", "Trash is empty"),
+        Msg::TrashEmptySub => pick(
+            "Удалённые проекты и папки появятся здесь.",
+            "Deleted projects and folders show up here.",
+        ),
+        Msg::FavEmptyTitle => pick("Нет избранных проектов", "No favorite projects"),
+        Msg::FavEmptySub => pick(
+            "Отметьте проект звёздочкой, чтобы он появился здесь.",
+            "Star a project to see it here.",
+        ),
+        Msg::RecentEmptyTitle => pick("Пока ничего нет", "Nothing here yet"),
+        Msg::RecentEmptySub => pick(
+            "Недавно открытые проекты появятся здесь.",
+            "Recently opened projects show up here.",
+        ),
+        Msg::FolderEmpty => pick(
+            "Папка пуста. Перетащите сюда проекты.",
+            "This folder is empty. Drag projects here.",
+        ),
         Msg::Settings => pick("Настройки", "Settings"),
         Msg::SettingsProfile => pick("Профиль", "Profile"),
         Msg::SettingsYourName => pick("Имя", "Name"),
@@ -166,14 +212,14 @@ fn ru_form(n: u64) -> usize {
     }
 }
 
-/// "1 проект", "3 проекта", "5 проектов" / "1 project", "2 projects".
-pub fn projects_count(n: u64) -> String {
+/// "1 элемент", "2 элемента", "5 элементов" / "1 item", "2 items".
+pub fn items_count(n: u64) -> String {
     match lang() {
         Lang::Ru => {
-            let word = ["проект", "проекта", "проектов"][ru_form(n)];
+            let word = ["элемент", "элемента", "элементов"][ru_form(n)];
             format!("{n} {word}")
         }
-        Lang::En => format!("{n} project{}", if n == 1 { "" } else { "s" }),
+        Lang::En => format!("{n} item{}", if n == 1 { "" } else { "s" }),
     }
 }
 
@@ -211,25 +257,28 @@ mod tests {
     #[test]
     fn russian_plurals() {
         set_lang(Lang::Ru);
-        let word = |n| projects_count(n);
-        assert_eq!(word(0), "0 проектов");
-        assert_eq!(word(1), "1 проект");
-        assert_eq!(word(2), "2 проекта");
-        assert_eq!(word(5), "5 проектов");
-        assert_eq!(word(11), "11 проектов");
-        assert_eq!(word(12), "12 проектов");
-        assert_eq!(word(21), "21 проект");
-        assert_eq!(word(22), "22 проекта");
-        assert_eq!(word(111), "111 проектов");
-        assert_eq!(word(101), "101 проект");
+        let word = items_count;
+        assert_eq!(word(0), "0 элементов");
+        assert_eq!(word(1), "1 элемент");
+        assert_eq!(word(2), "2 элемента");
+        assert_eq!(word(5), "5 элементов");
+        assert_eq!(word(11), "11 элементов");
+        assert_eq!(word(12), "12 элементов");
+        assert_eq!(word(101), "101 элемент");
+        assert_eq!(word(22), "22 элемента");
+        assert_eq!(word(111), "111 элементов");
+        assert_eq!(word(101), "101 элемент");
+        assert_eq!(items_count(1), "1 элемент");
+        assert_eq!(items_count(3), "3 элемента");
+        assert_eq!(items_count(12), "12 элементов");
     }
 
     #[test]
     fn english_plurals() {
         set_lang(Lang::En);
-        assert_eq!(projects_count(1), "1 project");
-        assert_eq!(projects_count(0), "0 projects");
-        assert_eq!(projects_count(2), "2 projects");
+        assert_eq!(items_count(1), "1 item");
+        assert_eq!(items_count(0), "0 items");
+        assert_eq!(items_count(2), "2 items");
         set_lang(Lang::Ru);
     }
 

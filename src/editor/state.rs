@@ -9,7 +9,7 @@ use super::{canvas, panels};
 use crate::anim::{ease_out_cubic, progress};
 use crate::draw::Cx;
 use crate::input::{Key, Mods, Screen, SharedAssets, Transition, Viewport};
-use crate::theme::colors::{BG_APP, hex};
+use crate::theme::colors::{bg_app, hex};
 use crate::theme::motion::{PANEL_INTRO, STAGGER};
 
 /// Time after which the intro animation is over.
@@ -66,7 +66,7 @@ impl Screen for Editor {
         self.mouse = (-1.0, -1.0);
     }
 
-    fn click(&mut self) {
+    fn click(&mut self, _mods: Mods) {
         if let Some(i) = self.toolbar.hit(&self.layout(), self.mouse.0, self.mouse.1) {
             self.toolbar.select(i);
         }
@@ -96,7 +96,7 @@ impl Screen for Editor {
             xf: Affine::scale(self.vp.scale),
         };
         let full = Rect::new(0.0, 0.0, self.vp.w, self.vp.h);
-        cx.fill(full, 0.0, hex(BG_APP));
+        cx.fill(full, 0.0, hex(bg_app()));
 
         let p = self.intro(0.0);
         cx.layer(layout.canvas, p, (0.0, 0.0), |cx| canvas::draw(cx, layout.canvas));

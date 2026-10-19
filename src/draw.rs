@@ -6,7 +6,7 @@ use vello::peniko::{BlendMode, Color, Fill, Gradient};
 
 use crate::icons::{Icon, Icons, VIEWBOX};
 use crate::text::Font;
-use crate::theme::colors::{BG_PANEL, WHITE, alpha, hex};
+use crate::theme::colors::{WHITE, alpha, bg_panel, hex, overlay, palette};
 
 pub struct Cx<'a> {
     pub scene: &'a mut Scene,
@@ -57,6 +57,7 @@ impl Cx<'_> {
 
     pub fn shadow(&mut self, r: Rect, radius: f64, c: Color, blur: f64, dy: f64) {
         let t = self.xf * Affine::translate((0.0, dy));
+        let c = c.multiply_alpha(palette().shadow_k);
         self.scene.draw_blurred_rounded_rect(t, r, c, radius, blur);
     }
 
@@ -85,13 +86,13 @@ impl Cx<'_> {
     /// Glass surface (imitation until the backdrop blur pass exists, see D-006).
     pub fn glass(&mut self, r: Rect, radius: f64) {
         self.shadow(r, radius, alpha(0x000000, 0.5), 22.0, 10.0);
-        self.fill(r, radius, alpha(BG_PANEL, 0.78));
+        self.fill(r, radius, alpha(bg_panel(), 0.78));
         let shape = RoundedRect::from_rect(r, radius);
         let top = Gradient::new_linear((0.0, r.y0), (0.0, r.y1))
             .with_stops([alpha(WHITE, 0.10), alpha(WHITE, 0.0)]);
         self.scene.fill(Fill::NonZero, self.xf, &top, None, &shape);
         let rim = Gradient::new_linear((0.0, r.y0), (0.0, r.y1))
-            .with_stops([alpha(WHITE, 0.28), alpha(WHITE, 0.06)]);
+            .with_stops([alpha(overlay(), 0.28), alpha(overlay(), 0.06)]);
         self.scene
             .stroke(&Stroke::new(1.0), self.xf, &rim, None, &shape);
     }

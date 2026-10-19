@@ -1,6 +1,7 @@
 mod anim;
 mod app;
 mod chrome;
+mod clipboard;
 mod draw;
 mod editor;
 mod icons;

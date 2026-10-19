@@ -22,3 +22,6 @@ Pure Rust. Linebender ecosystem for rendering and UI. Crates outside this list n
 Not in the stack: egui, iced, slint, dioxus, tauri, webview, tiny-skia, skia-safe.
 
 Animation (springs, easing, scheduler) is written in-house in `dv-ui`. No animation crates.
+
+## Добавлено позже
+- rboard (без default-features) — буфер обмена, текст (D-011).

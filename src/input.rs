@@ -18,15 +18,22 @@ pub enum Key {
     Enter,
     Escape,
     SelectAll,
+    Copy,
+    Cut,
+    Paste,
+    Undo,
+    Redo,
+    Insert,
 }
 
-/// Shared read-only resources.
+
 #[derive(Clone, Copy, Default, Debug)]
 pub struct Mods {
     pub ctrl: bool,
     pub shift: bool,
 }
 
+/// Shared read-only resources.
 pub struct Assets {
     pub font: Font,
     pub icons: Icons,
@@ -70,7 +77,7 @@ pub trait Screen {
     /// Positions are physical pixels.
     fn mouse_moved(&mut self, x: f64, y: f64);
     fn mouse_left(&mut self);
-    fn click(&mut self);
+    fn click(&mut self, mods: Mods);
     fn scroll(&mut self, _dy: f64) {}
     fn key(&mut self, _key: Key, _mods: Mods) {}
     fn mouse_up(&mut self) {}

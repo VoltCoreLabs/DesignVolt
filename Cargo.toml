@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+arboard = { version = "3.7.0", default-features = false }
 pollster = "1.0.1"
 skrifa = "0.44"
 vello = "0.11.0"

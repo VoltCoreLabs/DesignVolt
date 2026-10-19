@@ -21,6 +21,8 @@ pub enum Icon {
     Minimize,
     Restore,
     Close,
+    Sun,
+    Moon,
 }
 
 const SOURCES: &[(Icon, &str)] = &[
@@ -41,6 +43,8 @@ const SOURCES: &[(Icon, &str)] = &[
     (Icon::Minimize, include_str!("../assets/icons/phosphor/minus.svg")),
     (Icon::Restore, include_str!("../assets/icons/phosphor/copy-simple.svg")),
     (Icon::Close, include_str!("../assets/icons/phosphor/x.svg")),
+    (Icon::Sun, include_str!("../assets/icons/phosphor/sun.svg")),
+    (Icon::Moon, include_str!("../assets/icons/phosphor/moon.svg")),
 ];
 
 /// Icon viewBox is 256x256.

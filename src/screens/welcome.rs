@@ -107,17 +107,17 @@ impl Screen for Welcome {
         let p = self.intro(1.5);
         cx.layer(full, p, (0.0, 16.0 * (1.0 - p as f64)), |cx| {
             let logo = Rect::new(x, l.card.y0 + 36.0, x + 44.0, l.card.y0 + 80.0);
-            cx.shadow(logo, 12.0, alpha(ACCENT, 0.5), 14.0, 6.0);
-            cx.fill_grad(logo, 12.0, hex(ACCENT_FROM), hex(ACCENT_TO));
-            cx.text("Welcome to DesignVolt", 22.0, x, l.card.y0 + 116.0, hex(TEXT_PRIMARY));
-            cx.text("What should we call you?", FONT_MD, x, l.card.y0 + 142.0, hex(TEXT_SECONDARY));
+            cx.shadow(logo, 12.0, alpha(accent(), 0.5), 14.0, 6.0);
+            cx.fill_grad(logo, 12.0, hex(accent_from()), hex(accent_to()));
+            cx.text("Welcome to DesignVolt", 22.0, x, l.card.y0 + 116.0, hex(text_primary()));
+            cx.text("What should we call you?", FONT_MD, x, l.card.y0 + 142.0, hex(text_secondary()));
         });
 
         let p = self.intro(2.5);
         cx.layer(full, p, (0.0, 16.0 * (1.0 - p as f64)), |cx| {
             self.input.draw(cx, l.input);
             let hint = "Any characters, up to 20.";
-            cx.text(hint, FONT_SM, l.input.x0, l.input.y1 + 20.0, hex(TEXT_DISABLED));
+            cx.text(hint, FONT_SM, l.input.x0, l.input.y1 + 20.0, hex(text_disabled()));
         });
 
         let p = self.intro(3.5);
@@ -136,12 +136,12 @@ impl Screen for Welcome {
         self.mouse = (-1.0, -1.0);
     }
 
-    fn click(&mut self) {
+    fn click(&mut self, mods: Mods) {
         let l = self.layout();
         if self.at(l.button) {
             self.submit();
         } else if self.at(l.input) {
-            self.input.press_at(&self.assets.font, self.mouse.0 - l.input.x0, false);
+            self.input.press_at(&self.assets.font, self.mouse.0 - l.input.x0, mods.shift);
         } else {
             self.input.focused = false;
         }

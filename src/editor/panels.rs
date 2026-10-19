@@ -8,60 +8,60 @@ use crate::theme::colors::*;
 use crate::theme::metrics::*;
 
 fn divider(cx: &mut Cx, x0: f64, x1: f64, y: f64) {
-    cx.fill(Rect::new(x0, y, x1, y + 1.0), 0.0, alpha(WHITE, 0.08));
+    cx.fill(Rect::new(x0, y, x1, y + 1.0), 0.0, alpha(overlay(), 0.08));
 }
 
 /// Active tab label with an accent underline.
 fn tab(cx: &mut Cx, label: &str, x: f64, y: f64, active: bool) -> f64 {
-    let color = if active { hex(TEXT_PRIMARY) } else { hex(TEXT_SECONDARY) };
+    let color = if active { hex(text_primary()) } else { hex(text_secondary()) };
     let w = cx.text(label, FONT_UI, x, y + 18.0, color);
     if active {
-        cx.fill_grad(Rect::new(x, y + 27.0, x + w, y + 29.0), 1.0, hex(ACCENT_FROM), hex(ACCENT_TO));
+        cx.fill_grad(Rect::new(x, y + 27.0, x + w, y + 29.0), 1.0, hex(accent_from()), hex(accent_to()));
     }
     w
 }
 
 fn row(cx: &mut Cx, r: Rect, icon: Option<Icon>, label: &str, indent: f64, selected: bool) {
     if selected {
-        cx.fill(r, R_BUTTON, alpha(ACCENT, 0.22));
+        cx.fill(r, R_BUTTON, alpha(accent(), 0.22));
     }
     let mut x = r.x0 + 12.0 + indent * 16.0;
-    let color = if selected { hex(TEXT_PRIMARY) } else { hex(TEXT_SECONDARY) };
+    let color = if selected { hex(text_primary()) } else { hex(text_secondary()) };
     if let Some(i) = icon {
         cx.icon(i, x, r.y0 + 7.0, 14.0, color);
         x += 22.0;
     }
-    cx.text(label, FONT_UI, x, r.y0 + 18.0, hex(TEXT_PRIMARY));
-    cx.icon(Icon::Eye, r.x1 - 28.0, r.y0 + 7.0, 14.0, alpha(TEXT_SECONDARY, 0.5));
+    cx.text(label, FONT_UI, x, r.y0 + 18.0, hex(text_primary()));
+    cx.icon(Icon::Eye, r.x1 - 28.0, r.y0 + 7.0, 14.0, alpha(text_secondary(), 0.5));
 }
 
 fn field(cx: &mut Cx, r: Rect, label: &str, value: &str) {
-    cx.fill(r, R_FIELD, hex(BG_RAISED));
-    cx.text(label, FONT_SM, r.x0 + 9.0, r.y0 + 18.0, hex(TEXT_DISABLED));
-    cx.text(value, FONT_UI, r.x0 + 28.0, r.y0 + 18.0, hex(TEXT_PRIMARY));
+    cx.fill(r, R_FIELD, hex(bg_raised()));
+    cx.text(label, FONT_SM, r.x0 + 9.0, r.y0 + 18.0, hex(text_disabled()));
+    cx.text(value, FONT_UI, r.x0 + 28.0, r.y0 + 18.0, hex(text_primary()));
 }
 
 pub fn topbar(cx: &mut Cx, r: Rect) {
-    cx.fill(r, 0.0, hex(BG_PANEL));
+    cx.fill(r, 0.0, hex(bg_panel()));
     divider(cx, r.x0, r.x1, r.y1 - 1.0);
     for (i, item) in ["File", "Edit", "View"].iter().enumerate() {
-        cx.text(item, FONT_UI, 16.0 + i as f64 * 48.0, 25.0, hex(TEXT_SECONDARY));
+        cx.text(item, FONT_UI, 16.0 + i as f64 * 48.0, 25.0, hex(text_secondary()));
     }
 
     let title = "Untitled  /  Page 1";
     let w = cx.text_width(title, FONT_UI);
-    cx.text(title, FONT_UI, r.center().x - w / 2.0, 25.0, hex(TEXT_SECONDARY));
+    cx.text(title, FONT_UI, r.center().x - w / 2.0, 25.0, hex(text_secondary()));
 
     let share = Rect::new(r.x1 - 82.0, 7.0, r.x1 - 12.0, 33.0);
-    cx.fill_grad(share, R_BUTTON, hex(ACCENT_FROM), hex(ACCENT_TO));
+    cx.fill_grad(share, R_BUTTON, hex(accent_from()), hex(accent_to()));
     cx.icon(Icon::Share, share.x0 + 10.0, 13.0, 14.0, hex(WHITE));
     cx.text("Share", FONT_UI, share.x0 + 29.0, 24.0, hex(WHITE));
-    cx.text("100%", FONT_UI, r.x1 - 130.0, 25.0, hex(TEXT_SECONDARY));
+    cx.text("100%", FONT_UI, r.x1 - 130.0, 25.0, hex(text_secondary()));
 }
 
 pub fn left_panel(cx: &mut Cx, r: Rect) {
-    cx.fill(r, 0.0, hex(BG_PANEL));
-    cx.fill(Rect::new(r.x1 - 1.0, r.y0, r.x1, r.y1), 0.0, alpha(WHITE, 0.08));
+    cx.fill(r, 0.0, hex(bg_panel()));
+    cx.fill(Rect::new(r.x1 - 1.0, r.y0, r.x1, r.y1), 0.0, alpha(overlay(), 0.08));
     let (x0, x1, y0) = (r.x0, r.x1 - 1.0, r.y0);
 
     let w = tab(cx, "Layers", x0 + 12.0, y0 + 8.0, true);
@@ -69,12 +69,12 @@ pub fn left_panel(cx: &mut Cx, r: Rect) {
     divider(cx, x0, x1, y0 + 38.0);
 
     let search = Rect::new(x0 + 12.0, y0 + 48.0, x1 - 12.0, y0 + 48.0 + FIELD_H);
-    cx.fill(search, R_FIELD, hex(BG_RAISED));
-    cx.icon(Icon::Search, search.x0 + 8.0, search.y0 + 7.0, 14.0, hex(TEXT_SECONDARY));
-    cx.text("Search layers", FONT_UI, search.x0 + 30.0, search.y0 + 18.0, hex(TEXT_DISABLED));
+    cx.fill(search, R_FIELD, hex(bg_raised()));
+    cx.icon(Icon::Search, search.x0 + 8.0, search.y0 + 7.0, 14.0, hex(text_secondary()));
+    cx.text("Search layers", FONT_UI, search.x0 + 30.0, search.y0 + 18.0, hex(text_disabled()));
 
-    cx.text("Pages", FONT_SM, x0 + 12.0, y0 + 98.0, hex(TEXT_SECONDARY));
-    cx.icon(Icon::Plus, x1 - 28.0, y0 + 86.0, 14.0, hex(TEXT_SECONDARY));
+    cx.text("Pages", FONT_SM, x0 + 12.0, y0 + 98.0, hex(text_secondary()));
+    cx.icon(Icon::Plus, x1 - 28.0, y0 + 86.0, 14.0, hex(text_secondary()));
     for (i, name) in ["Page 1", "Page 2"].iter().enumerate() {
         let ry = y0 + 108.0 + i as f64 * ROW_H;
         row(cx, Rect::new(x0 + 8.0, ry, x1 - 8.0, ry + ROW_H), None, name, 0.0, i == 0);
@@ -94,8 +94,8 @@ pub fn left_panel(cx: &mut Cx, r: Rect) {
 }
 
 pub fn right_panel(cx: &mut Cx, r: Rect) {
-    cx.fill(r, 0.0, hex(BG_PANEL));
-    cx.fill(Rect::new(r.x0, r.y0, r.x0 + 1.0, r.y1), 0.0, alpha(WHITE, 0.08));
+    cx.fill(r, 0.0, hex(bg_panel()));
+    cx.fill(Rect::new(r.x0, r.y0, r.x0 + 1.0, r.y1), 0.0, alpha(overlay(), 0.08));
     let (x0, x1, y0) = (r.x0 + 1.0, r.x1, r.y0);
 
     let w1 = tab(cx, "Design", x0 + 12.0, y0 + 8.0, true);
@@ -103,7 +103,7 @@ pub fn right_panel(cx: &mut Cx, r: Rect) {
     tab(cx, "Inspect", x0 + 36.0 + w1 + w2, y0 + 8.0, false);
     divider(cx, x0, x1, y0 + 38.0);
 
-    cx.text("Frame", FONT_SM, x0 + 12.0, y0 + 62.0, hex(TEXT_SECONDARY));
+    cx.text("Frame", FONT_SM, x0 + 12.0, y0 + 62.0, hex(text_secondary()));
     let fw = (x1 - x0 - 24.0 - GAP) / 2.0;
     let cells = [("X", "120"), ("Y", "80"), ("W", "360"), ("H", "240"), ("R", "16")];
     for (i, (l, v)) in cells.iter().enumerate() {
@@ -113,18 +113,18 @@ pub fn right_panel(cx: &mut Cx, r: Rect) {
     }
     divider(cx, x0, x1, y0 + 176.0);
 
-    cx.text("Fill", FONT_SM, x0 + 12.0, y0 + 198.0, hex(TEXT_SECONDARY));
-    cx.icon(Icon::Plus, x1 - 28.0, y0 + 186.0, 14.0, hex(TEXT_SECONDARY));
+    cx.text("Fill", FONT_SM, x0 + 12.0, y0 + 198.0, hex(text_secondary()));
+    cx.icon(Icon::Plus, x1 - 28.0, y0 + 186.0, 14.0, hex(text_secondary()));
     let sw = Rect::new(x0 + 12.0, y0 + 208.0, x0 + 32.0, y0 + 228.0);
-    cx.fill_grad(sw, R_FIELD, hex(ACCENT_FROM), hex(ACCENT_TO));
-    cx.text("6366F1", FONT_UI, x0 + 42.0, y0 + 222.0, hex(TEXT_PRIMARY));
-    cx.text("100%", FONT_UI, x1 - 48.0, y0 + 222.0, hex(TEXT_SECONDARY));
+    cx.fill_grad(sw, R_FIELD, hex(accent_from()), hex(accent_to()));
+    cx.text("6366F1", FONT_UI, x0 + 42.0, y0 + 222.0, hex(text_primary()));
+    cx.text("100%", FONT_UI, x1 - 48.0, y0 + 222.0, hex(text_secondary()));
     divider(cx, x0, x1, y0 + 244.0);
 
-    cx.text("Effects", FONT_SM, x0 + 12.0, y0 + 266.0, hex(TEXT_SECONDARY));
-    cx.icon(Icon::Plus, x1 - 28.0, y0 + 254.0, 14.0, hex(TEXT_SECONDARY));
+    cx.text("Effects", FONT_SM, x0 + 12.0, y0 + 266.0, hex(text_secondary()));
+    cx.icon(Icon::Plus, x1 - 28.0, y0 + 254.0, 14.0, hex(text_secondary()));
     let er = Rect::new(x0 + 8.0, y0 + 276.0, x1 - 8.0, y0 + 276.0 + ROW_H);
-    cx.fill(er, R_BUTTON, hex(BG_RAISED));
-    cx.text("Drop shadow", FONT_UI, er.x0 + 12.0, er.y0 + 18.0, hex(TEXT_PRIMARY));
-    cx.icon(Icon::CaretDown, er.x1 - 26.0, er.y0 + 7.0, 14.0, hex(TEXT_SECONDARY));
+    cx.fill(er, R_BUTTON, hex(bg_raised()));
+    cx.text("Drop shadow", FONT_UI, er.x0 + 12.0, er.y0 + 18.0, hex(text_primary()));
+    cx.icon(Icon::CaretDown, er.x1 - 26.0, er.y0 + 7.0, 14.0, hex(text_secondary()));
 }

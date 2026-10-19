@@ -200,7 +200,7 @@ impl Screen for Projects {
         self.mouse = (-1.0, -1.0);
     }
 
-    fn click(&mut self) {
+    fn click(&mut self, mods: Mods) {
         let l = self.layout();
         if self.menu_open {
             let row = (self.mouse.1 - l.menu.y0 - 8.0) / 32.0;
@@ -218,7 +218,7 @@ impl Screen for Projects {
             self.menu_open = true;
             self.search.focused = false;
         } else if self.at(l.search) {
-            self.search.press_at(&self.assets.font, self.mouse.0 - l.search.x0, false);
+            self.search.press_at(&self.assets.font, self.mouse.0 - l.search.x0, mods.shift);
         } else if let Some(id) = self.hovered_card() {
             self.next = Some(Transition::OpenProject(id));
         } else {

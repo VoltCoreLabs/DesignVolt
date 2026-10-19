@@ -6,7 +6,6 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use vello::kurbo::Affine;
-use vello::peniko::Color;
 use vello::util::{RenderContext, RenderSurface};
 use vello::wgpu::{self, CurrentSurfaceTexture, PresentMode};
 use vello::{AaConfig, RenderParams, Renderer, RendererOptions, Scene};
@@ -26,6 +25,7 @@ use crate::screens::projects::Projects;
 use crate::screens::welcome::Welcome;
 use crate::store::{Store, default_dir};
 use crate::text::Font;
+use crate::theme::colors::{bg_app, hex, is_dark, set_dark};
 use crate::titlebar::{BarState, HEIGHT as BAR_H, Part, TitleBar};
 
 const FONT_BYTES: &[u8] = include_bytes!("../assets/fonts/Inter.ttf");
@@ -197,7 +197,7 @@ impl App {
             }
         };
         let params = RenderParams {
-            base_color: Color::from_rgba8(10, 12, 20, 255),
+            base_color: hex(bg_app()),
             width: w,
             height: h,
             antialiasing_method: AaConfig::Area,
@@ -269,6 +269,7 @@ impl App {
         let Some(part) = self.bar.hit(self.logical_width(), home) else { return false };
         match part {
             Part::Close => event_loop.exit(),
+            Part::Theme => set_dark(!is_dark()),
             Part::Minimize => gfx.window.set_minimized(true),
             Part::Maximize => gfx.window.set_maximized(!gfx.window.is_maximized()),
             Part::Home => {
@@ -295,6 +296,7 @@ impl App {
             let key = match named {
                 NamedKey::Backspace => Some(Key::Backspace),
                 NamedKey::Delete => Some(Key::Delete),
+                NamedKey::Insert => Some(Key::Insert),
                 NamedKey::ArrowLeft => Some(Key::Left),
                 NamedKey::ArrowRight => Some(Key::Right),
                 NamedKey::Home => Some(Key::Home),
@@ -310,8 +312,18 @@ impl App {
         }
         if self.mods.ctrl {
             // Shortcuts use the physical key so they work on any keyboard layout (e.g. Russian).
-            if let PhysicalKey::Code(KeyCode::KeyA) = event.physical_key {
-                self.screen.key(Key::SelectAll, self.mods);
+            let key = match event.physical_key {
+                PhysicalKey::Code(KeyCode::KeyA) => Some(Key::SelectAll),
+                PhysicalKey::Code(KeyCode::KeyC) => Some(Key::Copy),
+                PhysicalKey::Code(KeyCode::KeyX) => Some(Key::Cut),
+                PhysicalKey::Code(KeyCode::KeyV) => Some(Key::Paste),
+                PhysicalKey::Code(KeyCode::KeyY) => Some(Key::Redo),
+                PhysicalKey::Code(KeyCode::KeyZ) if self.mods.shift => Some(Key::Redo),
+                PhysicalKey::Code(KeyCode::KeyZ) => Some(Key::Undo),
+                _ => None,
+            };
+            if let Some(k) = key {
+                self.screen.key(k, self.mods);
             }
             return;
         }
@@ -384,7 +396,7 @@ impl ApplicationHandler for App {
             }
             WindowEvent::MouseInput { state: ElementState::Pressed, button: MouseButton::Left, .. } => {
                 if !self.chrome_click(event_loop) {
-                    self.screen.click();
+                    self.screen.click(self.mods);
                 }
             }
             WindowEvent::MouseWheel { delta, .. } => {

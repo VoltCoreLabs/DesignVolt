@@ -7,7 +7,6 @@ use vello::peniko::Color;
 use vello::peniko::color::AlphaColor;
 
 pub struct Palette {
-    pub dark: bool,
     pub bg_app: u32,
     pub bg_app2: u32,
     pub bg_canvas: u32,
@@ -28,7 +27,6 @@ pub struct Palette {
 }
 
 pub static DARK: Palette = Palette {
-    dark: true,
     bg_app: 0x0A0C14,
     bg_app2: 0x16122B,
     bg_canvas: 0x0E1019,
@@ -47,7 +45,6 @@ pub static DARK: Palette = Palette {
 };
 
 pub static LIGHT: Palette = Palette {
-    dark: false,
     bg_app: 0xF3F6FC,
     bg_app2: 0xE3ECFB,
     bg_canvas: 0xE9EEF7,
@@ -75,10 +72,6 @@ pub fn palette() -> &'static Palette {
 
 pub fn set_dark(dark: bool) {
     CURRENT.with(|c| c.set(if dark { &DARK } else { &LIGHT }));
-}
-
-pub fn is_dark() -> bool {
-    palette().dark
 }
 
 pub const WHITE: u32 = 0xFFFFFF;
@@ -143,18 +136,18 @@ mod tests {
         for p in [&DARK, &LIGHT] {
             assert!(
                 contrast(p.text_primary, p.bg_panel) >= 7.0,
-                "primary dark={}",
-                p.dark
+                "primary {:06X}",
+                p.bg_panel
             );
             assert!(
                 contrast(p.text_secondary, p.bg_panel) >= 4.5,
-                "secondary dark={}",
-                p.dark
+                "secondary {:06X}",
+                p.bg_panel
             );
             assert!(
                 contrast(p.text_primary, p.bg_raised) >= 4.5,
-                "raised dark={}",
-                p.dark
+                "raised {:06X}",
+                p.bg_panel
             );
         }
     }
@@ -168,8 +161,8 @@ mod tests {
     #[test]
     fn toggling_switches_the_palette() {
         set_dark(true);
-        assert!(is_dark());
+        assert_eq!(bg_panel(), DARK.bg_panel);
         set_dark(false);
-        assert!(!is_dark());
+        assert_eq!(bg_panel(), LIGHT.bg_panel);
     }
 }

@@ -8,6 +8,7 @@ use super::text_edit::Edit;
 use crate::anim::Spring;
 use crate::clipboard;
 use crate::draw::Cx;
+use crate::i18n::{Msg, tr};
 use crate::input::{Key, Mods};
 use crate::text::Font;
 use crate::theme::colors::*;
@@ -22,7 +23,7 @@ const PAD_X: f64 = 14.0;
 pub struct TextInput {
     edit: Edit,
     max_chars: usize,
-    placeholder: &'static str,
+    placeholder: Msg,
     show_counter: bool,
     pub focused: bool,
     pub dragging: bool,
@@ -33,7 +34,7 @@ pub struct TextInput {
 }
 
 impl TextInput {
-    pub fn new(max_chars: usize, placeholder: &'static str, show_counter: bool) -> Self {
+    pub fn new(max_chars: usize, placeholder: Msg, show_counter: bool) -> Self {
         Self {
             edit: Edit::new(max_chars),
             max_chars,
@@ -171,7 +172,7 @@ impl TextInput {
             cx.fill(sel, 3.0, alpha(accent(), 0.35));
         }
         if text.is_empty() {
-            cx.text(self.placeholder, FONT_MD, x, base, hex(text_disabled()));
+            cx.text(tr(self.placeholder), FONT_MD, x, base, hex(text_disabled()));
         } else {
             cx.text(text, FONT_MD, x, base, hex(text_primary()));
         }

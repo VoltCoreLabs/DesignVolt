@@ -4,6 +4,7 @@ mod chrome;
 mod clipboard;
 mod draw;
 mod editor;
+mod i18n;
 mod icons;
 mod input;
 mod screens;

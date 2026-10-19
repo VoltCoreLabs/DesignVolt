@@ -3,6 +3,7 @@
 use vello::kurbo::Rect;
 
 use crate::draw::Cx;
+use crate::i18n::{Msg, tr};
 use crate::icons::Icon;
 use crate::theme::colors::*;
 use crate::theme::metrics::*;
@@ -75,17 +76,12 @@ fn field(cx: &mut Cx, r: Rect, label: &str, value: &str) {
 pub fn topbar(cx: &mut Cx, r: Rect) {
     cx.fill(r, 0.0, hex(bg_panel()));
     divider(cx, r.x0, r.x1, r.y1 - 1.0);
-    for (i, item) in ["File", "Edit", "View"].iter().enumerate() {
-        cx.text(
-            item,
-            FONT_UI,
-            16.0 + i as f64 * 48.0,
-            25.0,
-            hex(text_secondary()),
-        );
+    let mut mx = 16.0;
+    for item in [Msg::MenuFile, Msg::MenuEdit, Msg::MenuView] {
+        mx += cx.text(tr(item), FONT_UI, mx, 25.0, hex(text_secondary())) + 20.0;
     }
 
-    let title = "Untitled  /  Page 1";
+    let title = tr(Msg::DocumentTitle);
     let w = cx.text_width(title, FONT_UI);
     cx.text(
         title,
@@ -95,11 +91,18 @@ pub fn topbar(cx: &mut Cx, r: Rect) {
         hex(text_secondary()),
     );
 
-    let share = Rect::new(r.x1 - 82.0, 7.0, r.x1 - 12.0, 33.0);
+    let share_w = 29.0 + cx.text_width(tr(Msg::Share), FONT_UI) + 14.0;
+    let share = Rect::new(r.x1 - 12.0 - share_w, 7.0, r.x1 - 12.0, 33.0);
     cx.fill_grad(share, R_BUTTON, hex(accent_from()), hex(accent_to()));
     cx.icon(Icon::Share, share.x0 + 10.0, 13.0, 14.0, hex(WHITE));
-    cx.text("Share", FONT_UI, share.x0 + 29.0, 24.0, hex(WHITE));
-    cx.text("100%", FONT_UI, r.x1 - 130.0, 25.0, hex(text_secondary()));
+    cx.text(tr(Msg::Share), FONT_UI, share.x0 + 29.0, 24.0, hex(WHITE));
+    cx.text(
+        "100%",
+        FONT_UI,
+        share.x0 - 52.0,
+        25.0,
+        hex(text_secondary()),
+    );
 }
 
 pub fn left_panel(cx: &mut Cx, r: Rect) {
@@ -111,8 +114,8 @@ pub fn left_panel(cx: &mut Cx, r: Rect) {
     );
     let (x0, x1, y0) = (r.x0, r.x1 - 1.0, r.y0);
 
-    let w = tab(cx, "Layers", x0 + 12.0, y0 + 8.0, true);
-    tab(cx, "Assets", x0 + 24.0 + w, y0 + 8.0, false);
+    let w = tab(cx, tr(Msg::TabLayers), x0 + 12.0, y0 + 8.0, true);
+    tab(cx, tr(Msg::TabAssets), x0 + 24.0 + w, y0 + 8.0, false);
     divider(cx, x0, x1, y0 + 38.0);
 
     let search = Rect::new(x0 + 12.0, y0 + 48.0, x1 - 12.0, y0 + 48.0 + FIELD_H);
@@ -125,7 +128,7 @@ pub fn left_panel(cx: &mut Cx, r: Rect) {
         hex(text_secondary()),
     );
     cx.text(
-        "Search layers",
+        tr(Msg::SearchLayers),
         FONT_UI,
         search.x0 + 30.0,
         search.y0 + 18.0,
@@ -133,7 +136,7 @@ pub fn left_panel(cx: &mut Cx, r: Rect) {
     );
 
     cx.text(
-        "Pages",
+        tr(Msg::Pages),
         FONT_SM,
         x0 + 12.0,
         y0 + 98.0,
@@ -146,13 +149,13 @@ pub fn left_panel(cx: &mut Cx, r: Rect) {
         14.0,
         hex(text_secondary()),
     );
-    for (i, name) in ["Page 1", "Page 2"].iter().enumerate() {
+    for (i, name) in [Msg::Page1, Msg::Page2].iter().enumerate() {
         let ry = y0 + 108.0 + i as f64 * ROW_H;
         row(
             cx,
             Rect::new(x0 + 8.0, ry, x1 - 8.0, ry + ROW_H),
             None,
-            name,
+            tr(*name),
             0.0,
             i == 0,
         );
@@ -160,10 +163,10 @@ pub fn left_panel(cx: &mut Cx, r: Rect) {
     divider(cx, x0, x1, y0 + 176.0);
 
     let layers = [
-        (Icon::Frame, "Frame 1", 0.0, false),
-        (Icon::Square, "Rectangle", 1.0, true),
-        (Icon::Circle, "Ellipse", 1.0, false),
-        (Icon::Text, "Title", 1.0, false),
+        (Icon::Frame, tr(Msg::LayerFrame), 0.0, false),
+        (Icon::Square, tr(Msg::LayerRectangle), 1.0, true),
+        (Icon::Circle, tr(Msg::LayerEllipse), 1.0, false),
+        (Icon::Text, tr(Msg::LayerTitle), 1.0, false),
     ];
     for (i, (icon, name, indent, sel)) in layers.iter().enumerate() {
         let ry = y0 + 188.0 + i as f64 * ROW_H;
@@ -187,13 +190,19 @@ pub fn right_panel(cx: &mut Cx, r: Rect) {
     );
     let (x0, x1, y0) = (r.x0 + 1.0, r.x1, r.y0);
 
-    let w1 = tab(cx, "Design", x0 + 12.0, y0 + 8.0, true);
-    let w2 = tab(cx, "Prototype", x0 + 24.0 + w1, y0 + 8.0, false);
-    tab(cx, "Inspect", x0 + 36.0 + w1 + w2, y0 + 8.0, false);
+    let w1 = tab(cx, tr(Msg::TabDesign), x0 + 12.0, y0 + 8.0, true);
+    let w2 = tab(cx, tr(Msg::TabPrototype), x0 + 24.0 + w1, y0 + 8.0, false);
+    tab(
+        cx,
+        tr(Msg::TabInspect),
+        x0 + 36.0 + w1 + w2,
+        y0 + 8.0,
+        false,
+    );
     divider(cx, x0, x1, y0 + 38.0);
 
     cx.text(
-        "Frame",
+        tr(Msg::SectionFrame),
         FONT_SM,
         x0 + 12.0,
         y0 + 62.0,
@@ -215,7 +224,7 @@ pub fn right_panel(cx: &mut Cx, r: Rect) {
     divider(cx, x0, x1, y0 + 176.0);
 
     cx.text(
-        "Fill",
+        tr(Msg::SectionFill),
         FONT_SM,
         x0 + 12.0,
         y0 + 198.0,
@@ -231,7 +240,7 @@ pub fn right_panel(cx: &mut Cx, r: Rect) {
     let sw = Rect::new(x0 + 12.0, y0 + 208.0, x0 + 32.0, y0 + 228.0);
     cx.fill_grad(sw, R_FIELD, hex(accent_from()), hex(accent_to()));
     cx.text(
-        "6366F1",
+        &format!("{:06X}", accent_from()),
         FONT_UI,
         x0 + 42.0,
         y0 + 222.0,
@@ -247,7 +256,7 @@ pub fn right_panel(cx: &mut Cx, r: Rect) {
     divider(cx, x0, x1, y0 + 244.0);
 
     cx.text(
-        "Effects",
+        tr(Msg::SectionEffects),
         FONT_SM,
         x0 + 12.0,
         y0 + 266.0,
@@ -263,7 +272,7 @@ pub fn right_panel(cx: &mut Cx, r: Rect) {
     let er = Rect::new(x0 + 8.0, y0 + 276.0, x1 - 8.0, y0 + 276.0 + ROW_H);
     cx.fill(er, R_BUTTON, hex(bg_raised()));
     cx.text(
-        "Drop shadow",
+        tr(Msg::DropShadow),
         FONT_UI,
         er.x0 + 12.0,
         er.y0 + 18.0,

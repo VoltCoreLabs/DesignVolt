@@ -6,6 +6,7 @@ use vello::kurbo::{Affine, Rect};
 use super::backdrop;
 use crate::anim::{ease_out_cubic, progress};
 use crate::draw::Cx;
+use crate::i18n::{Msg, tr};
 use crate::input::{Key, Mods, Screen, SharedAssets, Transition, Viewport};
 use crate::store::NAME_MAX_CHARS;
 use crate::theme::colors::*;
@@ -36,7 +37,7 @@ struct Layout {
 
 impl Welcome {
     pub fn new(assets: SharedAssets) -> Self {
-        let mut input = TextInput::new(NAME_MAX_CHARS, "Your name", true);
+        let mut input = TextInput::new(NAME_MAX_CHARS, Msg::NamePlaceholder, true);
         input.focused = true;
         Self {
             assets,
@@ -121,14 +122,14 @@ impl Screen for Welcome {
             cx.shadow(logo, 12.0, alpha(accent(), 0.5), 14.0, 6.0);
             cx.fill_grad(logo, 12.0, hex(accent_from()), hex(accent_to()));
             cx.text(
-                "Welcome to DesignVolt",
-                22.0,
+                tr(Msg::WelcomeTitle),
+                20.0,
                 x,
                 l.card.y0 + 116.0,
                 hex(text_primary()),
             );
             cx.text(
-                "What should we call you?",
+                tr(Msg::WelcomeAsk),
                 FONT_MD,
                 x,
                 l.card.y0 + 142.0,
@@ -139,7 +140,7 @@ impl Screen for Welcome {
         let p = self.intro(2.5);
         cx.layer(full, p, (0.0, 16.0 * (1.0 - p as f64)), |cx| {
             self.input.draw(cx, l.input);
-            let hint = "Any characters, up to 20.";
+            let hint = tr(Msg::NameHint);
             cx.text(
                 hint,
                 FONT_SM,
@@ -151,8 +152,13 @@ impl Screen for Welcome {
 
         let p = self.intro(3.5);
         cx.layer(full, p, (0.0, 16.0 * (1.0 - p as f64)), |cx| {
-            self.button
-                .draw(cx, l.button, "Continue", None, !self.input.is_blank());
+            self.button.draw(
+                cx,
+                l.button,
+                tr(Msg::Continue),
+                None,
+                !self.input.is_blank(),
+            );
         });
     }
 

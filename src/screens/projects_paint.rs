@@ -7,8 +7,9 @@ use super::backdrop;
 use super::projects::*;
 use crate::anim::{ease_out_cubic, progress};
 use crate::draw::Cx;
+use crate::i18n::{Msg, edited, projects_count, tr};
 use crate::icons::Icon;
-use crate::store::{Project, ago, now_secs};
+use crate::store::{Project, now_secs};
 use crate::theme::colors::*;
 use crate::theme::metrics::*;
 use crate::theme::motion::{PANEL_INTRO, STAGGER};
@@ -65,9 +66,14 @@ impl Projects {
             alpha(overlay(), 0.08),
         );
 
-        for (i, name) in ["All projects", "Recent", "Favorites", "Trash"]
-            .iter()
-            .enumerate()
+        for (i, name) in [
+            Msg::NavAll,
+            Msg::NavRecent,
+            Msg::NavFavorites,
+            Msg::NavTrash,
+        ]
+        .iter()
+        .enumerate()
         {
             let row = Rect::new(
                 12.0,
@@ -84,11 +90,11 @@ impl Projects {
             } else {
                 hex(text_disabled())
             };
-            cx.text(name, FONT_MD, row.x0 + 14.0, row.center().y + 4.5, c);
+            cx.text(tr(*name), FONT_MD, row.x0 + 14.0, row.center().y + 4.5, c);
         }
 
         let name = self.store.borrow().name.clone().unwrap_or_default();
-        let chip = Rect::new(12.0, self.vp.h - 68.0, SIDEBAR_W - 12.0, self.vp.h - 12.0);
+        let chip = self.profile_chip();
         cx.fill(chip, R_CARD, hex(bg_raised()));
         let (ax, ay) = (chip.x0 + 28.0, chip.center().y);
         cx.fill_grad(
@@ -115,19 +121,16 @@ impl Projects {
 
     fn header(&self, cx: &mut Cx, l: &Layout) {
         let x = SIDEBAR_W + MARGIN;
-        cx.text("All projects", 22.0, x, 54.0, hex(text_primary()));
+        cx.text(tr(Msg::NavAll), 22.0, x, 54.0, hex(text_primary()));
         let n = self.store.borrow().projects.len();
-        let sub = match n {
-            1 => "1 project".to_string(),
-            n => format!("{n} projects"),
-        };
+        let sub = projects_count(n as u64);
         cx.text(&sub, FONT_UI, x, 76.0, hex(text_secondary()));
 
         self.search.draw(cx, l.search);
         let label = SORT_OPTIONS
             .iter()
             .find(|o| o.0 == self.sort_key)
-            .map_or("", |o| o.1);
+            .map_or("", |o| tr(o.1));
         let arrow = if self.ascending {
             "\u{2191}"
         } else {
@@ -159,8 +162,13 @@ impl Projects {
             14.0,
             hex(text_secondary()),
         );
-        self.new_button
-            .draw(cx, l.new_button, "New project", Some(Icon::Plus), true);
+        self.new_button.draw(
+            cx,
+            l.new_button,
+            tr(Msg::NewProject),
+            Some(Icon::Plus),
+            true,
+        );
     }
 
     fn grid(&self, cx: &mut Cx) {
@@ -193,12 +201,9 @@ impl Projects {
         let c = area.center();
         let filtered = !self.search.is_blank();
         let (title, sub) = if filtered {
-            ("No projects match your search", "Try a different name.")
+            (tr(Msg::NoMatchTitle), tr(Msg::NoMatchSub))
         } else {
-            (
-                "Create your first project",
-                "Your projects will show up here.",
-            )
+            (tr(Msg::EmptyTitle), tr(Msg::EmptySub))
         };
         let badge = Rect::new(c.x - 32.0, c.y - 96.0, c.x + 32.0, c.y - 32.0);
         cx.shadow(badge, 20.0, alpha(accent(), 0.45), 18.0, 8.0);
@@ -237,7 +242,7 @@ impl Projects {
             } else {
                 hex(text_secondary())
             };
-            cx.text(label, FONT_UI, row.x0 + 12.0, row.center().y + 4.3, c);
+            cx.text(tr(*label), FONT_UI, row.x0 + 12.0, row.center().y + 4.3, c);
             if selected {
                 let arrow = if self.ascending {
                     "\u{2191}"
@@ -289,7 +294,7 @@ fn card(cx: &mut Cx, r: Rect, p: &Project, hover: f32, now: u64) {
         hex(text_primary()),
     );
     cx.text(
-        &format!("Edited {}", ago(now, p.modified)),
+        &edited(now, p.modified),
         FONT_SM,
         r.x0 + 14.0,
         r.y0 + 166.0,

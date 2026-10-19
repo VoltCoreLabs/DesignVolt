@@ -3,6 +3,7 @@
 use vello::kurbo::Rect;
 
 use crate::draw::{Cx, mix};
+use crate::i18n::{Msg, tr};
 use crate::theme::colors::*;
 
 const GRID: f64 = 24.0;
@@ -24,7 +25,7 @@ pub fn draw(cx: &mut Cx, r: Rect) {
         let c = r.center();
         let frame = Rect::new(c.x - 180.0, c.y - 150.0, c.x + 180.0, c.y + 90.0);
         cx.text(
-            "Frame 1",
+            tr(Msg::LayerFrame),
             11.0,
             frame.x0,
             frame.y0 - 8.0,

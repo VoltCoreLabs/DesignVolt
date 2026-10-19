@@ -8,6 +8,7 @@ use vello::Scene;
 use vello::kurbo::{Point, Rect};
 
 use crate::anim::Spring;
+use crate::i18n::{Msg, tr};
 use crate::input::{Key, Mods, Screen, SharedAssets, Transition, Viewport};
 use crate::store::{SortKey, Store, now_secs};
 use crate::theme::motion::*;
@@ -20,10 +21,10 @@ pub const CARD_H: f64 = 180.0;
 pub const CARD_GAP: f64 = 20.0;
 pub const MARGIN: f64 = 32.0;
 pub const GRID_TOP: f64 = 112.0;
-pub const SORT_OPTIONS: [(SortKey, &str); 3] = [
-    (SortKey::Name, "Name"),
-    (SortKey::Modified, "Last modified"),
-    (SortKey::Created, "Created"),
+pub const SORT_OPTIONS: [(SortKey, Msg); 3] = [
+    (SortKey::Name, Msg::SortName),
+    (SortKey::Modified, Msg::SortModified),
+    (SortKey::Created, Msg::SortCreated),
 ];
 
 pub struct CardAnim {
@@ -77,7 +78,7 @@ impl Projects {
             vp: Viewport::new(),
             time: 0.0,
             mouse: (-1.0, -1.0),
-            search: TextInput::new(40, "Search projects", false),
+            search: TextInput::new(40, Msg::SearchProjects, false),
             new_button: Button::new(),
             sort_key: SortKey::Modified,
             ascending: false,
@@ -121,6 +122,11 @@ impl Projects {
         r.contains(Point::new(self.mouse.0, self.mouse.1))
     }
 
+    /// Profile chip at the bottom of the sidebar; opens settings.
+    pub fn profile_chip(&self) -> Rect {
+        Rect::new(12.0, self.vp.h - 68.0, SIDEBAR_W - 12.0, self.vp.h - 12.0)
+    }
+
     pub fn columns(&self) -> usize {
         let room = self.vp.w - SIDEBAR_W - 2.0 * MARGIN + CARD_GAP;
         ((room / (CARD_W + CARD_GAP)).floor() as usize).max(1)
@@ -160,7 +166,10 @@ impl Projects {
     }
 
     fn create_project(&mut self) {
-        let id = self.store.borrow_mut().create_project(now_secs());
+        let id = self
+            .store
+            .borrow_mut()
+            .create_project(now_secs(), tr(Msg::UntitledProject));
         if let Err(e) = self.store.borrow().save() {
             eprintln!("could not save projects: {e}");
         }
@@ -245,7 +254,9 @@ impl Screen for Projects {
             }
             return;
         }
-        if self.at(l.new_button) {
+        if self.at(self.profile_chip()) {
+            self.next = Some(Transition::OpenSettings);
+        } else if self.at(l.new_button) {
             self.new_button.press();
             self.create_project();
         } else if self.at(l.sort_button) {
@@ -285,6 +296,7 @@ impl Screen for Projects {
     fn pointer_hand(&self) -> bool {
         let l = self.layout();
         self.at(l.new_button)
+            || self.at(self.profile_chip())
             || self.at(l.sort_button)
             || self.at(l.search)
             || (self.menu_open && self.at(l.menu))

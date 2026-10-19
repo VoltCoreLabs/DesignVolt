@@ -23,6 +23,7 @@ pub enum Icon {
     Close,
     Sun,
     Moon,
+    Gear,
 }
 
 const SOURCES: &[(Icon, &str)] = &[
@@ -92,6 +93,10 @@ const SOURCES: &[(Icon, &str)] = &[
     (
         Icon::Moon,
         include_str!("../assets/icons/phosphor/moon.svg"),
+    ),
+    (
+        Icon::Gear,
+        include_str!("../assets/icons/phosphor/gear.svg"),
     ),
 ];
 

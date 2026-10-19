@@ -19,13 +19,15 @@ use winit::window::{CursorIcon, Window, WindowId};
 use crate::chrome::{cursor_for, resize_direction};
 use crate::draw::Cx;
 use crate::editor::Editor;
+use crate::i18n::{Msg, set_lang, tr};
 use crate::icons::Icons;
 use crate::input::{Assets, Key, Mods, Screen, SharedAssets, Transition};
 use crate::screens::projects::Projects;
+use crate::screens::settings::Settings;
 use crate::screens::welcome::Welcome;
 use crate::store::{Store, default_dir};
 use crate::text::Font;
-use crate::theme::colors::{bg_app, hex, is_dark, set_dark};
+use crate::theme::colors::{bg_app, hex, set_dark};
 use crate::titlebar::{BarState, HEIGHT as BAR_H, Part, TitleBar};
 
 const FONT_BYTES: &[u8] = include_bytes!("../assets/fonts/Inter.ttf");
@@ -45,6 +47,7 @@ struct Gfx {
 enum Place {
     Welcome,
     Projects,
+    Settings,
     Editor(String),
 }
 
@@ -58,7 +61,12 @@ impl Place {
             },
             Place::Projects => BarState {
                 home: true,
-                label: Some("All projects"),
+                label: Some(tr(Msg::NavAll)),
+                maximized,
+            },
+            Place::Settings => BarState {
+                home: true,
+                label: Some(tr(Msg::Settings)),
                 maximized,
             },
             Place::Editor(name) => BarState {
@@ -94,6 +102,8 @@ impl App {
             icons: Icons::new(),
         });
         let store = Rc::new(RefCell::new(Store::load(&default_dir())));
+        set_dark(store.borrow().dark);
+        set_lang(store.borrow().lang);
         let (screen, place): (Box<dyn Screen>, Place) = if store.borrow().name.is_some() {
             (
                 Box::new(Projects::new(assets.clone(), store.clone())),
@@ -151,6 +161,10 @@ impl App {
                 self.screen = Box::new(Editor::new(self.assets.clone()));
             }
             Transition::BackToProjects => self.show_projects(),
+            Transition::OpenSettings => {
+                self.place = Place::Settings;
+                self.screen = Box::new(Settings::new(self.assets.clone(), self.store.clone()));
+            }
         }
         if let Some(gfx) = &self.gfx {
             let size = gfx.window.inner_size();
@@ -299,7 +313,11 @@ impl App {
         };
         match part {
             Part::Close => event_loop.exit(),
-            Part::Theme => set_dark(!is_dark()),
+            Part::Settings => {
+                if !matches!(self.place, Place::Settings) {
+                    self.switch(Transition::OpenSettings);
+                }
+            }
             Part::Minimize => gfx.window.set_minimized(true),
             Part::Maximize => gfx.window.set_maximized(!gfx.window.is_maximized()),
             Part::Home => {

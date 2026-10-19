@@ -70,6 +70,7 @@ pub enum Transition {
     SetName(String),
     OpenProject(u64),
     BackToProjects,
+    OpenSettings,
 }
 
 pub trait Screen {

@@ -7,6 +7,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use crate::i18n::Lang;
+
 pub const NAME_MAX_CHARS: usize = 20;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -28,6 +30,8 @@ pub struct Store {
     dir: PathBuf,
     pub name: Option<String>,
     pub projects: Vec<Project>,
+    pub dark: bool,
+    pub lang: Lang,
 }
 
 pub fn now_secs() -> u64 {
@@ -98,15 +102,49 @@ impl Store {
         let projects = fs::read_to_string(dir.join("projects.txt"))
             .map(|s| s.lines().filter_map(parse_project).collect())
             .unwrap_or_default();
+        let mut store = Self::blank(dir);
+        store.name = name;
+        store.projects = projects;
+        if let Ok(s) = fs::read_to_string(dir.join("settings.txt")) {
+            store.apply_settings(&s);
+        }
+        store
+    }
+
+    /// Empty store with default settings (light theme, Russian) that was not loaded from disk.
+    pub fn blank(dir: &Path) -> Self {
         Self {
             dir: dir.to_path_buf(),
-            name,
-            projects,
+            name: None,
+            projects: Vec::new(),
+            dark: false,
+            lang: Lang::Ru,
         }
+    }
+
+    /// Reads `key=value` lines; unknown keys and bad values are ignored.
+    fn apply_settings(&mut self, text: &str) {
+        for line in text.lines() {
+            match line.split_once('=') {
+                Some(("theme", v)) => self.dark = v.trim() == "dark",
+                Some(("lang", v)) => {
+                    if let Some(l) = Lang::from_code(v) {
+                        self.lang = l;
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    fn settings_text(&self) -> String {
+        let theme = if self.dark { "dark" } else { "light" };
+        format!("theme={theme}\nlang={}\n", self.lang.code())
     }
 
     pub fn save(&self) -> std::io::Result<()> {
         fs::create_dir_all(&self.dir)?;
+        write_atomic(&self.dir.join("settings.txt"), &self.settings_text())?;
         let name = self.name.as_deref().unwrap_or("");
         write_atomic(&self.dir.join("profile.txt"), name)?;
         let body: String = self
@@ -129,20 +167,20 @@ impl Store {
         self.name = Some(sanitize_name(raw));
     }
 
-    /// Adds "Untitled N" with the lowest free N and returns its id.
-    pub fn create_project(&mut self, now: u64) -> u64 {
+    /// Adds "<base> N" with the lowest free N and returns its id.
+    pub fn create_project(&mut self, now: u64, base: &str) -> u64 {
         let id = self.projects.iter().map(|p| p.id).max().unwrap_or(0) + 1;
         let mut n = 1;
         while self
             .projects
             .iter()
-            .any(|p| p.name == format!("Untitled {n}"))
+            .any(|p| p.name == format!("{base} {n}"))
         {
             n += 1;
         }
         self.projects.push(Project {
             id,
-            name: format!("Untitled {n}"),
+            name: format!("{base} {n}"),
             created: now,
             modified: now,
         });
@@ -182,17 +220,6 @@ fn write_atomic(path: &Path, content: &str) -> std::io::Result<()> {
     fs::rename(&tmp, path)
 }
 
-/// "just now", "5 min ago", "3 h ago", "2 d ago", or a day count for older items.
-pub fn ago(now: u64, then: u64) -> String {
-    let d = now.saturating_sub(then);
-    match d {
-        0..=59 => "just now".to_string(),
-        60..=3599 => format!("{} min ago", d / 60),
-        3600..=86_399 => format!("{} h ago", d / 3600),
-        _ => format!("{} d ago", d / 86_400),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -216,7 +243,7 @@ mod tests {
         let dir = temp_dir("roundtrip");
         let mut s = Store::load(&dir);
         s.set_name("Вадим 🎨");
-        let id = s.create_project(100);
+        let id = s.create_project(100, "Untitled");
         s.projects[0].name = "tab\there\\and\nnewline Ж".to_string();
         s.save().unwrap();
 
@@ -239,28 +266,20 @@ mod tests {
 
     #[test]
     fn create_picks_free_untitled_number() {
-        let mut s = Store {
-            dir: PathBuf::new(),
-            name: None,
-            projects: vec![],
-        };
-        s.create_project(1);
-        s.create_project(2);
+        let mut s = Store::blank(&PathBuf::new());
+        s.create_project(1, "Untitled");
+        s.create_project(2, "Untitled");
         s.projects.remove(0);
-        s.create_project(3);
+        s.create_project(3, "Untitled");
         let names: Vec<_> = s.projects.iter().map(|p| p.name.as_str()).collect();
         assert_eq!(names, ["Untitled 2", "Untitled 1"]);
     }
 
     #[test]
     fn view_sorts_and_filters() {
-        let mut s = Store {
-            dir: PathBuf::new(),
-            name: None,
-            projects: vec![],
-        };
+        let mut s = Store::blank(&PathBuf::new());
         for (n, c, m) in [("beta", 1, 30), ("Alpha", 2, 10), ("gamma", 3, 20)] {
-            let id = s.create_project(0);
+            let id = s.create_project(0, "Untitled");
             let p = s.projects.iter_mut().find(|p| p.id == id).unwrap();
             (p.name, p.created, p.modified) = (n.to_string(), c, m);
         }
@@ -281,11 +300,47 @@ mod tests {
     }
 
     #[test]
-    fn ago_formats() {
-        assert_eq!(ago(100, 100), "just now");
-        assert_eq!(ago(400, 100), "5 min ago");
-        assert_eq!(ago(10_000, 0), "2 h ago");
-        assert_eq!(ago(200_000, 0), "2 d ago");
-        assert_eq!(ago(5, 100), "just now");
+    fn settings_default_to_light_and_russian() {
+        let dir = temp_dir("defaults");
+        let s = Store::load(&dir);
+        assert!(!s.dark);
+        assert_eq!(s.lang, Lang::Ru);
+    }
+
+    #[test]
+    fn settings_roundtrip() {
+        let dir = temp_dir("settings");
+        let mut s = Store::load(&dir);
+        s.dark = true;
+        s.lang = Lang::En;
+        s.save().unwrap();
+        let back = Store::load(&dir);
+        assert!(back.dark);
+        assert_eq!(back.lang, Lang::En);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn bad_settings_values_are_ignored() {
+        let dir = temp_dir("badsettings");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(
+            dir.join("settings.txt"),
+            "theme=dark\nlang=klingon\nnoise\n",
+        )
+        .unwrap();
+        let s = Store::load(&dir);
+        assert!(s.dark);
+        assert_eq!(s.lang, Lang::Ru);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn new_projects_use_the_given_base_name() {
+        let mut s = Store::blank(&PathBuf::new());
+        s.create_project(1, "Без названия");
+        s.create_project(2, "Без названия");
+        let names: Vec<_> = s.projects.iter().map(|p| p.name.as_str()).collect();
+        assert_eq!(names, ["Без названия 1", "Без названия 2"]);
     }
 }

@@ -20,14 +20,14 @@ pub enum Part {
     Minimize,
     Maximize,
     Close,
-    Theme,
+    Settings,
     /// Empty area: dragging moves the window, double-click maximizes.
     Drag,
 }
 
 /// What the bar shows; supplied by the app each frame.
 pub struct BarState<'a> {
-    /// Show the home button (hidden on the welcome screen).
+    /// Show the home and settings buttons (hidden on the welcome screen).
     pub home: bool,
     /// Current location, e.g. "All projects" or a project name.
     pub label: Option<&'a str>,
@@ -46,7 +46,7 @@ struct Rects {
     min: Rect,
     max: Rect,
     close: Rect,
-    theme: Rect,
+    settings: Rect,
 }
 
 fn rects(w: f64) -> Rects {
@@ -61,7 +61,7 @@ fn rects(w: f64) -> Rects {
         close: btn(0.0),
         max: btn(1.0),
         min: btn(2.0),
-        theme: btn(3.0),
+        settings: btn(3.0),
     }
 }
 
@@ -94,8 +94,8 @@ impl TitleBar {
             Part::Close
         } else if r.max.contains(p) {
             Part::Maximize
-        } else if r.theme.contains(p) {
-            Part::Theme
+        } else if home_visible && r.settings.contains(p) {
+            Part::Settings
         } else if r.min.contains(p) {
             Part::Minimize
         } else if home_visible && r.home.contains(p) {
@@ -113,7 +113,7 @@ impl TitleBar {
             Part::Minimize,
             Part::Maximize,
             Part::Close,
-            Part::Theme,
+            Part::Settings,
         ]
         .iter()
         .enumerate()
@@ -156,17 +156,12 @@ impl TitleBar {
             let col = mix_color(text_secondary(), text_primary(), h(i + 1));
             cx.icon(*icon, c.x - 7.0, c.y - 7.0, 14.0, col);
         }
-        // Theme toggle: shows where a click leads (moon in light theme, sun in dark).
-        cx.fill(r.theme, 0.0, alpha(bg_hover(), h(4)));
-        let tc = r.theme.center();
-        let theme_icon = if is_dark() { Icon::Sun } else { Icon::Moon };
-        cx.icon(
-            theme_icon,
-            tc.x - 8.0,
-            tc.y - 8.0,
-            16.0,
-            mix_color(text_secondary(), text_primary(), h(4)),
-        );
+        if state.home {
+            cx.fill(r.settings, 0.0, alpha(bg_hover(), h(4)));
+            let sc = r.settings.center();
+            let col = mix_color(text_secondary(), text_primary(), h(4));
+            cx.icon(Icon::Gear, sc.x - 8.0, sc.y - 8.0, 16.0, col);
+        }
         cx.fill(r.close, 0.0, alpha(danger(), h(3)));
         let c = r.close.center();
         cx.icon(

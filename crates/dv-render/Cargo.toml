@@ -1,0 +1,12 @@
+[package]
+name = "dv-render"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+dv-core.workspace = true
+dv-geom.workspace = true
+vello.workspace = true
+
+[dev-dependencies]
+pollster.workspace = true

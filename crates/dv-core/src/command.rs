@@ -1,0 +1,442 @@
+//! Reversible commands. `Document::apply` performs a command and returns its inverse, which is
+//! all that undo/redo needs. Every change of a document goes through a command.
+
+use crate::document::{Color, Document, Geometry, Node, NodeId, Stroke};
+
+/// Property changes; `None` leaves the property as it is.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Props {
+    pub name: Option<String>,
+    pub fill: Option<Option<Color>>,
+    pub stroke: Option<Option<Stroke>>,
+    pub radius: Option<f64>,
+    pub visible: Option<bool>,
+    pub locked: Option<bool>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum Command {
+    /// Adds a childless node with a pre-allocated id (`Document::alloc_id`).
+    Create {
+        id: NodeId,
+        parent: Option<NodeId>,
+        index: usize,
+        node: Node,
+    },
+    /// Removes a node together with its descendants.
+    Delete {
+        id: NodeId,
+    },
+    /// Puts a removed subtree back (root first); the inverse of `Delete`.
+    Restore {
+        nodes: Vec<(NodeId, Node)>,
+        parent: Option<NodeId>,
+        index: usize,
+    },
+    SetGeometry {
+        id: NodeId,
+        geom: Geometry,
+    },
+    SetProps {
+        id: NodeId,
+        props: Props,
+    },
+    /// Moves a node to `index` among its siblings (z-order).
+    Reorder {
+        id: NodeId,
+        index: usize,
+    },
+    /// Several commands that undo as one.
+    Batch(Vec<Command>),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum CommandError {
+    MissingNode(NodeId),
+    DuplicateNode(NodeId),
+    InvalidParent(NodeId),
+    EmptyRestore,
+}
+
+impl Document {
+    /// Applies `cmd` and returns the command that reverts it.
+    pub fn apply(&mut self, cmd: &Command) -> Result<Command, CommandError> {
+        match cmd {
+            Command::Create {
+                id,
+                parent,
+                index,
+                node,
+            } => self.create(*id, *parent, *index, node),
+            Command::Delete { id } => self.delete(*id),
+            Command::Restore {
+                nodes,
+                parent,
+                index,
+            } => self.restore(nodes, *parent, *index),
+            Command::SetGeometry { id, geom } => {
+                let n = self
+                    .page_mut()
+                    .nodes
+                    .get_mut(id)
+                    .ok_or(CommandError::MissingNode(*id))?;
+                let old = std::mem::replace(&mut n.geom, *geom);
+                Ok(Command::SetGeometry { id: *id, geom: old })
+            }
+            Command::SetProps { id, props } => self.set_props(*id, props),
+            Command::Reorder { id, index } => self.reorder(*id, *index),
+            Command::Batch(cmds) => self.batch(cmds),
+        }
+    }
+
+    fn create(
+        &mut self,
+        id: NodeId,
+        parent: Option<NodeId>,
+        index: usize,
+        node: &Node,
+    ) -> Result<Command, CommandError> {
+        if self.page().contains(id) {
+            return Err(CommandError::DuplicateNode(id));
+        }
+        if let Some(p) = parent
+            && !self.page().contains(p)
+        {
+            return Err(CommandError::InvalidParent(p));
+        }
+        self.reserve_id(id);
+        let mut node = node.clone();
+        node.parent = parent;
+        node.children.clear();
+        let page = self.page_mut();
+        page.nodes.insert(id, node);
+        let list = siblings_mut(page, parent);
+        list.insert(index.min(list.len()), id);
+        Ok(Command::Delete { id })
+    }
+
+    fn delete(&mut self, id: NodeId) -> Result<Command, CommandError> {
+        if !self.page().contains(id) {
+            return Err(CommandError::MissingNode(id));
+        }
+        let ids = self.page().subtree(id);
+        let parent = self.page().nodes[&id].parent;
+        let page = self.page_mut();
+        let list = siblings_mut(page, parent);
+        let index = list.iter().position(|x| *x == id).unwrap_or(0);
+        list.remove(index);
+        let nodes = ids
+            .into_iter()
+            .filter_map(|i| page.nodes.remove(&i).map(|n| (i, n)))
+            .collect();
+        Ok(Command::Restore {
+            nodes,
+            parent,
+            index,
+        })
+    }
+
+    fn restore(
+        &mut self,
+        nodes: &[(NodeId, Node)],
+        parent: Option<NodeId>,
+        index: usize,
+    ) -> Result<Command, CommandError> {
+        let Some((root, _)) = nodes.first() else {
+            return Err(CommandError::EmptyRestore);
+        };
+        if let Some((dup, _)) = nodes.iter().find(|(i, _)| self.page().contains(*i)) {
+            return Err(CommandError::DuplicateNode(*dup));
+        }
+        if let Some(p) = parent
+            && !self.page().contains(p)
+        {
+            return Err(CommandError::InvalidParent(p));
+        }
+        for (id, _) in nodes {
+            self.reserve_id(*id);
+        }
+        let page = self.page_mut();
+        for (id, node) in nodes {
+            page.nodes.insert(*id, node.clone());
+        }
+        let list = siblings_mut(page, parent);
+        list.insert(index.min(list.len()), *root);
+        Ok(Command::Delete { id: *root })
+    }
+
+    fn set_props(&mut self, id: NodeId, props: &Props) -> Result<Command, CommandError> {
+        let n = self
+            .page_mut()
+            .nodes
+            .get_mut(&id)
+            .ok_or(CommandError::MissingNode(id))?;
+        let mut old = Props::default();
+        if let Some(v) = &props.name {
+            old.name = Some(std::mem::replace(&mut n.name, v.clone()));
+        }
+        if let Some(v) = props.fill {
+            old.fill = Some(std::mem::replace(&mut n.fill, v));
+        }
+        if let Some(v) = props.stroke {
+            old.stroke = Some(std::mem::replace(&mut n.stroke, v));
+        }
+        if let Some(v) = props.radius {
+            old.radius = Some(std::mem::replace(&mut n.radius, v));
+        }
+        if let Some(v) = props.visible {
+            old.visible = Some(std::mem::replace(&mut n.visible, v));
+        }
+        if let Some(v) = props.locked {
+            old.locked = Some(std::mem::replace(&mut n.locked, v));
+        }
+        Ok(Command::SetProps { id, props: old })
+    }
+
+    fn reorder(&mut self, id: NodeId, index: usize) -> Result<Command, CommandError> {
+        let parent = self
+            .page()
+            .node(id)
+            .ok_or(CommandError::MissingNode(id))?
+            .parent;
+        let list = siblings_mut(self.page_mut(), parent);
+        let old = list.iter().position(|x| *x == id).unwrap_or(0);
+        list.remove(old);
+        list.insert(index.min(list.len()), id);
+        Ok(Command::Reorder { id, index: old })
+    }
+
+    fn batch(&mut self, cmds: &[Command]) -> Result<Command, CommandError> {
+        let mut inverses = Vec::with_capacity(cmds.len());
+        for cmd in cmds {
+            match self.apply(cmd) {
+                Ok(inv) => inverses.push(inv),
+                Err(e) => {
+                    // Roll back what was already applied so a failed batch changes nothing.
+                    for inv in inverses.iter().rev() {
+                        let _ = self.apply(inv);
+                    }
+                    return Err(e);
+                }
+            }
+        }
+        inverses.reverse();
+        Ok(Command::Batch(inverses))
+    }
+}
+
+fn siblings_mut(page: &mut crate::document::Page, parent: Option<NodeId>) -> &mut Vec<NodeId> {
+    match parent {
+        None => &mut page.roots,
+        Some(p) => &mut page.nodes.get_mut(&p).expect("parent exists").children,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::document::NodeKind;
+
+    fn rect(name: &str, x: f64) -> Node {
+        Node::new(
+            NodeKind::Rectangle,
+            name,
+            Geometry {
+                x,
+                y: 0.0,
+                w: 10.0,
+                h: 10.0,
+                rotation: 0.0,
+            },
+        )
+    }
+
+    fn create(doc: &mut Document, name: &str, parent: Option<NodeId>) -> NodeId {
+        let id = doc.alloc_id();
+        let index = doc.page().siblings(parent).len();
+        doc.apply(&Command::Create {
+            id,
+            parent,
+            index,
+            node: rect(name, 0.0),
+        })
+        .unwrap();
+        id
+    }
+
+    #[test]
+    fn create_and_delete_roundtrip_keep_ids_and_order() {
+        let mut doc = Document::default();
+        let a = create(&mut doc, "a", None);
+        let b = create(&mut doc, "b", None);
+        let c = create(&mut doc, "c", None);
+        let inv = doc.apply(&Command::Delete { id: b }).unwrap();
+        assert_eq!(doc.page().roots(), [a, c]);
+        doc.apply(&inv).unwrap();
+        assert_eq!(doc.page().roots(), [a, b, c]);
+        assert_eq!(doc.page().node(b).unwrap().name, "b");
+    }
+
+    #[test]
+    fn deleting_a_frame_removes_and_restores_its_subtree() {
+        let mut doc = Document::default();
+        let f = create(&mut doc, "frame", None);
+        let k1 = create(&mut doc, "k1", Some(f));
+        let k2 = create(&mut doc, "k2", Some(f));
+        let g = create(&mut doc, "grand", Some(k1));
+        assert_eq!(doc.page().len(), 4);
+        let inv = doc.apply(&Command::Delete { id: f }).unwrap();
+        assert!(doc.page().is_empty());
+        doc.apply(&inv).unwrap();
+        assert_eq!(doc.page().len(), 4);
+        assert_eq!(doc.page().siblings(Some(f)), [k1, k2]);
+        assert_eq!(doc.page().node(g).unwrap().parent, Some(k1));
+        assert_eq!(doc.page().draw_order(), [f, k1, g, k2]);
+    }
+
+    #[test]
+    fn set_geometry_and_props_are_reversible() {
+        let mut doc = Document::default();
+        let a = create(&mut doc, "a", None);
+        let geom = Geometry {
+            x: 5.0,
+            y: 6.0,
+            w: 7.0,
+            h: 8.0,
+            rotation: 30.0,
+        };
+        let inv = doc.apply(&Command::SetGeometry { id: a, geom }).unwrap();
+        assert_eq!(doc.page().node(a).unwrap().geom, geom);
+        doc.apply(&inv).unwrap();
+        assert_eq!(doc.page().node(a).unwrap().geom.x, 0.0);
+
+        let props = Props {
+            name: Some("renamed".into()),
+            fill: Some(None),
+            radius: Some(4.0),
+            locked: Some(true),
+            ..Props::default()
+        };
+        let inv = doc.apply(&Command::SetProps { id: a, props }).unwrap();
+        let n = doc.page().node(a).unwrap();
+        assert_eq!(
+            (n.name.as_str(), n.fill, n.radius, n.locked),
+            ("renamed", None, 4.0, true)
+        );
+        doc.apply(&inv).unwrap();
+        let n = doc.page().node(a).unwrap();
+        assert_eq!((n.name.as_str(), n.radius, n.locked), ("a", 0.0, false));
+        assert!(n.fill.is_some());
+    }
+
+    #[test]
+    fn reorder_changes_z_order_and_back() {
+        let mut doc = Document::default();
+        let a = create(&mut doc, "a", None);
+        let b = create(&mut doc, "b", None);
+        let c = create(&mut doc, "c", None);
+        let inv = doc.apply(&Command::Reorder { id: a, index: 99 }).unwrap();
+        assert_eq!(doc.page().roots(), [b, c, a]);
+        doc.apply(&inv).unwrap();
+        assert_eq!(doc.page().roots(), [a, b, c]);
+    }
+
+    #[test]
+    fn failed_batch_changes_nothing() {
+        let mut doc = Document::default();
+        let a = create(&mut doc, "a", None);
+        let before = doc.page().node(a).unwrap().geom;
+        let bad = Command::Batch(vec![
+            Command::SetGeometry {
+                id: a,
+                geom: Geometry { x: 99.0, ..before },
+            },
+            Command::Delete { id: NodeId(12345) },
+        ]);
+        assert_eq!(
+            doc.apply(&bad),
+            Err(CommandError::MissingNode(NodeId(12345)))
+        );
+        assert_eq!(doc.page().node(a).unwrap().geom, before);
+    }
+
+    #[test]
+    fn batch_undoes_in_reverse_order() {
+        let mut doc = Document::default();
+        let a = create(&mut doc, "a", None);
+        let one = Geometry {
+            x: 1.0,
+            ..Geometry::default()
+        };
+        let two = Geometry {
+            x: 2.0,
+            ..Geometry::default()
+        };
+        let inv = doc
+            .apply(&Command::Batch(vec![
+                Command::SetGeometry { id: a, geom: one },
+                Command::SetGeometry { id: a, geom: two },
+            ]))
+            .unwrap();
+        assert_eq!(doc.page().node(a).unwrap().geom.x, 2.0);
+        doc.apply(&inv).unwrap();
+        assert_eq!(doc.page().node(a).unwrap().geom.x, 0.0);
+    }
+
+    #[test]
+    fn invalid_commands_are_rejected() {
+        let mut doc = Document::default();
+        let a = create(&mut doc, "a", None);
+        let dup = Command::Create {
+            id: a,
+            parent: None,
+            index: 0,
+            node: rect("x", 0.0),
+        };
+        assert_eq!(doc.apply(&dup), Err(CommandError::DuplicateNode(a)));
+        let orphan = Command::Create {
+            id: doc.alloc_id(),
+            parent: Some(NodeId(999)),
+            index: 0,
+            node: rect("x", 0.0),
+        };
+        assert_eq!(
+            doc.apply(&orphan),
+            Err(CommandError::InvalidParent(NodeId(999)))
+        );
+        assert_eq!(
+            doc.apply(&Command::Restore {
+                nodes: vec![],
+                parent: None,
+                index: 0
+            }),
+            Err(CommandError::EmptyRestore)
+        );
+    }
+
+    #[test]
+    fn without_descendants_drops_nodes_inside_listed_nodes() {
+        let mut doc = Document::default();
+        let f = create(&mut doc, "f", None);
+        let k = create(&mut doc, "k", Some(f));
+        let g = create(&mut doc, "g", Some(k));
+        let other = create(&mut doc, "o", None);
+        let page = doc.page();
+        assert_eq!(page.without_descendants(&[f, k, g, other]), vec![f, other]);
+        assert_eq!(page.without_descendants(&[k, g]), vec![k]);
+        assert_eq!(page.without_descendants(&[g]), vec![g]);
+    }
+
+    #[test]
+    fn revision_grows_and_ids_are_never_reused() {
+        let mut doc = Document::default();
+        let r0 = doc.revision();
+        let a = create(&mut doc, "a", None);
+        assert!(doc.revision() > r0);
+        let inv = doc.apply(&Command::Delete { id: a }).unwrap();
+        let b = doc.alloc_id();
+        assert_ne!(a, b);
+        doc.apply(&inv).unwrap();
+        assert!(doc.page().contains(a));
+    }
+}

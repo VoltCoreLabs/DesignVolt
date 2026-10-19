@@ -1,29 +1,29 @@
 # Architecture
 
-Engine first. UI is a thin layer over a pure-data engine.
+Engine first. UI is a toolkit and the application on top of a pure-data engine.
 
 ```
 DesignVolt/
 ├── crates/
-│   ├── dv-core/     # document model, nodes, commands, undo/redo. No UI, no rendering.
-│   ├── dv-geom/     # kurbo helpers, boolean ops, hit-testing, spatial index
-│   ├── dv-render/   # builds a Vello scene from the document; culling, LOD, caching
-│   ├── dv-text/     # parley / skrifa / harfrust
-│   └── dv-ui/       # design system, widgets, animation engine (on Masonry)
+│   ├── dv-core/     document model, nodes, reversible commands, undo/redo. No UI, no rendering.
+│   ├── dv-geom/     transforms, bounds, exact hit-testing, R-tree spatial index
+│   ├── dv-render/   viewport (zoom/pan), culling, Vello scene from a page; bench example
+│   └── dv-ui/       UI toolkit: drawing context, text, icons, theme tokens, animation, widgets
 └── apps/
-    └── desktop/     # winit window, wires engine + canvas + panels
+    └── desktop/     binary `designvolt`: window, screens, project library, editor, i18n
 ```
 
 ## Dependency direction
 
-`dv-core` <- `dv-geom` <- `dv-render` <- `dv-ui` <- `apps/desktop`
-
-A crate may depend only on crates to its left. `dv-core` depends on none of the others.
+`dv-core` ← `dv-geom` ← `dv-render` ← `apps/desktop`, and `dv-ui` ← `apps/desktop`.
+`dv-ui` does not depend on the document crates and knows nothing about the app's screens.
+Every crate has `#![forbid(unsafe_code)]`.
 
 ## Rules
 
-- Document = arena of nodes (`slotmap`) plus persistent structures; snapshots for undo must be cheap.
-- All mutations are commands applied through one registry. UI, shortcuts and (later) CLI/scripting use the same commands.
-- Rendering reads an immutable document snapshot. Only visible nodes are drawn (spatial index + bounding boxes).
+- All document changes are commands applied through `Executor` (undo/redo). UI code never mutates nodes directly.
+- Node ids are stable (monotonic counter), so history and (later) collaboration can refer to them.
+- Rendering reads the document; only visible nodes are drawn (spatial index) and nodes that are too small to see are skipped.
+- The spatial index is rebuilt when the document revision changes.
 - Redraw only when the document, viewport or an animation changed.
 - Canvas and panels share one Vello renderer and one window.

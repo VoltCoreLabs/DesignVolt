@@ -17,6 +17,10 @@ pub enum Icon {
     Search,
     Plus,
     Share,
+    Home,
+    Minimize,
+    Restore,
+    Close,
 }
 
 const SOURCES: &[(Icon, &str)] = &[
@@ -33,6 +37,10 @@ const SOURCES: &[(Icon, &str)] = &[
     (Icon::Search, include_str!("../assets/icons/phosphor/magnifying-glass.svg")),
     (Icon::Plus, include_str!("../assets/icons/phosphor/plus.svg")),
     (Icon::Share, include_str!("../assets/icons/phosphor/share-network.svg")),
+    (Icon::Home, include_str!("../assets/icons/phosphor/house.svg")),
+    (Icon::Minimize, include_str!("../assets/icons/phosphor/minus.svg")),
+    (Icon::Restore, include_str!("../assets/icons/phosphor/copy-simple.svg")),
+    (Icon::Close, include_str!("../assets/icons/phosphor/x.svg")),
 ];
 
 /// Icon viewBox is 256x256.

@@ -56,11 +56,9 @@ impl Projects {
         let r = Rect::new(0.0, 0.0, SIDEBAR_W, self.vp.h);
         cx.fill(r, 0.0, alpha(BG_PANEL, 0.92));
         cx.fill(Rect::new(r.x1 - 1.0, 0.0, r.x1, r.y1), 0.0, alpha(WHITE, 0.08));
-        cx.fill_grad(Rect::new(20.0, 22.0, 42.0, 44.0), 7.0, hex(ACCENT_FROM), hex(ACCENT_TO));
-        cx.text("DesignVolt", 15.0, 52.0, 39.0, hex(TEXT_PRIMARY));
 
         for (i, name) in ["All projects", "Recent", "Favorites", "Trash"].iter().enumerate() {
-            let row = Rect::new(12.0, 84.0 + i as f64 * 36.0, SIDEBAR_W - 12.0, 84.0 + i as f64 * 36.0 + 32.0);
+            let row = Rect::new(12.0, 24.0 + i as f64 * 36.0, SIDEBAR_W - 12.0, 24.0 + i as f64 * 36.0 + 32.0);
             let active = i == 0;
             if active {
                 cx.fill(row, R_BUTTON, alpha(ACCENT, 0.22));

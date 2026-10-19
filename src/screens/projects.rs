@@ -8,7 +8,7 @@ use vello::Scene;
 use vello::kurbo::{Point, Rect};
 
 use crate::anim::Spring;
-use crate::input::{Key, Screen, SharedAssets, Transition, Viewport};
+use crate::input::{Key, Mods, Screen, SharedAssets, Transition, Viewport};
 use crate::store::{SortKey, Store, now_secs};
 use crate::theme::motion::*;
 use crate::widgets::button::Button;
@@ -188,6 +188,12 @@ impl Screen for Projects {
 
     fn mouse_moved(&mut self, x: f64, y: f64) {
         self.mouse = (x / self.vp.scale, y / self.vp.scale);
+        let left = self.layout().search.x0;
+        self.search.drag_to(&self.assets.font, self.mouse.0 - left);
+    }
+
+    fn mouse_up(&mut self) {
+        self.search.dragging = false;
     }
 
     fn mouse_left(&mut self) {
@@ -212,7 +218,7 @@ impl Screen for Projects {
             self.menu_open = true;
             self.search.focused = false;
         } else if self.at(l.search) {
-            self.search.focused = true;
+            self.search.press_at(&self.assets.font, self.mouse.0 - l.search.x0, false);
         } else if let Some(id) = self.hovered_card() {
             self.next = Some(Transition::OpenProject(id));
         } else {
@@ -224,12 +230,13 @@ impl Screen for Projects {
         self.scroll.target -= dy as f32;
     }
 
-    fn key(&mut self, key: Key) {
+    fn key(&mut self, key: Key, mods: Mods) {
         if key == Key::Escape {
             self.menu_open = false;
             self.search.focused = false;
         } else if self.search.focused {
-            self.search.key(key);
+            self.search.key(key, mods);
+            self.scroll.target = 0.0;
         }
     }
 

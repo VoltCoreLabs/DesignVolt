@@ -14,6 +14,7 @@ pub const TEXT_DISABLED: u32 = 0x5A6080;
 pub const ACCENT_FROM: u32 = 0x6366F1;
 pub const ACCENT_TO: u32 = 0xA855F7;
 pub const ACCENT: u32 = 0x7C5CFF;
+pub const DANGER: u32 = 0xF87171;
 pub const WHITE: u32 = 0xFFFFFF;
 
 /// Opaque color from `0xRRGGBB`.

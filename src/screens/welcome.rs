@@ -6,7 +6,7 @@ use vello::kurbo::{Affine, Rect};
 use super::backdrop;
 use crate::anim::{ease_out_cubic, progress};
 use crate::draw::Cx;
-use crate::input::{Key, Screen, SharedAssets, Transition, Viewport};
+use crate::input::{Key, Mods, Screen, SharedAssets, Transition, Viewport};
 use crate::store::NAME_MAX_CHARS;
 use crate::theme::colors::*;
 use crate::theme::metrics::*;
@@ -128,6 +128,8 @@ impl Screen for Welcome {
 
     fn mouse_moved(&mut self, x: f64, y: f64) {
         self.mouse = (x / self.vp.scale, y / self.vp.scale);
+        let left = self.layout().input.x0;
+        self.input.drag_to(&self.assets.font, self.mouse.0 - left);
     }
 
     fn mouse_left(&mut self) {
@@ -138,15 +140,21 @@ impl Screen for Welcome {
         let l = self.layout();
         if self.at(l.button) {
             self.submit();
+        } else if self.at(l.input) {
+            self.input.press_at(&self.assets.font, self.mouse.0 - l.input.x0, false);
         } else {
-            self.input.focused = self.at(l.input);
+            self.input.focused = false;
         }
     }
 
-    fn key(&mut self, key: Key) {
+    fn mouse_up(&mut self) {
+        self.input.dragging = false;
+    }
+
+    fn key(&mut self, key: Key, mods: Mods) {
         match key {
             Key::Enter => self.submit(),
-            k if self.input.focused => self.input.key(k),
+            k if self.input.focused => self.input.key(k, mods),
             _ => {}
         }
     }

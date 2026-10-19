@@ -17,9 +17,16 @@ pub enum Key {
     End,
     Enter,
     Escape,
+    SelectAll,
 }
 
 /// Shared read-only resources.
+#[derive(Clone, Copy, Default, Debug)]
+pub struct Mods {
+    pub ctrl: bool,
+    pub shift: bool,
+}
+
 pub struct Assets {
     pub font: Font,
     pub icons: Icons,
@@ -65,7 +72,8 @@ pub trait Screen {
     fn mouse_left(&mut self);
     fn click(&mut self);
     fn scroll(&mut self, _dy: f64) {}
-    fn key(&mut self, _key: Key) {}
+    fn key(&mut self, _key: Key, _mods: Mods) {}
+    fn mouse_up(&mut self) {}
     fn text(&mut self, _s: &str) {}
     fn pointer_hand(&self) -> bool;
     fn take_transition(&mut self) -> Option<Transition>;

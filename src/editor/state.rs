@@ -8,7 +8,7 @@ use super::toolbar::Toolbar;
 use super::{canvas, panels};
 use crate::anim::{ease_out_cubic, progress};
 use crate::draw::Cx;
-use crate::input::{Key, Screen, SharedAssets, Transition, Viewport};
+use crate::input::{Key, Mods, Screen, SharedAssets, Transition, Viewport};
 use crate::theme::colors::{BG_APP, hex};
 use crate::theme::motion::{PANEL_INTRO, STAGGER};
 
@@ -72,7 +72,7 @@ impl Screen for Editor {
         }
     }
 
-    fn key(&mut self, key: Key) {
+    fn key(&mut self, key: Key, _mods: Mods) {
         if key == Key::Escape {
             self.next = Some(Transition::BackToProjects);
         }

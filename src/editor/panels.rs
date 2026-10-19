@@ -44,8 +44,9 @@ fn field(cx: &mut Cx, r: Rect, label: &str, value: &str) {
 pub fn topbar(cx: &mut Cx, r: Rect) {
     cx.fill(r, 0.0, hex(BG_PANEL));
     divider(cx, r.x0, r.x1, r.y1 - 1.0);
-    cx.fill_grad(Rect::new(14.0, 11.0, 32.0, 29.0), 6.0, hex(ACCENT_FROM), hex(ACCENT_TO));
-    cx.text("DesignVolt", FONT_MD, 42.0, 25.0, hex(TEXT_PRIMARY));
+    for (i, item) in ["File", "Edit", "View"].iter().enumerate() {
+        cx.text(item, FONT_UI, 16.0 + i as f64 * 48.0, 25.0, hex(TEXT_SECONDARY));
+    }
 
     let title = "Untitled  /  Page 1";
     let w = cx.text_width(title, FONT_UI);

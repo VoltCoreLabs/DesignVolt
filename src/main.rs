@@ -1,5 +1,6 @@
 mod anim;
 mod app;
+mod chrome;
 mod draw;
 mod editor;
 mod icons;
@@ -8,6 +9,7 @@ mod screens;
 mod store;
 mod text;
 mod theme;
+mod titlebar;
 mod widgets;
 
 fn main() {

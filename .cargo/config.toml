@@ -1,0 +1,3 @@
+[alias]
+# Live rebuild: save a file -> app rebuilds and restarts (needs cargo-watch)
+dev = "watch -q -c -w crates -w apps -x run"

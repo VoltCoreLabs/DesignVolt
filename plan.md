@@ -1,0 +1,51 @@
+# План DesignVolt
+
+Цель: десктопный клон Figma на чистом Rust, быстрее CPU-рендеров. Стек — `docs/stack.md`, архитектура — `docs/architecture.md`.
+Полная карта вех (M0–M12, паритет с Figma без Community): `docs/roadmap.md`. Здесь — только текущая веха.
+
+## Текущий этап
+Этап 0 — каркас и проверка стека.
+
+## Этап 0 — каркас и прототип
+- [ ] Превратить проект в workspace (`crates/dv-*`, `apps/desktop`), общие версии в `[workspace.dependencies]`
+- [ ] `.cargo/config.toml`: alias `dev` (cargo-watch), быстрые dev-профили (как в WordVolt)
+- [ ] Сверить версии и API vello / masonry / xilem / parley на docs.rs, записать в ADR
+- [ ] Окно winit + wgpu, пустой холст на Vello
+- [ ] Бесконечный холст: зум и панорамирование
+- [ ] Кнопка со spring-анимацией hover/press (проверка ощущения стека)
+- [ ] Решение «Masonry или Xilem» — запись в ADR
+
+## Этап 1 — движок документа (`dv-core`, `dv-geom`)
+- [ ] Модель: страница → фреймы → узлы (rect, ellipse, path, text, group), arena `slotmap`
+- [ ] Трейт `Command` + реестр + undo/redo (persistent-снимки)
+- [ ] Hit-testing и выбор через `rstar`
+- [ ] Трансформации (move, resize, rotate), группировка
+- [ ] Булевы операции (`linesweeper`)
+
+## Этап 2 — рендер (`dv-render`)
+- [ ] Vello-сцена из документа: заливки, обводки, градиенты, тени
+- [ ] Culling и LOD при зуме
+- [ ] Инкрементальная перерисовка (кэш сцены)
+
+## Этап 3 — дизайн-система и UI (`dv-ui`)
+- [ ] Токены темы (светлая; тёмная позже)
+- [ ] Движок анимаций: `Animated<T>`, spring, easing, планировщик кадров
+- [ ] Базовые виджеты: Button, IconButton, Toggle, TextInput, Slider, Dropdown, Tooltip, ContextMenu
+- [ ] Панель слоёв (дерево, drag-and-drop, rename, hide/lock)
+- [ ] Панель свойств: scrubbable number field, цветовой пикер с градиентами
+- [ ] Тулбар и горячие клавиши
+
+## Этап 4 — текст
+- [ ] Текстовые узлы на parley/skrifa/harfrust
+- [ ] Редактирование текста на холсте
+
+## Позже
+- [ ] Сохранение/загрузка нативного формата, экспорт (PNG, SVG, PDF)
+- [ ] Импорт SVG
+- [ ] Коллаборация (CRDT, `yrs`)
+- [ ] Плагины
+
+## Открытые вопросы
+- Библиотека локализации (i18n) не выбрана — нужна запись в ADR (стек её не содержит).
+- Формат сохранения документа.
+- `thiserror`/`anyhow`/`tracing`/`serde` не входят в стек — решить, добавлять ли (через ADR).

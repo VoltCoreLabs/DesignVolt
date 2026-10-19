@@ -78,7 +78,9 @@ impl Cx<'_> {
     }
 
     pub fn icon(&mut self, icon: Icon, x: f64, y: f64, size: f64, c: Color) {
-        let Some(path) = self.icons.get(icon) else { return };
+        let Some(path) = self.icons.get(icon) else {
+            return;
+        };
         let t = self.xf * Affine::translate((x, y)) * Affine::scale(size / VIEWBOX);
         self.scene.fill(Fill::NonZero, t, c, None, path);
     }

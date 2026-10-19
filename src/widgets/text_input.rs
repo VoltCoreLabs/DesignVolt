@@ -162,7 +162,12 @@ impl TextInput {
 
         let (a, b) = self.edit.range();
         if self.focused && a != b {
-            let sel = Rect::new(x + width_of(cx, a), r.y0 + 8.0, x + width_of(cx, b), r.y1 - 8.0);
+            let sel = Rect::new(
+                x + width_of(cx, a),
+                r.y0 + 8.0,
+                x + width_of(cx, b),
+                r.y1 - 8.0,
+            );
             cx.fill(sel, 3.0, alpha(accent(), 0.35));
         }
         if text.is_empty() {
@@ -177,7 +182,11 @@ impl TextInput {
         }
         if self.focused && a == b && self.blink < BLINK_PERIOD / 2.0 {
             let pos = x + width_of(cx, self.edit.cursor());
-            cx.fill(Rect::new(pos, r.y0 + 10.0, pos + 1.5, r.y1 - 10.0), 0.75, hex(accent()));
+            cx.fill(
+                Rect::new(pos, r.y0 + 10.0, pos + 1.5, r.y1 - 10.0),
+                0.75,
+                hex(accent()),
+            );
         }
     }
 }

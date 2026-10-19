@@ -79,7 +79,9 @@ impl Screen for Editor {
     }
 
     fn pointer_hand(&self) -> bool {
-        self.toolbar.hit(&self.layout(), self.mouse.0, self.mouse.1).is_some()
+        self.toolbar
+            .hit(&self.layout(), self.mouse.0, self.mouse.1)
+            .is_some()
     }
 
     fn take_transition(&mut self) -> Option<Transition> {
@@ -99,7 +101,9 @@ impl Screen for Editor {
         cx.fill(full, 0.0, hex(bg_app()));
 
         let p = self.intro(0.0);
-        cx.layer(layout.canvas, p, (0.0, 0.0), |cx| canvas::draw(cx, layout.canvas));
+        cx.layer(layout.canvas, p, (0.0, 0.0), |cx| {
+            canvas::draw(cx, layout.canvas)
+        });
 
         let p = self.intro(0.0);
         cx.layer(layout.topbar, p, (0.0, -16.0 * (1.0 - p as f64)), |cx| {

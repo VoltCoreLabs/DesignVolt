@@ -51,9 +51,21 @@ enum Place {
 impl Place {
     fn bar_state(&self, maximized: bool) -> BarState<'_> {
         match self {
-            Place::Welcome => BarState { home: false, label: None, maximized },
-            Place::Projects => BarState { home: true, label: Some("All projects"), maximized },
-            Place::Editor(name) => BarState { home: true, label: Some(name), maximized },
+            Place::Welcome => BarState {
+                home: false,
+                label: None,
+                maximized,
+            },
+            Place::Projects => BarState {
+                home: true,
+                label: Some("All projects"),
+                maximized,
+            },
+            Place::Editor(name) => BarState {
+                home: true,
+                label: Some(name),
+                maximized,
+            },
         }
     }
 }
@@ -83,7 +95,10 @@ impl App {
         });
         let store = Rc::new(RefCell::new(Store::load(&default_dir())));
         let (screen, place): (Box<dyn Screen>, Place) = if store.borrow().name.is_some() {
-            (Box::new(Projects::new(assets.clone(), store.clone())), Place::Projects)
+            (
+                Box::new(Projects::new(assets.clone(), store.clone())),
+                Place::Projects,
+            )
         } else {
             (Box::new(Welcome::new(assets.clone())), Place::Welcome)
         };
@@ -115,7 +130,8 @@ impl App {
     /// Gives the active screen the area below the title bar.
     fn sync_viewport(&mut self, w: u32, h: u32) {
         let bar = self.bar_phys() as u32;
-        self.screen.set_viewport(w, h.saturating_sub(bar).max(1), self.scale());
+        self.screen
+            .set_viewport(w, h.saturating_sub(bar).max(1), self.scale());
     }
 
     fn switch(&mut self, t: Transition) {
@@ -152,7 +168,9 @@ impl App {
     }
 
     fn logical_width(&self) -> f64 {
-        self.gfx.as_ref().map_or(1.0, |g| g.surface.config.width as f64 / g.window.scale_factor())
+        self.gfx.as_ref().map_or(1.0, |g| {
+            g.surface.config.width as f64 / g.window.scale_factor()
+        })
     }
 
     fn render(&mut self) {
@@ -173,8 +191,10 @@ impl App {
 
         self.screen.draw(&mut self.child);
         self.scene.reset();
-        self.scene
-            .append(&self.child, Some(Affine::translate((0.0, (BAR_H * scale).round()))));
+        self.scene.append(
+            &self.child,
+            Some(Affine::translate((0.0, (BAR_H * scale).round()))),
+        );
         let mut cx = Cx {
             scene: &mut self.scene,
             font: &self.assets.font,
@@ -212,7 +232,9 @@ impl App {
             eprintln!("render error: {e}");
             return;
         }
-        let view = frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let view = frame
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
         let mut enc = handle
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
@@ -234,7 +256,13 @@ impl App {
         }
         let size = gfx.window.inner_size();
         let border = RESIZE_BORDER * gfx.window.scale_factor();
-        resize_direction(self.mouse.0, self.mouse.1, size.width as f64, size.height as f64, border)
+        resize_direction(
+            self.mouse.0,
+            self.mouse.1,
+            size.width as f64,
+            size.height as f64,
+            border,
+        )
     }
 
     fn pointer_moved(&mut self, x: f64, y: f64) {
@@ -266,7 +294,9 @@ impl App {
             return true;
         }
         let home = !matches!(self.place, Place::Welcome);
-        let Some(part) = self.bar.hit(self.logical_width(), home) else { return false };
+        let Some(part) = self.bar.hit(self.logical_width(), home) else {
+            return false;
+        };
         match part {
             Part::Close => event_loop.exit(),
             Part::Theme => set_dark(!is_dark()),
@@ -278,7 +308,9 @@ impl App {
                 }
             }
             Part::Drag => {
-                let double = self.last_bar_click.is_some_and(|t| t.elapsed() < DOUBLE_CLICK);
+                let double = self
+                    .last_bar_click
+                    .is_some_and(|t| t.elapsed() < DOUBLE_CLICK);
                 if double {
                     gfx.window.set_maximized(!gfx.window.is_maximized());
                     self.last_bar_click = None;
@@ -362,7 +394,11 @@ impl ApplicationHandler for App {
             },
         )
         .expect("renderer");
-        self.gfx = Some(Gfx { window: window.clone(), surface, renderer });
+        self.gfx = Some(Gfx {
+            window: window.clone(),
+            surface,
+            renderer,
+        });
         self.sync_viewport(size.width, size.height);
         self.last = Instant::now();
         window.request_redraw();
@@ -376,7 +412,8 @@ impl ApplicationHandler for App {
             WindowEvent::CloseRequested => event_loop.exit(),
             WindowEvent::Resized(size) if size.width > 0 && size.height > 0 => {
                 if let Some(gfx) = &mut self.gfx {
-                    self.ctx.resize_surface(&mut gfx.surface, size.width, size.height);
+                    self.ctx
+                        .resize_surface(&mut gfx.surface, size.width, size.height);
                 }
                 self.sync_viewport(size.width, size.height);
             }
@@ -388,13 +425,24 @@ impl ApplicationHandler for App {
             }
             WindowEvent::ModifiersChanged(m) => {
                 let s = m.state();
-                self.mods = Mods { ctrl: s.control_key() || s.super_key(), shift: s.shift_key() };
+                self.mods = Mods {
+                    ctrl: s.control_key() || s.super_key(),
+                    shift: s.shift_key(),
+                };
                 return;
             }
-            WindowEvent::MouseInput { state: ElementState::Released, button: MouseButton::Left, .. } => {
+            WindowEvent::MouseInput {
+                state: ElementState::Released,
+                button: MouseButton::Left,
+                ..
+            } => {
                 self.screen.mouse_up();
             }
-            WindowEvent::MouseInput { state: ElementState::Pressed, button: MouseButton::Left, .. } => {
+            WindowEvent::MouseInput {
+                state: ElementState::Pressed,
+                button: MouseButton::Left,
+                ..
+            } => {
                 if !self.chrome_click(event_loop) {
                     self.screen.click(self.mods);
                 }

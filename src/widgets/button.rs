@@ -56,7 +56,13 @@ impl Button {
 
         let a = if enabled { 1.0 } else { 0.35 };
         if enabled {
-            cx.shadow(r, R_BUTTON, alpha(accent(), (0.30 + 0.30 * h as f32).min(0.7)), 14.0 + 8.0 * h, 6.0);
+            cx.shadow(
+                r,
+                R_BUTTON,
+                alpha(accent(), (0.30 + 0.30 * h as f32).min(0.7)),
+                14.0 + 8.0 * h,
+                6.0,
+            );
         }
         cx.fill_grad(r, R_BUTTON, alpha(accent_from(), a), alpha(accent_to(), a));
         cx.fill(r, R_BUTTON, alpha(WHITE, 0.10 * h as f32));
@@ -69,7 +75,13 @@ impl Button {
             cx.icon(i, x, r.center().y - 8.0, 16.0, color);
             x += icon_w;
         }
-        cx.text(label, FONT_MD, x, r.center().y + FONT_MD as f64 * 0.36, color);
+        cx.text(
+            label,
+            FONT_MD,
+            x,
+            r.center().y + FONT_MD as f64 * 0.36,
+            color,
+        );
         cx.xf = old;
     }
 }

@@ -61,7 +61,15 @@ impl Projects {
             .borrow()
             .projects
             .iter()
-            .map(|p| (p.id, CardAnim { hover: hover_spring(), age: 10.0 }))
+            .map(|p| {
+                (
+                    p.id,
+                    CardAnim {
+                        hover: hover_spring(),
+                        age: 10.0,
+                    },
+                )
+            })
             .collect();
         Self {
             assets,
@@ -83,10 +91,30 @@ impl Projects {
     pub fn layout(&self) -> Layout {
         let end = self.vp.w - MARGIN;
         let new_button = Rect::new(end - 148.0, 26.0, end, 62.0);
-        let sort_button = Rect::new(new_button.x0 - 12.0 - 190.0, 26.0, new_button.x0 - 12.0, 62.0);
-        let search = Rect::new(sort_button.x0 - 12.0 - 240.0, 26.0, sort_button.x0 - 12.0, 62.0);
-        let menu = Rect::new(sort_button.x0, 68.0, sort_button.x1, 68.0 + 8.0 + 3.0 * 32.0 + 8.0);
-        Layout { new_button, sort_button, search, menu }
+        let sort_button = Rect::new(
+            new_button.x0 - 12.0 - 190.0,
+            26.0,
+            new_button.x0 - 12.0,
+            62.0,
+        );
+        let search = Rect::new(
+            sort_button.x0 - 12.0 - 240.0,
+            26.0,
+            sort_button.x0 - 12.0,
+            62.0,
+        );
+        let menu = Rect::new(
+            sort_button.x0,
+            68.0,
+            sort_button.x1,
+            68.0 + 8.0 + 3.0 * 32.0 + 8.0,
+        );
+        Layout {
+            new_button,
+            sort_button,
+            search,
+            menu,
+        }
     }
 
     pub fn at(&self, r: Rect) -> bool {
@@ -136,7 +164,13 @@ impl Projects {
         if let Err(e) = self.store.borrow().save() {
             eprintln!("could not save projects: {e}");
         }
-        self.cards.insert(id, CardAnim { hover: hover_spring(), age: 0.0 });
+        self.cards.insert(
+            id,
+            CardAnim {
+                hover: hover_spring(),
+                age: 0.0,
+            },
+        );
         self.search.focused = false;
         self.sort_key = SortKey::Created;
         self.ascending = false;
@@ -218,7 +252,8 @@ impl Screen for Projects {
             self.menu_open = true;
             self.search.focused = false;
         } else if self.at(l.search) {
-            self.search.press_at(&self.assets.font, self.mouse.0 - l.search.x0, mods.shift);
+            self.search
+                .press_at(&self.assets.font, self.mouse.0 - l.search.x0, mods.shift);
         } else if let Some(id) = self.hovered_card() {
             self.next = Some(Transition::OpenProject(id));
         } else {

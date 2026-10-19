@@ -56,7 +56,9 @@ pub fn default_dir() -> PathBuf {
 }
 
 fn escape(s: &str) -> String {
-    s.replace('\\', "\\\\").replace('\t', "\\t").replace('\n', "\\n")
+    s.replace('\\', "\\\\")
+        .replace('\t', "\\t")
+        .replace('\n', "\\n")
 }
 
 fn unescape(s: &str) -> String {
@@ -96,7 +98,11 @@ impl Store {
         let projects = fs::read_to_string(dir.join("projects.txt"))
             .map(|s| s.lines().filter_map(parse_project).collect())
             .unwrap_or_default();
-        Self { dir: dir.to_path_buf(), name, projects }
+        Self {
+            dir: dir.to_path_buf(),
+            name,
+            projects,
+        }
     }
 
     pub fn save(&self) -> std::io::Result<()> {
@@ -106,7 +112,15 @@ impl Store {
         let body: String = self
             .projects
             .iter()
-            .map(|p| format!("{}\t{}\t{}\t{}\n", p.id, p.created, p.modified, escape(&p.name)))
+            .map(|p| {
+                format!(
+                    "{}\t{}\t{}\t{}\n",
+                    p.id,
+                    p.created,
+                    p.modified,
+                    escape(&p.name)
+                )
+            })
             .collect();
         write_atomic(&self.dir.join("projects.txt"), &body)
     }
@@ -119,10 +133,19 @@ impl Store {
     pub fn create_project(&mut self, now: u64) -> u64 {
         let id = self.projects.iter().map(|p| p.id).max().unwrap_or(0) + 1;
         let mut n = 1;
-        while self.projects.iter().any(|p| p.name == format!("Untitled {n}")) {
+        while self
+            .projects
+            .iter()
+            .any(|p| p.name == format!("Untitled {n}"))
+        {
             n += 1;
         }
-        self.projects.push(Project { id, name: format!("Untitled {n}"), created: now, modified: now });
+        self.projects.push(Project {
+            id,
+            name: format!("Untitled {n}"),
+            created: now,
+            modified: now,
+        });
         id
     }
 
@@ -138,12 +161,14 @@ impl Store {
             .iter()
             .filter(|p| needle.is_empty() || p.name.to_lowercase().contains(&needle))
             .collect();
-        list.sort_by(|a, b| match key {
-            SortKey::Name => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
-            SortKey::Modified => a.modified.cmp(&b.modified),
-            SortKey::Created => a.created.cmp(&b.created),
-        }
-        .then(a.id.cmp(&b.id)));
+        list.sort_by(|a, b| {
+            match key {
+                SortKey::Name => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
+                SortKey::Modified => a.modified.cmp(&b.modified),
+                SortKey::Created => a.created.cmp(&b.created),
+            }
+            .then(a.id.cmp(&b.id))
+        });
         if !ascending {
             list.reverse();
         }
@@ -214,7 +239,11 @@ mod tests {
 
     #[test]
     fn create_picks_free_untitled_number() {
-        let mut s = Store { dir: PathBuf::new(), name: None, projects: vec![] };
+        let mut s = Store {
+            dir: PathBuf::new(),
+            name: None,
+            projects: vec![],
+        };
         s.create_project(1);
         s.create_project(2);
         s.projects.remove(0);
@@ -225,16 +254,29 @@ mod tests {
 
     #[test]
     fn view_sorts_and_filters() {
-        let mut s = Store { dir: PathBuf::new(), name: None, projects: vec![] };
+        let mut s = Store {
+            dir: PathBuf::new(),
+            name: None,
+            projects: vec![],
+        };
         for (n, c, m) in [("beta", 1, 30), ("Alpha", 2, 10), ("gamma", 3, 20)] {
             let id = s.create_project(0);
             let p = s.projects.iter_mut().find(|p| p.id == id).unwrap();
             (p.name, p.created, p.modified) = (n.to_string(), c, m);
         }
         let names = |v: Vec<&Project>| v.iter().map(|p| p.name.clone()).collect::<Vec<_>>();
-        assert_eq!(names(s.view(SortKey::Name, true, "")), ["Alpha", "beta", "gamma"]);
-        assert_eq!(names(s.view(SortKey::Modified, false, "")), ["beta", "gamma", "Alpha"]);
-        assert_eq!(names(s.view(SortKey::Created, true, "")), ["beta", "Alpha", "gamma"]);
+        assert_eq!(
+            names(s.view(SortKey::Name, true, "")),
+            ["Alpha", "beta", "gamma"]
+        );
+        assert_eq!(
+            names(s.view(SortKey::Modified, false, "")),
+            ["beta", "gamma", "Alpha"]
+        );
+        assert_eq!(
+            names(s.view(SortKey::Created, true, "")),
+            ["beta", "Alpha", "gamma"]
+        );
         assert_eq!(names(s.view(SortKey::Name, true, " AL ")), ["Alpha"]);
     }
 

@@ -11,7 +11,13 @@ pub struct Spring {
 
 impl Spring {
     pub fn new(value: f32, stiffness: f32, damping: f32) -> Self {
-        Self { pos: value, vel: 0.0, target: value, stiffness, damping }
+        Self {
+            pos: value,
+            vel: 0.0,
+            target: value,
+            stiffness,
+            damping,
+        }
     }
 
     pub fn step(&mut self, dt: f32) {

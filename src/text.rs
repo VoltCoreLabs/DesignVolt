@@ -15,7 +15,9 @@ impl Font {
     pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
         FontRef::from_index(bytes, 0).ok()?;
         let blob = Blob::new(Arc::new(bytes.to_vec()));
-        Some(Self { data: FontData::new(blob, 0) })
+        Some(Self {
+            data: FontData::new(blob, 0),
+        })
     }
 
     /// Returns positioned glyphs (baseline at y = 0) and the total advance width.
@@ -33,7 +35,11 @@ impl Font {
         let mut glyphs = Vec::new();
         for ch in text.chars() {
             let gid = charmap.map(ch).unwrap_or_default();
-            glyphs.push(Glyph { id: gid.to_u32(), x, y: 0.0 });
+            glyphs.push(Glyph {
+                id: gid.to_u32(),
+                x,
+                y: 0.0,
+            });
             x += metrics.advance_width(gid).unwrap_or(0.0) * scale;
         }
         (glyphs, x)

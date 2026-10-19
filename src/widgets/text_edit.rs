@@ -78,7 +78,10 @@ impl Edit {
     }
 
     fn byte_at(&self, chars: usize) -> usize {
-        self.text.char_indices().nth(chars).map_or(self.text.len(), |(i, _)| i)
+        self.text
+            .char_indices()
+            .nth(chars)
+            .map_or(self.text.len(), |(i, _)| i)
     }
 
     pub fn selected(&self) -> &str {
@@ -87,7 +90,11 @@ impl Edit {
     }
 
     fn snap(&self) -> Snap {
-        Snap { text: self.text.clone(), cursor: self.cursor, anchor: self.anchor }
+        Snap {
+            text: self.text.clone(),
+            cursor: self.cursor,
+            anchor: self.anchor,
+        }
     }
 
     fn restore(&mut self, s: Snap) {
@@ -239,7 +246,11 @@ impl Edit {
                 if self.has_selection() && !shift {
                     self.move_to(a, false);
                 } else {
-                    let to = if ctrl { self.word_target(false) } else { self.cursor.saturating_sub(1) };
+                    let to = if ctrl {
+                        self.word_target(false)
+                    } else {
+                        self.cursor.saturating_sub(1)
+                    };
                     self.move_to(to, shift);
                 }
             }
@@ -248,7 +259,11 @@ impl Edit {
                 if self.has_selection() && !shift {
                     self.move_to(b, false);
                 } else {
-                    let to = if ctrl { self.word_target(true) } else { self.cursor + 1 };
+                    let to = if ctrl {
+                        self.word_target(true)
+                    } else {
+                        self.cursor + 1
+                    };
                     self.move_to(to, shift);
                 }
             }
@@ -266,7 +281,11 @@ impl Edit {
             self.remove_range(a, b);
         } else if self.cursor > 0 {
             self.begin(Kind::Backspace);
-            let from = if word { self.word_target(false) } else { self.cursor - 1 };
+            let from = if word {
+                self.word_target(false)
+            } else {
+                self.cursor - 1
+            };
             self.remove_range(from, self.cursor);
         }
     }
@@ -278,7 +297,11 @@ impl Edit {
             self.remove_range(a, b);
         } else if self.cursor < self.len() {
             self.begin(Kind::Delete);
-            let to = if word { self.word_target(true) } else { self.cursor + 1 };
+            let to = if word {
+                self.word_target(true)
+            } else {
+                self.cursor + 1
+            };
             self.remove_range(self.cursor, to);
         }
     }
@@ -288,9 +311,18 @@ impl Edit {
 mod tests {
     use super::*;
 
-    const NONE: Mods = Mods { ctrl: false, shift: false };
-    const SHIFT: Mods = Mods { ctrl: false, shift: true };
-    const CTRL: Mods = Mods { ctrl: true, shift: false };
+    const NONE: Mods = Mods {
+        ctrl: false,
+        shift: false,
+    };
+    const SHIFT: Mods = Mods {
+        ctrl: false,
+        shift: true,
+    };
+    const CTRL: Mods = Mods {
+        ctrl: true,
+        shift: false,
+    };
 
     fn with(text: &str) -> Edit {
         let mut e = Edit::new(40);
@@ -372,7 +404,13 @@ mod tests {
     #[test]
     fn shift_ctrl_arrow_selects_a_word() {
         let mut e = with("alpha beta");
-        e.key(Key::Left, Mods { ctrl: true, shift: true });
+        e.key(
+            Key::Left,
+            Mods {
+                ctrl: true,
+                shift: true,
+            },
+        );
         assert_eq!(e.selected(), "beta");
     }
 

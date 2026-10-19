@@ -26,7 +26,6 @@ pub enum Key {
     Insert,
 }
 
-
 #[derive(Clone, Copy, Default, Debug)]
 pub struct Mods {
     pub ctrl: bool,
@@ -49,7 +48,11 @@ pub struct Viewport {
 
 impl Viewport {
     pub fn new() -> Self {
-        Self { w: 1180.0, h: 760.0, scale: 1.0 }
+        Self {
+            w: 1180.0,
+            h: 760.0,
+            scale: 1.0,
+        }
     }
 
     /// `w`/`h` are physical pixels.

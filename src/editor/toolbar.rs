@@ -36,7 +36,10 @@ impl Toolbar {
     }
 
     pub fn hit(&self, layout: &Layout, x: f64, y: f64) -> Option<usize> {
-        layout.tools.iter().position(|t| t.contains(Point::new(x, y)))
+        layout
+            .tools
+            .iter()
+            .position(|t| t.contains(Point::new(x, y)))
     }
 
     pub fn select(&mut self, i: usize) {
@@ -72,7 +75,11 @@ impl Toolbar {
             }
             // Active icon is white; others fade from secondary to primary on hover.
             let near_pill = (self.pill.pos - i as f32).abs().min(1.0);
-            let color = if near_pill < 0.5 { hex(WHITE) } else { mix(text_secondary(), text_primary(), h) };
+            let color = if near_pill < 0.5 {
+                hex(WHITE)
+            } else {
+                mix(text_secondary(), text_primary(), h)
+            };
             let c = t.center();
             cx.icon(ICONS[i], c.x - 9.0, c.y - 9.0, 18.0, color);
         }

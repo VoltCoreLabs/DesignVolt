@@ -51,11 +51,20 @@ impl Welcome {
 
     fn layout(&self) -> Layout {
         let c = Rect::new(0.0, 0.0, self.vp.w, self.vp.h).center();
-        let card = Rect::new(c.x - CARD_W / 2.0, c.y - CARD_H / 2.0, c.x + CARD_W / 2.0, c.y + CARD_H / 2.0);
+        let card = Rect::new(
+            c.x - CARD_W / 2.0,
+            c.y - CARD_H / 2.0,
+            c.x + CARD_W / 2.0,
+            c.y + CARD_H / 2.0,
+        );
         let (x0, x1) = (card.x0 + PAD_X, card.x1 - PAD_X);
         let input = Rect::new(x0, card.y0 + 170.0, x1, card.y0 + 170.0 + 44.0);
         let button = Rect::new(x0, card.y0 + 262.0, x1, card.y0 + 262.0 + 44.0);
-        Layout { card, input, button }
+        Layout {
+            card,
+            input,
+            button,
+        }
     }
 
     fn at(&self, r: Rect) -> bool {
@@ -101,7 +110,9 @@ impl Screen for Welcome {
 
         let full = Rect::new(0.0, 0.0, self.vp.w, self.vp.h);
         let p = self.intro(0.0);
-        cx.layer(full, p, (0.0, 24.0 * (1.0 - p as f64)), |cx| cx.glass(l.card, R_MODAL));
+        cx.layer(full, p, (0.0, 24.0 * (1.0 - p as f64)), |cx| {
+            cx.glass(l.card, R_MODAL)
+        });
 
         let x = l.card.x0 + PAD_X;
         let p = self.intro(1.5);
@@ -109,20 +120,39 @@ impl Screen for Welcome {
             let logo = Rect::new(x, l.card.y0 + 36.0, x + 44.0, l.card.y0 + 80.0);
             cx.shadow(logo, 12.0, alpha(accent(), 0.5), 14.0, 6.0);
             cx.fill_grad(logo, 12.0, hex(accent_from()), hex(accent_to()));
-            cx.text("Welcome to DesignVolt", 22.0, x, l.card.y0 + 116.0, hex(text_primary()));
-            cx.text("What should we call you?", FONT_MD, x, l.card.y0 + 142.0, hex(text_secondary()));
+            cx.text(
+                "Welcome to DesignVolt",
+                22.0,
+                x,
+                l.card.y0 + 116.0,
+                hex(text_primary()),
+            );
+            cx.text(
+                "What should we call you?",
+                FONT_MD,
+                x,
+                l.card.y0 + 142.0,
+                hex(text_secondary()),
+            );
         });
 
         let p = self.intro(2.5);
         cx.layer(full, p, (0.0, 16.0 * (1.0 - p as f64)), |cx| {
             self.input.draw(cx, l.input);
             let hint = "Any characters, up to 20.";
-            cx.text(hint, FONT_SM, l.input.x0, l.input.y1 + 20.0, hex(text_disabled()));
+            cx.text(
+                hint,
+                FONT_SM,
+                l.input.x0,
+                l.input.y1 + 20.0,
+                hex(text_disabled()),
+            );
         });
 
         let p = self.intro(3.5);
         cx.layer(full, p, (0.0, 16.0 * (1.0 - p as f64)), |cx| {
-            self.button.draw(cx, l.button, "Continue", None, !self.input.is_blank());
+            self.button
+                .draw(cx, l.button, "Continue", None, !self.input.is_blank());
         });
     }
 
@@ -141,7 +171,8 @@ impl Screen for Welcome {
         if self.at(l.button) {
             self.submit();
         } else if self.at(l.input) {
-            self.input.press_at(&self.assets.font, self.mouse.0 - l.input.x0, mods.shift);
+            self.input
+                .press_at(&self.assets.font, self.mouse.0 - l.input.x0, mods.shift);
         } else {
             self.input.focused = false;
         }

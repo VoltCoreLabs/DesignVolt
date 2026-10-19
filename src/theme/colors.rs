@@ -124,7 +124,11 @@ mod tests {
     fn lum(rgb: u32) -> f64 {
         let ch = |s: u32| {
             let c = ((rgb >> s) & 255) as f64 / 255.0;
-            if c <= 0.03928 { c / 12.92 } else { ((c + 0.055) / 1.055).powf(2.4) }
+            if c <= 0.03928 {
+                c / 12.92
+            } else {
+                ((c + 0.055) / 1.055).powf(2.4)
+            }
         };
         0.2126 * ch(16) + 0.7152 * ch(8) + 0.0722 * ch(0)
     }
@@ -137,9 +141,21 @@ mod tests {
     #[test]
     fn text_meets_wcag_aa_on_panels_in_both_themes() {
         for p in [&DARK, &LIGHT] {
-            assert!(contrast(p.text_primary, p.bg_panel) >= 7.0, "primary dark={}", p.dark);
-            assert!(contrast(p.text_secondary, p.bg_panel) >= 4.5, "secondary dark={}", p.dark);
-            assert!(contrast(p.text_primary, p.bg_raised) >= 4.5, "raised dark={}", p.dark);
+            assert!(
+                contrast(p.text_primary, p.bg_panel) >= 7.0,
+                "primary dark={}",
+                p.dark
+            );
+            assert!(
+                contrast(p.text_secondary, p.bg_panel) >= 4.5,
+                "secondary dark={}",
+                p.dark
+            );
+            assert!(
+                contrast(p.text_primary, p.bg_raised) >= 4.5,
+                "raised dark={}",
+                p.dark
+            );
         }
     }
 

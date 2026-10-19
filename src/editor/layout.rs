@@ -27,7 +27,9 @@ impl Layout {
         let right = Rect::new((w - RIGHT_W).max(LEFT_W), TOPBAR_H, w, h);
         let canvas = Rect::new(left.x1, TOPBAR_H, right.x0, h);
 
-        let tb_w = TOOL_COUNT as f64 * TOOL_SIZE + (TOOL_COUNT as f64 - 1.0) * TOOL_GAP + 2.0 * TOOLBAR_PAD;
+        let tb_w = TOOL_COUNT as f64 * TOOL_SIZE
+            + (TOOL_COUNT as f64 - 1.0) * TOOL_GAP
+            + 2.0 * TOOLBAR_PAD;
         let tb_x = canvas.center().x - tb_w / 2.0;
         let tb_y = canvas.y1 - TOOLBAR_MARGIN - TOOLBAR_H;
         let toolbar = Rect::new(tb_x, tb_y, tb_x + tb_w, tb_y + TOOLBAR_H);
@@ -38,6 +40,13 @@ impl Layout {
             let y = tb_y + (TOOLBAR_H - TOOL_SIZE) / 2.0;
             *t = Rect::new(x, y, x + TOOL_SIZE, y + TOOL_SIZE);
         }
-        Self { topbar, left, right, canvas, toolbar, tools }
+        Self {
+            topbar,
+            left,
+            right,
+            canvas,
+            toolbar,
+            tools,
+        }
     }
 }

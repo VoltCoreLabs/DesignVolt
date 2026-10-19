@@ -23,17 +23,38 @@ pub fn draw(cx: &mut Cx, r: Rect) {
 
         let c = r.center();
         let frame = Rect::new(c.x - 180.0, c.y - 150.0, c.x + 180.0, c.y + 90.0);
-        cx.text("Frame 1", 11.0, frame.x0, frame.y0 - 8.0, hex(text_secondary()));
+        cx.text(
+            "Frame 1",
+            11.0,
+            frame.x0,
+            frame.y0 - 8.0,
+            hex(text_secondary()),
+        );
         cx.shadow(frame, 12.0, alpha(0x000000, 0.45), 24.0, 12.0);
         cx.fill(frame, 12.0, hex(WHITE));
 
-        let rect = Rect::new(frame.x0 + 40.0, frame.y0 + 50.0, frame.x0 + 200.0, frame.y0 + 150.0);
+        let rect = Rect::new(
+            frame.x0 + 40.0,
+            frame.y0 + 50.0,
+            frame.x0 + 200.0,
+            frame.y0 + 150.0,
+        );
         cx.fill_grad(rect, 16.0, hex(accent_from()), hex(accent_to()));
-        cx.circle(frame.x1 - 70.0, frame.y0 + 120.0, 38.0, mix(0x34D399, 0x22D3EE, 0.5));
+        cx.circle(
+            frame.x1 - 70.0,
+            frame.y0 + 120.0,
+            38.0,
+            mix(0x34D399, 0x22D3EE, 0.5),
+        );
 
         // Selection box with handles.
         cx.stroke(rect, 16.0, 1.5, hex(accent()));
-        for (hx, hy) in [(rect.x0, rect.y0), (rect.x1, rect.y0), (rect.x0, rect.y1), (rect.x1, rect.y1)] {
+        for (hx, hy) in [
+            (rect.x0, rect.y0),
+            (rect.x1, rect.y0),
+            (rect.x0, rect.y1),
+            (rect.x1, rect.y1),
+        ] {
             let h = Rect::new(hx - 4.0, hy - 4.0, hx + 4.0, hy + 4.0);
             cx.fill(h, 2.0, hex(WHITE));
             cx.stroke(h, 2.0, 1.5, hex(accent()));

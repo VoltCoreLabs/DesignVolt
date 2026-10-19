@@ -26,25 +26,73 @@ pub enum Icon {
 }
 
 const SOURCES: &[(Icon, &str)] = &[
-    (Icon::Cursor, include_str!("../assets/icons/phosphor/cursor.svg")),
-    (Icon::Frame, include_str!("../assets/icons/phosphor/frame-corners.svg")),
-    (Icon::Square, include_str!("../assets/icons/phosphor/square.svg")),
-    (Icon::Circle, include_str!("../assets/icons/phosphor/circle.svg")),
-    (Icon::Pen, include_str!("../assets/icons/phosphor/pen-nib.svg")),
-    (Icon::Text, include_str!("../assets/icons/phosphor/text-t.svg")),
-    (Icon::Hand, include_str!("../assets/icons/phosphor/hand.svg")),
-    (Icon::CaretDown, include_str!("../assets/icons/phosphor/caret-down.svg")),
+    (
+        Icon::Cursor,
+        include_str!("../assets/icons/phosphor/cursor.svg"),
+    ),
+    (
+        Icon::Frame,
+        include_str!("../assets/icons/phosphor/frame-corners.svg"),
+    ),
+    (
+        Icon::Square,
+        include_str!("../assets/icons/phosphor/square.svg"),
+    ),
+    (
+        Icon::Circle,
+        include_str!("../assets/icons/phosphor/circle.svg"),
+    ),
+    (
+        Icon::Pen,
+        include_str!("../assets/icons/phosphor/pen-nib.svg"),
+    ),
+    (
+        Icon::Text,
+        include_str!("../assets/icons/phosphor/text-t.svg"),
+    ),
+    (
+        Icon::Hand,
+        include_str!("../assets/icons/phosphor/hand.svg"),
+    ),
+    (
+        Icon::CaretDown,
+        include_str!("../assets/icons/phosphor/caret-down.svg"),
+    ),
     (Icon::Eye, include_str!("../assets/icons/phosphor/eye.svg")),
-    (Icon::Lock, include_str!("../assets/icons/phosphor/lock.svg")),
-    (Icon::Search, include_str!("../assets/icons/phosphor/magnifying-glass.svg")),
-    (Icon::Plus, include_str!("../assets/icons/phosphor/plus.svg")),
-    (Icon::Share, include_str!("../assets/icons/phosphor/share-network.svg")),
-    (Icon::Home, include_str!("../assets/icons/phosphor/house.svg")),
-    (Icon::Minimize, include_str!("../assets/icons/phosphor/minus.svg")),
-    (Icon::Restore, include_str!("../assets/icons/phosphor/copy-simple.svg")),
+    (
+        Icon::Lock,
+        include_str!("../assets/icons/phosphor/lock.svg"),
+    ),
+    (
+        Icon::Search,
+        include_str!("../assets/icons/phosphor/magnifying-glass.svg"),
+    ),
+    (
+        Icon::Plus,
+        include_str!("../assets/icons/phosphor/plus.svg"),
+    ),
+    (
+        Icon::Share,
+        include_str!("../assets/icons/phosphor/share-network.svg"),
+    ),
+    (
+        Icon::Home,
+        include_str!("../assets/icons/phosphor/house.svg"),
+    ),
+    (
+        Icon::Minimize,
+        include_str!("../assets/icons/phosphor/minus.svg"),
+    ),
+    (
+        Icon::Restore,
+        include_str!("../assets/icons/phosphor/copy-simple.svg"),
+    ),
     (Icon::Close, include_str!("../assets/icons/phosphor/x.svg")),
     (Icon::Sun, include_str!("../assets/icons/phosphor/sun.svg")),
-    (Icon::Moon, include_str!("../assets/icons/phosphor/moon.svg")),
+    (
+        Icon::Moon,
+        include_str!("../assets/icons/phosphor/moon.svg"),
+    ),
 ];
 
 /// Icon viewBox is 256x256.

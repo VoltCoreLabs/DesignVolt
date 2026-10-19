@@ -198,6 +198,22 @@ impl Document {
         }
     }
 
+    /// Builds a document from loaded pages (used by the text loader).
+    pub(crate) fn from_parts(name: String, pages: Vec<Page>, next_id: u64) -> Self {
+        let pages = if pages.is_empty() {
+            vec![Page::new("Page 1")]
+        } else {
+            pages
+        };
+        Self {
+            name,
+            pages,
+            current: 0,
+            next_id,
+            revision: 0,
+        }
+    }
+
     pub fn page(&self) -> &Page {
         &self.pages[self.current]
     }

@@ -16,9 +16,9 @@ DesignVolt/
 ├─ docs/                                stack, architecture, design-system, structure, decisions (ADR), log, roadmap
 ├─ assets/                              fonts/ (Golos Text), icons/phosphor/
 ├─ crates/
-│  ├─ dv-core/src/                      document.rs (модель), command.rs (команды), history.rs (undo/redo)
+│  ├─ dv-core/src/                      document.rs (модель), command.rs (команды), history.rs (undo/redo), text.rs (формат файла)
 │  ├─ dv-geom/src/                      transform.rs (матрицы, границы, попадание), index.rs (R-tree)
-│  ├─ dv-render/                        src/viewport.rs, src/paint.rs; examples/bench.rs
+│  ├─ dv-render/                        src/viewport.rs, src/paint.rs, src/grid.rs (точки); examples/bench.rs
 │  └─ dv-ui/src/                        draw.rs (Cx), text.rs, icons.rs, anim.rs, clipboard.rs, input.rs,
 │                                       theme/ (colors, metrics, motion), widgets/ (button, segmented, text_edit, text_input)
 └─ apps/desktop/src/
@@ -27,7 +27,7 @@ DesignVolt/
    ├─ library.rs, library_io.rs, store.rs         проекты и папки (модель), файлы данных, профиль и настройки
    ├─ screens/                                    welcome, settings, projects (+ _actions, _bar, _cards, _input, _menu, _modal, _paint)
    └─ editor/                                     state, interact (мышь), keys (клавиши), canvas, panels, toolbar,
-                                                  layout, handles (маркеры), ops (операции над документом), session, tests
+                                                  layout, handles (маркеры), ops (операции над документом), session (файл и автосохранение), tests
 ```
 
 ## Правила масштабирования

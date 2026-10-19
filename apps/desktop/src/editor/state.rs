@@ -235,7 +235,11 @@ impl Screen for Editor {
         let hovered = self.toolbar.hit(&self.layout(), self.mouse.x, self.mouse.y);
         let busy = self.toolbar.update(dt, hovered);
         self.refresh_index();
-        busy || self.time < INTRO_END || self.interaction.is_some()
+        let saving = self
+            .session
+            .borrow_mut()
+            .tick(dt, self.interaction.is_some());
+        busy || saving || self.time < INTRO_END || self.interaction.is_some()
     }
 
     fn mouse_moved(&mut self, x: f64, y: f64) {

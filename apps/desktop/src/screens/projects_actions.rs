@@ -230,17 +230,30 @@ impl Projects {
                     for item in &nested {
                         match item {
                             Item::Project(id) => {
-                                store.lib.duplicate_project(*id, now, suffix);
+                                if let Some(new) = store.lib.duplicate_project(*id, now, suffix) {
+                                    store.copy_document(*id, new);
+                                }
                             }
                             Item::Folder(id) => {
-                                store.lib.duplicate_folder(*id, now, suffix);
+                                if let Some(copy) = store.lib.duplicate_folder(*id, now, suffix) {
+                                    for (old, new) in copy.projects {
+                                        store.copy_document(old, new);
+                                    }
+                                }
                             }
                         }
                     }
                 }
                 Action::Delete => nested.iter().for_each(|i| store.lib.trash(*i, now)),
                 Action::Restore => items.iter().for_each(|i| store.lib.restore(*i)),
-                Action::DeleteForever => nested.iter().for_each(|i| store.lib.purge(*i)),
+                Action::DeleteForever => {
+                    let doomed: Vec<u64> = nested
+                        .iter()
+                        .flat_map(|i| store.lib.projects_in(*i))
+                        .collect();
+                    nested.iter().for_each(|i| store.lib.purge(*i));
+                    doomed.iter().for_each(|id| store.delete_document(*id));
+                }
             }
         }
         match (action, items.first()) {
@@ -259,7 +272,12 @@ impl Projects {
     }
 
     pub fn empty_trash(&mut self) {
-        self.store.borrow_mut().lib.empty_trash();
+        {
+            let mut store = self.store.borrow_mut();
+            let doomed = store.lib.trashed_projects();
+            store.lib.empty_trash();
+            doomed.iter().for_each(|id| store.delete_document(*id));
+        }
         self.modal = None;
         self.clear_selection();
         self.save();

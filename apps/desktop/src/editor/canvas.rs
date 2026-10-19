@@ -65,6 +65,9 @@ pub(super) fn draw(ed: &Editor, cx: &mut Cx, canvas: Rect) {
     let s = ed.session.borrow();
     let page = s.exec.doc().page();
     cx.clip(canvas, |cx| {
+        // Infinite dot grid, like Figma: only the visible dots are generated.
+        let (minor, major) = (alpha(overlay(), 0.18), alpha(overlay(), 0.34));
+        dv_render::paint_dots(cx.scene, &s.vp, size, cx.xf * origin, minor, major);
         let started = Instant::now();
         let stats = dv_render::paint_page(cx.scene, page, &ed.index, &s.vp, size, cx.xf * origin);
         ed.paint_ms.set(started.elapsed().as_secs_f32() * 1000.0);
@@ -72,7 +75,7 @@ pub(super) fn draw(ed: &Editor, cx: &mut Cx, canvas: Rect) {
 
         let outer = cx.xf;
         cx.xf = outer * origin;
-        overlay(ed, cx, &s.vp, page, size);
+        paint_overlay(ed, cx, &s.vp, page, size);
         status_line(ed, cx, &s.vp, page.len(), size);
         if page.is_empty() && ed.interaction.is_none() {
             let hint = tr(Msg::EmptyCanvasHint);
@@ -115,7 +118,7 @@ fn outline(cx: &mut Cx, page: &Page, vp: &Viewport, id: NodeId, width: f64, colo
     cx.stroke_path(&path, width, alpha(color, a));
 }
 
-fn overlay(ed: &Editor, cx: &mut Cx, vp: &Viewport, page: &Page, size: (f64, f64)) {
+fn paint_overlay(ed: &Editor, cx: &mut Cx, vp: &Viewport, page: &Page, size: (f64, f64)) {
     if let Some(h) = ed.hover
         && !ed.selection.contains(&h)
     {

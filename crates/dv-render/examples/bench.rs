@@ -169,6 +169,8 @@ fn main() {
         for frame in 0..(FRAMES + 5) {
             let t = Instant::now();
             scene.reset();
+            let dot = vello::peniko::Color::from_rgba8(255, 255, 255, 40);
+            dv_render::paint_dots(&mut scene, &vp, size, Affine::IDENTITY, dot, dot);
             last = paint_page(&mut scene, doc.page(), &index, &vp, size, Affine::IDENTITY);
             let b = ms(t);
             let t = Instant::now();

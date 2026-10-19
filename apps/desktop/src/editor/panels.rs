@@ -10,6 +10,7 @@ use kurbo::{Point, Rect};
 use vello::peniko::Color as VColor;
 
 use super::canvas::num;
+use super::session::SaveState;
 use super::state::Editor;
 use crate::i18n::{Msg, objects_count, tr};
 
@@ -102,8 +103,18 @@ pub fn topbar(cx: &mut Cx, r: Rect, ed: &Editor) {
     cx.fill(share, R_BUTTON, hex(accent()));
     cx.icon(Icon::Share, share.x0 + 10.0, 13.0, 14.0, hex(WHITE));
     cx.text(tr(Msg::Share), FONT_UI, share.x0 + 29.0, 24.0, hex(WHITE));
-    let zoom = format!("{:.0}%", ed.session.borrow().vp.zoom * 100.0);
+    let (state, zoom) = {
+        let s = ed.session.borrow();
+        (s.state(), format!("{:.0}%", s.vp.zoom * 100.0))
+    };
     cx.text(&zoom, FONT_UI, share.x0 - 52.0, 25.0, hex(text_secondary()));
+    let (label, color) = match state {
+        SaveState::Saved => (tr(Msg::Saved), hex(text_disabled())),
+        SaveState::Unsaved => (tr(Msg::Unsaved), hex(accent())),
+        SaveState::NoFile => ("", hex(text_disabled())),
+    };
+    let w = cx.text_width(label, FONT_SM);
+    cx.text(label, FONT_SM, share.x0 - 70.0 - w, 24.0, color);
 }
 
 pub fn left_panel(cx: &mut Cx, r: Rect, ed: &Editor) {

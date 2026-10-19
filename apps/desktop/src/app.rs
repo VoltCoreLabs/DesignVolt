@@ -148,7 +148,25 @@ impl App {
             .set_viewport(w, h.saturating_sub(bar).max(1), self.scale());
     }
 
+    /// Writes every document that has unsaved changes and marks its project as edited.
+    fn flush_sessions(&mut self) {
+        let mut touched = false;
+        for (id, session) in &self.sessions {
+            if session.borrow_mut().save() {
+                self.store
+                    .borrow_mut()
+                    .lib
+                    .touch(*id, crate::store::now_secs());
+                touched = true;
+            }
+        }
+        if touched {
+            self.store.borrow().save_logged();
+        }
+    }
+
     fn switch(&mut self, t: Transition) {
+        self.flush_sessions();
         match t {
             Transition::SetName(name) => {
                 let mut s = self.store.borrow_mut();
@@ -170,7 +188,10 @@ impl App {
                 let session = self
                     .sessions
                     .entry(id)
-                    .or_insert_with(|| Rc::new(RefCell::new(Session::new(&name))))
+                    .or_insert_with(|| {
+                        let path = self.store.borrow().document_path(id);
+                        Rc::new(RefCell::new(Session::open(&name, path)))
+                    })
                     .clone();
                 self.place = Place::Editor(name.clone());
                 self.screen = Box::new(Editor::new(self.assets.clone(), session, name));
@@ -413,6 +434,10 @@ impl App {
 }
 
 impl ApplicationHandler for App {
+    fn exiting(&mut self, _event_loop: &ActiveEventLoop) {
+        self.flush_sessions();
+    }
+
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if self.gfx.is_some() {
             return;

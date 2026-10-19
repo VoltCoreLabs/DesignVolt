@@ -409,3 +409,45 @@ fn a_session_keeps_the_document_when_the_editor_is_reopened() {
     assert!(again.session.borrow().exec.doc().page().contains(id));
     assert_eq!(again.index.len(), 1);
 }
+
+#[test]
+fn edits_are_autosaved_to_the_documents_file() {
+    let dir =
+        std::env::temp_dir().join(format!("designvolt-editor-autosave-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let path = dir.join("documents").join("7.dvd");
+    let font = Font::from_bytes(include_bytes!("../../../../assets/fonts/GolosText.ttf")).unwrap();
+    let assets = Rc::new(Assets {
+        font,
+        icons: Icons::new(),
+    });
+    let session = Rc::new(RefCell::new(Session::open("Doc", path.clone())));
+    let mut ed = Editor::new(assets, session.clone(), "Doc".into());
+    ed.set_viewport(1180, 760, 1.0);
+    ed.update(0.016);
+    draw_rect(&mut ed, (0.0, 0.0), (80.0, 60.0));
+    ed.update(0.5);
+    assert!(!path.exists(), "not yet: the change is still fresh");
+    ed.update(0.6);
+    assert!(path.exists(), "saved after the delay");
+    assert_eq!(session.borrow().state(), super::session::SaveState::Saved);
+    let reopened = Session::open("Doc", path);
+    assert_eq!(reopened.exec.doc().page().len(), 1);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn the_canvas_has_no_edges_you_can_pan_and_zoom_far_away() {
+    let mut ed = editor();
+    mv(&mut ed, 0.0, 0.0);
+    for _ in 0..200 {
+        ed.wheel(-5000.0, 3000.0, NONE);
+    }
+    let pan = ed.session.borrow().vp.pan;
+    assert!(pan.x < -900_000.0 && pan.y > 500_000.0, "{pan:?}");
+    // Far from the origin you can still draw and pick.
+    let c = ed.session.borrow().vp.to_world(Point::new(330.0, 360.0));
+    assert!(c.x > 900_000.0 && c.y < -500_000.0, "{c:?}");
+    let id = draw_rect(&mut ed, (c.x, c.y), (c.x + 100.0, c.y + 50.0));
+    assert!(ed.session.borrow().exec.doc().page().contains(id));
+}

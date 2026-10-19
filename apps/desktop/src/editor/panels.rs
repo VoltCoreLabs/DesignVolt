@@ -61,6 +61,20 @@ fn kind_icon(kind: NodeKind) -> Icon {
     }
 }
 
+/// Rectangle of the `i`-th property field of the right panel (two columns, three rows).
+pub fn field_rect(right: Rect, i: usize) -> Rect {
+    let (x0, x1, y0) = (right.x0 + 1.0, right.x1, right.y0);
+    let fw = (x1 - x0 - 24.0 - GAP) / 2.0;
+    let fx = x0 + 12.0 + (i % 2) as f64 * (fw + GAP);
+    let fy = y0 + 80.0 + (i / 2) as f64 * (FIELD_H + GAP);
+    Rect::new(fx, fy, fx + fw, fy + FIELD_H)
+}
+
+/// The numeric value shown in the `i`-th field (`None` when the selection has mixed values).
+pub fn field_value(ed: &Editor, i: usize) -> Option<f64> {
+    selection_info(ed)?.fields.get(i)?.2
+}
+
 fn field(cx: &mut Cx, r: Rect, label: &str, value: &str) {
     cx.fill(r, R_FIELD, hex(bg_raised()));
     cx.text(
@@ -244,11 +258,12 @@ pub fn right_panel(cx: &mut Cx, r: Rect, ed: &Editor) {
     let title = cx.fit(&info.title, FONT_MD, x1 - x0 - 24.0 - 24.0);
     cx.text(&title, FONT_MD, x0 + 34.0, y0 + 64.0, hex(text_primary()));
 
-    let fw = (x1 - x0 - 24.0 - GAP) / 2.0;
-    for (i, (label, value)) in info.fields.iter().enumerate() {
-        let fx = x0 + 12.0 + (i % 2) as f64 * (fw + GAP);
-        let fy = y0 + 80.0 + (i / 2) as f64 * (FIELD_H + GAP);
-        field(cx, Rect::new(fx, fy, fx + fw, fy + FIELD_H), label, value);
+    for (i, (label, value, _)) in info.fields.iter().enumerate() {
+        let rect = field_rect(r, i);
+        match &ed.prop_edit {
+            Some(edit) if edit.field.index() == i => edit.input.draw(cx, rect, ""),
+            _ => field(cx, rect, label, value),
+        }
     }
 
     let fills_y = y0 + 80.0 + 3.0 * (FIELD_H + GAP) + 8.0;
@@ -307,7 +322,7 @@ struct Info {
     icon: Icon,
     title: String,
     /// Label and value pairs in two columns: X, Y, W, H, rotation, radius.
-    fields: Vec<(&'static str, String)>,
+    fields: Vec<(&'static str, String, Option<f64>)>,
     fill: Fill,
 }
 
@@ -325,12 +340,12 @@ fn selection_info(ed: &Editor) -> Option<Info> {
             icon: kind_icon(n.kind),
             title: n.name.clone(),
             fields: vec![
-                ("X", num(n.geom.x)),
-                ("Y", num(n.geom.y)),
-                ("W", num(n.geom.w)),
-                ("H", num(n.geom.h)),
-                ("°", num(n.geom.rotation)),
-                ("R", num(n.radius)),
+                ("X", num(n.geom.x), Some(n.geom.x)),
+                ("Y", num(n.geom.y), Some(n.geom.y)),
+                ("W", num(n.geom.w), Some(n.geom.w)),
+                ("H", num(n.geom.h), Some(n.geom.h)),
+                ("°", num(n.geom.rotation), Some(n.geom.rotation)),
+                ("R", num(n.radius), Some(n.radius)),
             ],
             fill: n.fill.map_or(Fill::None, Fill::Solid),
         }),
@@ -349,12 +364,12 @@ fn selection_info(ed: &Editor) -> Option<Info> {
                 icon: Icon::Square,
                 title: objects_count(many.len() as u64),
                 fields: vec![
-                    ("X", num(b.x0)),
-                    ("Y", num(b.y0)),
-                    ("W", num(b.width())),
-                    ("H", num(b.height())),
-                    ("°", mixed.clone()),
-                    ("R", mixed),
+                    ("X", num(b.x0), Some(b.x0)),
+                    ("Y", num(b.y0), Some(b.y0)),
+                    ("W", num(b.width()), Some(b.width())),
+                    ("H", num(b.height()), Some(b.height())),
+                    ("°", mixed.clone(), None),
+                    ("R", mixed, None),
                 ],
                 fill,
             })

@@ -1,10 +1,12 @@
 mod canvas;
+mod drag;
 mod handles;
 mod interact;
 mod keys;
 mod layout;
 mod ops;
 mod panels;
+mod props;
 mod session;
 mod state;
 mod toolbar;

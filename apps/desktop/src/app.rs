@@ -395,6 +395,7 @@ impl App {
                 NamedKey::End => Some(Key::End),
                 NamedKey::Enter => Some(Key::Enter),
                 NamedKey::Escape => Some(Key::Escape),
+                NamedKey::Tab => Some(Key::Tab),
                 _ => None,
             };
             if let Some(k) = key {

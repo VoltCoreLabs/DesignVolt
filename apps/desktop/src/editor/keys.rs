@@ -15,6 +15,10 @@ pub const STRESS_COUNT: usize = 10_000;
 
 impl Editor {
     pub(super) fn handle_key(&mut self, key: Key, mods: Mods) {
+        if self.prop_edit.is_some() {
+            self.prop_key(key, mods);
+            return;
+        }
         match key {
             Key::Space => self.space = true,
             Key::Escape => self.escape(),
@@ -72,6 +76,7 @@ impl Editor {
                 self.session.borrow_mut().exec.break_merge();
             }
             self.interaction = None;
+            self.guides.clear();
         } else if self.tool != Tool::Select {
             self.set_tool(Tool::Select);
         } else {

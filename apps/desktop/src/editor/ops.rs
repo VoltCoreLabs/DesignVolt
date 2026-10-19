@@ -3,6 +3,10 @@
 use std::collections::HashMap;
 
 use dv_core::{Color, Command, Executor, Geometry, Node, NodeId, NodeKind, Page, Props};
+use dv_geom::to_parent_space;
+use kurbo::Rect;
+
+use super::handles::{MIN_SIZE, map_point, scale};
 
 pub const DEFAULT_SIZE: f64 = 100.0;
 /// Offset of a duplicate from its original, in page units.
@@ -220,6 +224,170 @@ pub fn stress(ex: &mut Executor, n: usize) -> Vec<NodeId> {
     ids
 }
 
+/// Geometry of nodes after their selection box changes from `orig` to `new` (page space).
+/// `originals` are the nodes with their geometry and world bounds before the change.
+pub fn resized(
+    page: &Page,
+    originals: &[(NodeId, Geometry, Rect)],
+    orig: Rect,
+    new: Rect,
+) -> Vec<(NodeId, Geometry)> {
+    let (sx, sy) = scale(orig, new);
+    originals
+        .iter()
+        .map(|(id, g, wb)| {
+            let (w, h) = ((g.w * sx).max(MIN_SIZE), (g.h * sy).max(MIN_SIZE));
+            let center = map_point(orig, new, wb.center());
+            let parent = page.node(*id).and_then(|n| n.parent);
+            let p = to_parent_space(page, parent, center);
+            let geom = Geometry {
+                x: p.x - w / 2.0,
+                y: p.y - h / 2.0,
+                w,
+                h,
+                rotation: g.rotation,
+            };
+            (*id, geom)
+        })
+        .collect()
+}
+
+/// The numeric properties that can be typed into the right panel.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Field {
+    X,
+    Y,
+    W,
+    H,
+    Rotation,
+    Radius,
+}
+
+impl Field {
+    /// In the order of the panel: two columns, three rows.
+    pub const ALL: [Field; 6] = [
+        Field::X,
+        Field::Y,
+        Field::W,
+        Field::H,
+        Field::Rotation,
+        Field::Radius,
+    ];
+
+    pub fn from_index(i: usize) -> Option<Field> {
+        Field::ALL.get(i).copied()
+    }
+
+    pub fn index(self) -> usize {
+        Field::ALL.iter().position(|f| *f == self).unwrap_or(0)
+    }
+}
+
+/// Applies a typed property value to the nodes as one undo step. Returns false when nothing
+/// changed (bad value, unknown nodes).
+pub fn set_field(ex: &mut Executor, ids: &[NodeId], field: Field, value: f64) -> bool {
+    if !value.is_finite() {
+        return false;
+    }
+    let page = ex.doc().page();
+    let tops: Vec<NodeId> = page
+        .without_descendants(ids)
+        .into_iter()
+        .filter(|id| page.contains(*id))
+        .collect();
+    let mut cmds: Vec<Command> = Vec::new();
+    let geoms = |tops: &[NodeId]| -> Vec<(NodeId, Geometry)> {
+        tops.iter()
+            .filter_map(|id| Some((*id, page.node(*id)?.geom)))
+            .collect()
+    };
+    match field {
+        Field::X | Field::Y => {
+            let Some(b) = dv_geom::selection_bounds(page, &tops) else {
+                return false;
+            };
+            let single = tops.len() == 1;
+            for (id, g) in geoms(&tops) {
+                let mut geom = g;
+                if single {
+                    // One shape: the typed value is its position in its parent.
+                    if field == Field::X {
+                        geom.x = value
+                    } else {
+                        geom.y = value
+                    }
+                } else {
+                    let delta = if field == Field::X {
+                        kurbo_vec(value - b.x0, 0.0)
+                    } else {
+                        kurbo_vec(0.0, value - b.y0)
+                    };
+                    let d = dv_geom::parent_delta(page, id, delta);
+                    geom.x += d.x;
+                    geom.y += d.y;
+                }
+                cmds.push(Command::SetGeometry { id, geom });
+            }
+        }
+        Field::W | Field::H => {
+            let value = value.max(MIN_SIZE);
+            if let [id] = tops[..] {
+                let Some(n) = page.node(id) else { return false };
+                let mut geom = n.geom;
+                if field == Field::W {
+                    geom.w = value
+                } else {
+                    geom.h = value
+                }
+                cmds.push(Command::SetGeometry { id, geom });
+            } else if let Some(orig) = dv_geom::selection_bounds(page, &tops) {
+                let new = if field == Field::W {
+                    Rect::new(orig.x0, orig.y0, orig.x0 + value, orig.y1)
+                } else {
+                    Rect::new(orig.x0, orig.y0, orig.x1, orig.y0 + value)
+                };
+                let originals: Vec<(NodeId, Geometry, Rect)> = tops
+                    .iter()
+                    .filter_map(|id| {
+                        Some((*id, page.node(*id)?.geom, dv_geom::world_bounds(page, *id)?))
+                    })
+                    .collect();
+                for (id, geom) in resized(page, &originals, orig, new) {
+                    cmds.push(Command::SetGeometry { id, geom });
+                }
+            }
+        }
+        Field::Rotation => {
+            let angle = super::handles::normalize_angle(value);
+            for (id, g) in geoms(&tops) {
+                cmds.push(Command::SetGeometry {
+                    id,
+                    geom: Geometry {
+                        rotation: angle,
+                        ..g
+                    },
+                });
+            }
+        }
+        Field::Radius => {
+            for id in ids {
+                let Some(n) = page.node(*id) else { continue };
+                if n.kind != NodeKind::Ellipse {
+                    let props = Props {
+                        radius: Some(value.max(0.0)),
+                        ..Props::default()
+                    };
+                    cmds.push(Command::SetProps { id: *id, props });
+                }
+            }
+        }
+    }
+    if cmds.is_empty() {
+        return false;
+    }
+    ex.execute("Edit property", Command::Batch(cmds)).is_ok()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -421,5 +589,114 @@ mod tests {
         assert!(!ex.doc().page().node(a).unwrap().visible);
         ex.undo();
         assert!(ex.doc().page().node(a).unwrap().visible);
+    }
+
+    fn sample() -> (Executor, NodeId, NodeId) {
+        let mut ex = exec();
+        let a = create(
+            &mut ex,
+            NodeKind::Rectangle,
+            "a".into(),
+            None,
+            g(10.0, 20.0),
+        )
+        .unwrap();
+        let b = create(&mut ex, NodeKind::Ellipse, "b".into(), None, g(100.0, 20.0)).unwrap();
+        (ex, a, b)
+    }
+
+    fn node_geom(ex: &Executor, id: NodeId) -> Geometry {
+        ex.doc().page().node(id).unwrap().geom
+    }
+
+    #[test]
+    fn typed_position_and_size_apply_to_one_shape() {
+        let (mut ex, a, _) = sample();
+        assert!(set_field(&mut ex, &[a], Field::X, -40.0));
+        assert!(set_field(&mut ex, &[a], Field::Y, 7.5));
+        assert!(set_field(&mut ex, &[a], Field::W, 300.0));
+        assert!(set_field(&mut ex, &[a], Field::H, 0.0));
+        let g = node_geom(&ex, a);
+        assert_eq!(
+            (g.x, g.y, g.w, g.h),
+            (-40.0, 7.5, 300.0, MIN_SIZE),
+            "size never drops below the minimum"
+        );
+        ex.undo();
+        assert_eq!(
+            node_geom(&ex, a).h,
+            40.0,
+            "each field edit is its own undo step"
+        );
+    }
+
+    #[test]
+    fn typed_rotation_is_normalized_and_keeps_the_center() {
+        let (mut ex, a, _) = sample();
+        let before = node_geom(&ex, a);
+        assert!(set_field(&mut ex, &[a], Field::Rotation, 270.0));
+        let g = node_geom(&ex, a);
+        assert!((g.rotation + 90.0).abs() < 1e-9);
+        assert_eq!(
+            (g.x + g.w / 2.0, g.y + g.h / 2.0),
+            (before.x + before.w / 2.0, before.y + before.h / 2.0)
+        );
+    }
+
+    #[test]
+    fn radius_applies_to_rectangles_only_and_never_goes_negative() {
+        let (mut ex, a, b) = sample();
+        assert!(set_field(&mut ex, &[a, b], Field::Radius, -5.0));
+        assert_eq!(ex.doc().page().node(a).unwrap().radius, 0.0);
+        assert!(set_field(&mut ex, &[a, b], Field::Radius, 12.0));
+        assert_eq!(ex.doc().page().node(a).unwrap().radius, 12.0);
+        assert_eq!(
+            ex.doc().page().node(b).unwrap().radius,
+            0.0,
+            "ellipses have no radius"
+        );
+        assert!(
+            !set_field(&mut ex, &[b], Field::Radius, 3.0),
+            "nothing to change for an ellipse"
+        );
+    }
+
+    #[test]
+    fn typed_x_of_a_group_moves_the_whole_group() {
+        let (mut ex, a, b) = sample();
+        // The group spans x 10 .. 150; put its left edge at 0.
+        assert!(set_field(&mut ex, &[a, b], Field::X, 0.0));
+        assert_eq!((node_geom(&ex, a).x, node_geom(&ex, b).x), (0.0, 90.0));
+        ex.undo();
+        assert_eq!((node_geom(&ex, a).x, node_geom(&ex, b).x), (10.0, 100.0));
+    }
+
+    #[test]
+    fn typed_width_of_a_group_scales_it() {
+        let (mut ex, a, b) = sample();
+        // The group is 140 wide (10 .. 150); make it 280 wide: everything doubles horizontally.
+        assert!(set_field(&mut ex, &[a, b], Field::W, 280.0));
+        let (ga, gb) = (node_geom(&ex, a), node_geom(&ex, b));
+        assert_eq!((ga.x, ga.w), (10.0, 100.0));
+        assert_eq!((gb.x, gb.w), (190.0, 100.0));
+    }
+
+    #[test]
+    fn bad_values_and_unknown_nodes_change_nothing() {
+        let (mut ex, a, _) = sample();
+        assert!(!set_field(&mut ex, &[a], Field::X, f64::NAN));
+        assert!(!set_field(&mut ex, &[a], Field::W, f64::INFINITY));
+        assert!(!set_field(&mut ex, &[NodeId(9999)], Field::X, 1.0));
+        assert!(!set_field(&mut ex, &[], Field::X, 1.0));
+        assert_eq!(node_geom(&ex, a).x, 10.0);
+    }
+
+    #[test]
+    fn fields_map_to_panel_slots() {
+        for (i, f) in Field::ALL.iter().enumerate() {
+            assert_eq!(f.index(), i);
+            assert_eq!(Field::from_index(i), Some(*f));
+        }
+        assert_eq!(Field::from_index(6), None);
     }
 }

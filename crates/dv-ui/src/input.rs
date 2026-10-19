@@ -20,6 +20,7 @@ pub enum Key {
     Up,
     Down,
     Space,
+    Tab,
     /// A layout-independent letter, digit, `=` or `-` (from the physical key), lowercase.
     Char(char),
 }

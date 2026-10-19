@@ -57,6 +57,7 @@ pub enum Cursor {
     Grab,
     Grabbing,
     Crosshair,
+    Text,
     Move,
     ResizeNs,
     ResizeEw,

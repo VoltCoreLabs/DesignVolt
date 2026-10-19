@@ -44,6 +44,15 @@ impl Cx<'_> {
             .stroke(&Stroke::new(width), self.xf, c, None, &shape);
     }
 
+    pub fn stroke_path(&mut self, path: &vello::kurbo::BezPath, width: f64, c: Color) {
+        self.scene
+            .stroke(&Stroke::new(width), self.xf, c, None, path);
+    }
+
+    pub fn fill_path(&mut self, path: &vello::kurbo::BezPath, c: Color) {
+        self.scene.fill(Fill::NonZero, self.xf, c, None, path);
+    }
+
     pub fn circle(&mut self, cx: f64, cy: f64, radius: f64, c: Color) {
         let shape = Circle::new((cx, cy), radius);
         self.scene.fill(Fill::NonZero, self.xf, c, None, &shape);

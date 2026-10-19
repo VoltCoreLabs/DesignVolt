@@ -415,6 +415,19 @@ mod tests {
     }
 
     #[test]
+    fn without_descendants_drops_nodes_inside_listed_nodes() {
+        let mut doc = Document::default();
+        let f = create(&mut doc, "f", None);
+        let k = create(&mut doc, "k", Some(f));
+        let g = create(&mut doc, "g", Some(k));
+        let other = create(&mut doc, "o", None);
+        let page = doc.page();
+        assert_eq!(page.without_descendants(&[f, k, g, other]), vec![f, other]);
+        assert_eq!(page.without_descendants(&[k, g]), vec![k]);
+        assert_eq!(page.without_descendants(&[g]), vec![g]);
+    }
+
+    #[test]
     fn revision_grows_and_ids_are_never_reused() {
         let mut doc = Document::default();
         let r0 = doc.revision();

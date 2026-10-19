@@ -91,6 +91,21 @@ impl SpatialIndex {
             .map(|e| e.id)
     }
 
+    /// Like `pick`, but only considers nodes accepted by `accept` (for example frames only).
+    pub fn pick_where(
+        &self,
+        page: &Page,
+        p: Point,
+        accept: impl Fn(&dv_core::Node) -> bool,
+    ) -> Option<NodeId> {
+        let at = AABB::from_point([p.x, p.y]);
+        self.tree
+            .locate_in_envelope_intersecting(at)
+            .filter(|e| page.node(e.id).is_some_and(&accept) && exact_hit(page, e, p))
+            .max_by_key(|e| e.order)
+            .map(|e| e.id)
+    }
+
     /// Unlocked nodes whose bounds intersect `rect` (marquee selection), bottom to top.
     pub fn in_rect(&self, page: &Page, rect: Rect) -> Vec<NodeId> {
         let mut hits: Vec<&Entry> = self

@@ -15,7 +15,7 @@ Pure Rust. Linebender ecosystem for rendering and UI. Crates outside this list n
 | Windowing | `winit` | |
 | Accessibility | `accesskit` | |
 | Spatial index | `rstar` | hit-testing, culling |
-| Document storage | `slotmap`, `rpds` (or `im`) | arena + persistent structures for cheap undo snapshots |
+| Document storage | `HashMap` with stable ids (D-021) | commands with inverses give undo/redo; no snapshots needed |
 | Parallelism | `rayon` | export, tessellation, boolean ops |
 | Collaboration (later) | `yrs` | CRDT, not before multiplayer work starts |
 

@@ -49,6 +49,21 @@ pub enum Transition {
     OpenSettings,
 }
 
+/// Mouse cursor a screen wants to show.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Cursor {
+    Default,
+    Pointer,
+    Grab,
+    Grabbing,
+    Crosshair,
+    Move,
+    ResizeNs,
+    ResizeEw,
+    ResizeNesw,
+    ResizeNwse,
+}
+
 pub trait Screen {
     fn set_viewport(&mut self, w: u32, h: u32, scale: f64);
     /// Advances animations; returns true while another frame is needed.
@@ -60,6 +75,19 @@ pub trait Screen {
     fn click(&mut self, mods: Mods);
     fn right_click(&mut self, _mods: Mods) {}
     fn scroll(&mut self, _dy: f64) {}
+    /// Mouse wheel / touchpad scroll in logical px (`dy > 0` = content moves down).
+    fn wheel(&mut self, _dx: f64, dy: f64, _mods: Mods) {
+        self.scroll(dy);
+    }
+    fn middle_button(&mut self, _pressed: bool) {}
+    fn key_up(&mut self, _key: Key) {}
+    fn cursor(&self) -> Cursor {
+        if self.pointer_hand() {
+            Cursor::Pointer
+        } else {
+            Cursor::Default
+        }
+    }
     fn key(&mut self, _key: Key, _mods: Mods) {}
     fn mouse_up(&mut self) {}
     fn text(&mut self, _s: &str) {}

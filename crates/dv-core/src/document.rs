@@ -157,6 +157,19 @@ impl Page {
         }
         false
     }
+
+    /// `ids` without the nodes that lie inside another node of the list, so that moving or
+    /// deleting a folder-like node does not also treat its children separately.
+    pub fn without_descendants(&self, ids: &[NodeId]) -> Vec<NodeId> {
+        ids.iter()
+            .copied()
+            .filter(|id| {
+                let parent = self.nodes.get(id).and_then(|n| n.parent);
+                !ids.iter()
+                    .any(|other| other != id && parent.is_some_and(|p| self.is_inside(p, *other)))
+            })
+            .collect()
+    }
 }
 
 #[derive(Clone, Debug)]

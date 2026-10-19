@@ -1,6 +1,7 @@
 //! Window, GPU surface, screen switching, title bar and the frame loop.
 
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -16,8 +17,8 @@ use winit::event_loop::ActiveEventLoop;
 use winit::keyboard::{Key as WKey, KeyCode, NamedKey, PhysicalKey};
 use winit::window::{CursorIcon, Window, WindowId};
 
-use crate::chrome::{cursor_for, resize_direction};
-use crate::editor::Editor;
+use crate::chrome::{cursor_for, icon_of, resize_direction};
+use crate::editor::{Editor, Session};
 use crate::i18n::{Msg, set_lang, tr};
 use crate::input::{Assets, Key, Mods, Screen, SharedAssets, Transition};
 use crate::screens::projects::Projects;
@@ -91,6 +92,8 @@ pub struct App {
     last: Instant,
     last_bar_click: Option<Instant>,
     mods: Mods,
+    /// Open documents, kept for the whole app session (not saved to disk yet).
+    sessions: HashMap<u64, Rc<RefCell<Session>>>,
     /// Pointer position in physical pixels.
     mouse: (f64, f64),
 }
@@ -125,6 +128,7 @@ impl App {
             last: Instant::now(),
             last_bar_click: None,
             mods: Mods::default(),
+            sessions: HashMap::new(),
             mouse: (-1.0, -1.0),
         }
     }
@@ -156,9 +160,20 @@ impl App {
                 self.show_projects();
             }
             Transition::OpenProject(id) => {
-                let name = self.store.borrow().lib.project(id).map(|p| p.name.clone());
-                self.place = Place::Editor(name.unwrap_or_default());
-                self.screen = Box::new(Editor::new(self.assets.clone()));
+                let name = self
+                    .store
+                    .borrow()
+                    .lib
+                    .project(id)
+                    .map(|p| p.name.clone())
+                    .unwrap_or_default();
+                let session = self
+                    .sessions
+                    .entry(id)
+                    .or_insert_with(|| Rc::new(RefCell::new(Session::new(&name))))
+                    .clone();
+                self.place = Place::Editor(name.clone());
+                self.screen = Box::new(Editor::new(self.assets.clone(), session, name));
             }
             Transition::BackToProjects => self.show_projects(),
             Transition::OpenSettings => {
@@ -284,6 +299,11 @@ impl App {
         let s = self.scale();
         self.bar.mouse_moved(x / s, y / s);
         self.screen.mouse_moved(x, y - self.bar_phys());
+        self.update_cursor();
+    }
+
+    /// Chooses the cursor from the window chrome (resize edges, title bar) or the screen.
+    fn update_cursor(&self) {
         let home = !matches!(self.place, Place::Welcome);
         let icon = if let Some(dir) = self.resize_dir() {
             cursor_for(dir)
@@ -291,8 +311,7 @@ impl App {
             match self.bar.hit(self.logical_width(), home) {
                 Some(Part::Drag) => CursorIcon::Default,
                 Some(_) => CursorIcon::Pointer,
-                None if self.screen.pointer_hand() => CursorIcon::Pointer,
-                None => CursorIcon::Default,
+                None => icon_of(self.screen.cursor()),
             }
         };
         if let Some(g) = &self.gfx {
@@ -349,6 +368,8 @@ impl App {
                 NamedKey::Insert => Some(Key::Insert),
                 NamedKey::ArrowLeft => Some(Key::Left),
                 NamedKey::ArrowRight => Some(Key::Right),
+                NamedKey::ArrowUp => Some(Key::Up),
+                NamedKey::ArrowDown => Some(Key::Down),
                 NamedKey::Home => Some(Key::Home),
                 NamedKey::End => Some(Key::End),
                 NamedKey::Enter => Some(Key::Enter),
@@ -359,9 +380,14 @@ impl App {
                 self.screen.key(k, self.mods);
                 return;
             }
+            if *named == NamedKey::Space {
+                // Space is both a key (pan in the editor) and a typed character.
+                self.screen.key(Key::Space, self.mods);
+            }
         }
+        // Shortcuts use the physical key so they work on any keyboard layout (e.g. Russian).
+        let letter = physical_char(event.physical_key);
         if self.mods.ctrl {
-            // Shortcuts use the physical key so they work on any keyboard layout (e.g. Russian).
             let key = match event.physical_key {
                 PhysicalKey::Code(KeyCode::KeyA) => Some(Key::SelectAll),
                 PhysicalKey::Code(KeyCode::KeyC) => Some(Key::Copy),
@@ -370,12 +396,15 @@ impl App {
                 PhysicalKey::Code(KeyCode::KeyY) => Some(Key::Redo),
                 PhysicalKey::Code(KeyCode::KeyZ) if self.mods.shift => Some(Key::Redo),
                 PhysicalKey::Code(KeyCode::KeyZ) => Some(Key::Undo),
-                _ => None,
+                _ => letter.map(Key::Char),
             };
             if let Some(k) = key {
                 self.screen.key(k, self.mods);
             }
             return;
+        }
+        if let Some(c) = letter {
+            self.screen.key(Key::Char(c), self.mods);
         }
         if let Some(text) = &event.text {
             self.screen.text(text);
@@ -475,11 +504,25 @@ impl ApplicationHandler for App {
                 }
             }
             WindowEvent::MouseWheel { delta, .. } => {
-                let dy = match delta {
-                    MouseScrollDelta::LineDelta(_, y) => y as f64 * WHEEL_LINE,
-                    MouseScrollDelta::PixelDelta(p) => p.y / self.scale(),
+                let (dx, dy) = match delta {
+                    MouseScrollDelta::LineDelta(x, y) => {
+                        (x as f64 * WHEEL_LINE, y as f64 * WHEEL_LINE)
+                    }
+                    MouseScrollDelta::PixelDelta(p) => (p.x / self.scale(), p.y / self.scale()),
                 };
-                self.screen.scroll(dy);
+                self.screen.wheel(dx, dy, self.mods);
+            }
+            WindowEvent::MouseInput {
+                state,
+                button: MouseButton::Middle,
+                ..
+            } => {
+                self.screen.middle_button(state == ElementState::Pressed);
+            }
+            WindowEvent::KeyboardInput { event, .. } if event.state == ElementState::Released => {
+                if event.physical_key == PhysicalKey::Code(KeyCode::Space) {
+                    self.screen.key_up(Key::Space);
+                }
             }
             WindowEvent::KeyboardInput { event, .. } if event.state == ElementState::Pressed => {
                 self.handle_key(&event);
@@ -497,8 +540,57 @@ impl ApplicationHandler for App {
         if let Some(t) = self.screen.take_transition() {
             self.switch(t);
         }
+        self.update_cursor();
         if let Some(gfx) = &self.gfx {
             gfx.window.request_redraw();
         }
     }
+}
+
+/// Letter, digit, `=` or `-` of a physical key (independent of the keyboard layout).
+fn physical_char(key: PhysicalKey) -> Option<char> {
+    const KEYS: [(KeyCode, char); 38] = [
+        (KeyCode::KeyA, 'a'),
+        (KeyCode::KeyB, 'b'),
+        (KeyCode::KeyC, 'c'),
+        (KeyCode::KeyD, 'd'),
+        (KeyCode::KeyE, 'e'),
+        (KeyCode::KeyF, 'f'),
+        (KeyCode::KeyG, 'g'),
+        (KeyCode::KeyH, 'h'),
+        (KeyCode::KeyI, 'i'),
+        (KeyCode::KeyJ, 'j'),
+        (KeyCode::KeyK, 'k'),
+        (KeyCode::KeyL, 'l'),
+        (KeyCode::KeyM, 'm'),
+        (KeyCode::KeyN, 'n'),
+        (KeyCode::KeyO, 'o'),
+        (KeyCode::KeyP, 'p'),
+        (KeyCode::KeyQ, 'q'),
+        (KeyCode::KeyR, 'r'),
+        (KeyCode::KeyS, 's'),
+        (KeyCode::KeyT, 't'),
+        (KeyCode::KeyU, 'u'),
+        (KeyCode::KeyV, 'v'),
+        (KeyCode::KeyW, 'w'),
+        (KeyCode::KeyX, 'x'),
+        (KeyCode::KeyY, 'y'),
+        (KeyCode::KeyZ, 'z'),
+        (KeyCode::Digit0, '0'),
+        (KeyCode::Digit1, '1'),
+        (KeyCode::Digit2, '2'),
+        (KeyCode::Digit3, '3'),
+        (KeyCode::Digit4, '4'),
+        (KeyCode::Digit5, '5'),
+        (KeyCode::Digit6, '6'),
+        (KeyCode::Digit7, '7'),
+        (KeyCode::Digit8, '8'),
+        (KeyCode::Digit9, '9'),
+        (KeyCode::Equal, '='),
+        (KeyCode::Minus, '-'),
+    ];
+    let PhysicalKey::Code(code) = key else {
+        return None;
+    };
+    KEYS.iter().find(|(k, _)| *k == code).map(|(_, c)| *c)
 }

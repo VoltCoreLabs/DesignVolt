@@ -7,4 +7,7 @@ mod index;
 mod transform;
 
 pub use index::{Entry, SpatialIndex};
-pub use transform::{hit_local, local_affine, selection_bounds, world_affine, world_bounds};
+pub use transform::{
+    hit_local, local_affine, parent_delta, selection_bounds, to_parent_space, world_affine,
+    world_bounds,
+};

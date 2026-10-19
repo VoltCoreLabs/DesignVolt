@@ -17,6 +17,11 @@ pub enum Key {
     Undo,
     Redo,
     Insert,
+    Up,
+    Down,
+    Space,
+    /// A layout-independent letter, digit, `=` or `-` (from the physical key), lowercase.
+    Char(char),
 }
 
 #[derive(Clone, Copy, Default, Debug)]

@@ -1,64 +1,216 @@
-//! Canvas mockup: dot grid, a frame with shapes and a selection box.
+//! Canvas drawing: the document (through `dv-render`), selection overlay, frame titles,
+//! drawing previews and the small status line.
 
-use vello::kurbo::Rect;
+use std::time::Instant;
 
-use crate::i18n::{Msg, tr};
-use dv_ui::draw::{Cx, mix};
+use dv_core::{NodeId, NodeKind, Page};
+use dv_geom::world_affine;
+use dv_render::Viewport;
+use dv_ui::draw::Cx;
 use dv_ui::theme::colors::*;
+use dv_ui::theme::metrics::*;
+use kurbo::{Affine, BezPath, Point, Rect};
 
-const GRID: f64 = 24.0;
+use super::handles::{HANDLE_PX, Handle};
+use super::interact::Interaction;
+use super::state::Editor;
+use crate::i18n::{Msg, objects_count, tr};
 
-pub fn draw(cx: &mut Cx, r: Rect) {
-    cx.fill(r, 0.0, hex(bg_canvas()));
-    cx.clip(r, |cx| {
-        let dot = alpha(overlay(), 0.09);
-        let mut y = r.y0 + GRID / 2.0;
-        while y < r.y1 {
-            let mut x = r.x0 + GRID / 2.0;
-            while x < r.x1 {
-                cx.circle(x, y, 1.0, dot);
-                x += GRID;
+const LABEL_PX: f32 = 11.0;
+
+/// The title above a root frame; clicking it selects the frame.
+pub(super) struct FrameLabel {
+    pub id: NodeId,
+    pub rect: Rect,
+    pub text: String,
+}
+
+pub(super) fn frame_labels(ed: &Editor) -> Vec<FrameLabel> {
+    let s = ed.session.borrow();
+    let page = s.exec.doc().page();
+    let c = ed.layout().canvas;
+    let (w, h) = (c.width(), c.height());
+    page.roots()
+        .iter()
+        .filter_map(|id| {
+            let n = page.node(*id)?;
+            if n.kind != NodeKind::Frame || !n.visible {
+                return None;
             }
-            y += GRID;
+            let b = dv_geom::world_bounds(page, *id)?;
+            let tl = s.vp.to_screen(Point::new(b.x0, b.y0));
+            let text_w = ed.assets.font.layout(&n.name, LABEL_PX).1 as f64;
+            let rect = Rect::new(tl.x, tl.y - 20.0, tl.x + text_w + 8.0, tl.y - 2.0);
+            let visible = rect.x1 >= 0.0 && rect.x0 <= w && rect.y1 >= 0.0 && rect.y0 <= h;
+            visible.then(|| FrameLabel {
+                id: *id,
+                rect,
+                text: n.name.clone(),
+            })
+        })
+        .collect()
+}
+
+pub(super) fn frame_label_at(ed: &Editor, p: Point) -> Option<NodeId> {
+    frame_labels(ed)
+        .into_iter()
+        .find(|l| l.rect.contains(p))
+        .map(|l| l.id)
+}
+
+pub(super) fn draw(ed: &Editor, cx: &mut Cx, canvas: Rect) {
+    cx.fill(canvas, 0.0, hex(bg_canvas()));
+    let size = (canvas.width(), canvas.height());
+    let origin = Affine::translate((canvas.x0, canvas.y0));
+    let s = ed.session.borrow();
+    let page = s.exec.doc().page();
+    cx.clip(canvas, |cx| {
+        let started = Instant::now();
+        let stats = dv_render::paint_page(cx.scene, page, &ed.index, &s.vp, size, cx.xf * origin);
+        ed.paint_ms.set(started.elapsed().as_secs_f32() * 1000.0);
+        ed.paint_stats.set(stats);
+
+        let outer = cx.xf;
+        cx.xf = outer * origin;
+        overlay(ed, cx, &s.vp, page, size);
+        status_line(ed, cx, &s.vp, page.len(), size);
+        if page.is_empty() && ed.interaction.is_none() {
+            let hint = tr(Msg::EmptyCanvasHint);
+            let w = cx.text_width(hint, FONT_MD);
+            cx.text(
+                hint,
+                FONT_MD,
+                (size.0 - w) / 2.0,
+                size.1 / 2.0,
+                hex(text_disabled()),
+            );
         }
-
-        let c = r.center();
-        let frame = Rect::new(c.x - 180.0, c.y - 150.0, c.x + 180.0, c.y + 90.0);
-        cx.text(
-            tr(Msg::LayerFrame),
-            11.0,
-            frame.x0,
-            frame.y0 - 8.0,
-            hex(text_secondary()),
-        );
-        cx.shadow(frame, 12.0, alpha(0x000000, 0.45), 24.0, 12.0);
-        cx.fill(frame, 12.0, hex(WHITE));
-
-        let rect = Rect::new(
-            frame.x0 + 40.0,
-            frame.y0 + 50.0,
-            frame.x0 + 200.0,
-            frame.y0 + 150.0,
-        );
-        cx.fill(rect, 16.0, hex(accent()));
-        cx.circle(
-            frame.x1 - 70.0,
-            frame.y0 + 120.0,
-            38.0,
-            mix(0x34D399, 0x22D3EE, 0.5),
-        );
-
-        // Selection box with handles.
-        cx.stroke(rect, 16.0, 1.5, hex(accent()));
-        for (hx, hy) in [
-            (rect.x0, rect.y0),
-            (rect.x1, rect.y0),
-            (rect.x0, rect.y1),
-            (rect.x1, rect.y1),
-        ] {
-            let h = Rect::new(hx - 4.0, hy - 4.0, hx + 4.0, hy + 4.0);
-            cx.fill(h, 2.0, hex(WHITE));
-            cx.stroke(h, 2.0, 1.5, hex(accent()));
-        }
+        cx.xf = outer;
     });
+}
+
+fn status_line(ed: &Editor, cx: &mut Cx, vp: &Viewport, count: usize, size: (f64, f64)) {
+    let text = format!(
+        "{:.0}%  ·  {}  ·  {:.1} ms",
+        vp.zoom * 100.0,
+        objects_count(count as u64),
+        ed.paint_ms.get()
+    );
+    cx.text(&text, LABEL_PX, 14.0, size.1 - 14.0, hex(text_secondary()));
+}
+
+/// Outline of a node (follows its rotation) in canvas screen space.
+fn outline(cx: &mut Cx, page: &Page, vp: &Viewport, id: NodeId, width: f64, color: u32, a: f32) {
+    let Some(n) = page.node(id) else { return };
+    let m = vp.transform() * world_affine(page, id);
+    let g = &n.geom;
+    let [a0, a1, a2, a3] =
+        [(0.0, 0.0), (g.w, 0.0), (g.w, g.h), (0.0, g.h)].map(|(x, y)| m * Point::new(x, y));
+    let mut path = BezPath::new();
+    path.move_to(a0);
+    path.line_to(a1);
+    path.line_to(a2);
+    path.line_to(a3);
+    path.close_path();
+    cx.stroke_path(&path, width, alpha(color, a));
+}
+
+fn overlay(ed: &Editor, cx: &mut Cx, vp: &Viewport, page: &Page, size: (f64, f64)) {
+    if let Some(h) = ed.hover
+        && !ed.selection.contains(&h)
+    {
+        outline(cx, page, vp, h, 1.5, accent(), 0.8);
+    }
+    for l in frame_labels(ed) {
+        let selected = ed.selection.contains(&l.id);
+        let color = if selected {
+            hex(accent())
+        } else if ed.hover == Some(l.id) {
+            hex(text_primary())
+        } else {
+            hex(text_secondary())
+        };
+        cx.text(&l.text, LABEL_PX, l.rect.x0 + 2.0, l.rect.y1 - 5.0, color);
+    }
+    for id in &ed.selection {
+        outline(cx, page, vp, *id, 1.5, accent(), 1.0);
+    }
+    if let Some(b) = ed.selection_screen_bounds() {
+        let moving = matches!(ed.interaction, Some(Interaction::Move { .. }));
+        if ed.selection.len() > 1 {
+            cx.stroke(b, 0.0, 1.0, alpha(accent(), 0.8));
+        }
+        if !moving {
+            for h in Handle::ALL {
+                let p = h.position(b);
+                let r = Rect::new(
+                    p.x - HANDLE_PX / 2.0,
+                    p.y - HANDLE_PX / 2.0,
+                    p.x + HANDLE_PX / 2.0,
+                    p.y + HANDLE_PX / 2.0,
+                );
+                cx.fill(r, 2.0, hex(WHITE));
+                cx.stroke(r, 2.0, 1.5, hex(accent()));
+            }
+        }
+        size_pill(cx, b, vp.zoom);
+    }
+    match &ed.interaction {
+        Some(Interaction::Create {
+            current: Some(r), ..
+        }) => {
+            let (p0, p1) = (
+                vp.to_screen(Point::new(r.x0, r.y0)),
+                vp.to_screen(Point::new(r.x1, r.y1)),
+            );
+            let screen = Rect::new(p0.x, p0.y, p1.x, p1.y);
+            cx.fill(screen, 0.0, alpha(accent(), 0.12));
+            cx.stroke(screen, 0.0, 1.5, hex(accent()));
+        }
+        Some(Interaction::Marquee { start, .. }) => {
+            let (p0, p1) = (vp.to_screen(*start), ed.canvas_point());
+            let r = Rect::from_points(p0, p1);
+            cx.fill(r, 0.0, alpha(accent(), 0.08));
+            cx.stroke(r, 0.0, 1.0, alpha(accent(), 0.8));
+        }
+        _ => {}
+    }
+    let _ = size;
+}
+
+/// "W × H" label under the selection box.
+fn size_pill(cx: &mut Cx, b: Rect, zoom: f64) {
+    let label = format!("{} × {}", num(b.width() / zoom), num(b.height() / zoom));
+    let w = cx.text_width(&label, LABEL_PX);
+    let pill = Rect::new(
+        b.center().x - w / 2.0 - 8.0,
+        b.y1 + 8.0,
+        b.center().x + w / 2.0 + 8.0,
+        b.y1 + 28.0,
+    );
+    cx.fill(pill, 6.0, hex(accent()));
+    cx.text(&label, LABEL_PX, pill.x0 + 8.0, pill.y1 - 6.0, hex(WHITE));
+}
+
+/// A number without a pointless fraction: 12, 12.5.
+pub(super) fn num(v: f64) -> String {
+    if (v - v.round()).abs() < 0.05 {
+        format!("{:.0}", v.round() + 0.0)
+    } else {
+        format!("{v:.1}")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::num;
+
+    #[test]
+    fn numbers_drop_insignificant_fractions() {
+        assert_eq!(num(12.0), "12");
+        assert_eq!(num(12.02), "12");
+        assert_eq!(num(12.5), "12.5");
+        assert_eq!(num(-0.01), "0");
+        assert_eq!(num(99.96), "100");
+    }
 }

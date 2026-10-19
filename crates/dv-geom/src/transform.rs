@@ -74,3 +74,98 @@ pub fn selection_bounds(page: &Page, ids: &[NodeId]) -> Option<Rect> {
         .filter_map(|id| world_bounds(page, *id))
         .reduce(|a, b| a.union(b))
 }
+
+/// Converts a page-space displacement into the coordinate system of the node's parent, so it
+/// can be added to the node's `x`/`y` (matters when a parent is rotated).
+pub fn parent_delta(page: &Page, id: NodeId, delta: Vec2) -> Vec2 {
+    let parent = page.node(id).and_then(|n| n.parent);
+    match parent {
+        None => delta,
+        Some(p) => {
+            let inv = world_affine(page, p).inverse();
+            let origin = inv * Point::ZERO;
+            inv * Point::new(delta.x, delta.y) - origin
+        }
+    }
+}
+
+/// Converts a page-space point into the node's parent space (`None` parent = the page).
+pub fn to_parent_space(page: &Page, parent: Option<NodeId>, p: Point) -> Point {
+    match parent {
+        None => p,
+        Some(par) => world_affine(page, par).inverse() * p,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use dv_core::{Command, Document, Node};
+
+    fn add(doc: &mut Document, parent: Option<NodeId>, g: Geometry) -> NodeId {
+        let id = doc.alloc_id();
+        let index = doc.page().siblings(parent).len();
+        doc.apply(&Command::Create {
+            id,
+            parent,
+            index,
+            node: Node::new(NodeKind::Frame, "n", g),
+        })
+        .unwrap();
+        id
+    }
+
+    fn g(x: f64, y: f64, w: f64, h: f64, rotation: f64) -> Geometry {
+        Geometry {
+            x,
+            y,
+            w,
+            h,
+            rotation,
+        }
+    }
+
+    fn near(a: f64, b: f64) -> bool {
+        (a - b).abs() < 1e-9
+    }
+
+    #[test]
+    fn rotation_is_around_the_center() {
+        let g = g(0.0, 0.0, 10.0, 20.0, 90.0);
+        let r = bounds_of(local_affine(&g), &g);
+        assert!(near(r.x0, -5.0) && near(r.x1, 15.0) && near(r.y0, 5.0) && near(r.y1, 15.0));
+    }
+
+    #[test]
+    fn page_level_delta_is_unchanged() {
+        let mut doc = Document::default();
+        let a = add(&mut doc, None, g(5.0, 5.0, 10.0, 10.0, 0.0));
+        assert_eq!(
+            parent_delta(doc.page(), a, Vec2::new(3.0, 4.0)),
+            Vec2::new(3.0, 4.0)
+        );
+    }
+
+    #[test]
+    fn delta_inside_a_rotated_parent_is_rotated_back() {
+        let mut doc = Document::default();
+        let parent = add(&mut doc, None, g(0.0, 0.0, 100.0, 100.0, 90.0));
+        let child = add(&mut doc, Some(parent), g(0.0, 0.0, 10.0, 10.0, 0.0));
+        let d = parent_delta(doc.page(), child, Vec2::new(10.0, 0.0));
+        // The parent is turned by 90 degrees, so a page-space move to the right is a move
+        // "up" (negative y) in the parent's own space.
+        assert!(near(d.x, 0.0) && near(d.y, -10.0), "{d:?}");
+    }
+
+    #[test]
+    fn points_convert_into_the_parent_space() {
+        let mut doc = Document::default();
+        let parent = add(&mut doc, None, g(100.0, 50.0, 200.0, 200.0, 0.0));
+        let p = to_parent_space(doc.page(), Some(parent), Point::new(130.0, 80.0));
+        assert!(near(p.x, 30.0) && near(p.y, 30.0));
+        assert_eq!(
+            to_parent_space(doc.page(), None, Point::new(1.0, 2.0)),
+            Point::new(1.0, 2.0)
+        );
+    }
+}

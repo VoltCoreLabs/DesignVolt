@@ -105,17 +105,14 @@ pub enum Msg {
     TabInspect,
     Pages,
     Page1,
-    Page2,
     SearchLayers,
-    LayerFrame,
-    LayerRectangle,
-    LayerEllipse,
-    LayerTitle,
-    SectionFrame,
+    NameFrame,
+    NameRectangle,
+    NameEllipse,
+    EmptyCanvasHint,
+    NothingSelected,
+    Mixed,
     SectionFill,
-    SectionEffects,
-    DropShadow,
-    DocumentTitle,
 }
 
 pub fn tr(m: Msg) -> &'static str {
@@ -198,17 +195,17 @@ pub fn tr(m: Msg) -> &'static str {
         Msg::TabInspect => pick("Инспектор", "Inspect"),
         Msg::Pages => pick("Страницы", "Pages"),
         Msg::Page1 => pick("Страница 1", "Page 1"),
-        Msg::Page2 => pick("Страница 2", "Page 2"),
         Msg::SearchLayers => pick("Поиск слоёв", "Search layers"),
-        Msg::LayerFrame => pick("Фрейм 1", "Frame 1"),
-        Msg::LayerRectangle => pick("Прямоугольник", "Rectangle"),
-        Msg::LayerEllipse => pick("Эллипс", "Ellipse"),
-        Msg::LayerTitle => pick("Заголовок", "Title"),
-        Msg::SectionFrame => pick("Фрейм", "Frame"),
+        Msg::NameFrame => pick("Фрейм", "Frame"),
+        Msg::NameRectangle => pick("Прямоугольник", "Rectangle"),
+        Msg::NameEllipse => pick("Эллипс", "Ellipse"),
+        Msg::EmptyCanvasHint => pick(
+            "Нажмите R или O и потяните по холсту, чтобы нарисовать фигуру",
+            "Press R or O and drag on the canvas to draw a shape",
+        ),
+        Msg::NothingSelected => pick("Ничего не выбрано", "Nothing selected"),
+        Msg::Mixed => pick("Разные", "Mixed"),
         Msg::SectionFill => pick("Заливка", "Fill"),
-        Msg::SectionEffects => pick("Эффекты", "Effects"),
-        Msg::DropShadow => pick("Тень", "Drop shadow"),
-        Msg::DocumentTitle => pick("Без названия  /  Страница 1", "Untitled  /  Page 1"),
     }
 }
 
@@ -232,6 +229,17 @@ pub fn empty_trash_body(n: u64) -> String {
             "The trash holds {n} item{}. They will be deleted forever and this cannot be undone.",
             if n == 1 { "" } else { "s" }
         ),
+    }
+}
+
+/// "1 объект", "2 объекта", "5 объектов" / "1 object", "2 objects".
+pub fn objects_count(n: u64) -> String {
+    match lang() {
+        Lang::Ru => {
+            let word = ["объект", "объекта", "объектов"][ru_form(n)];
+            format!("{n} {word}")
+        }
+        Lang::En => format!("{n} object{}", if n == 1 { "" } else { "s" }),
     }
 }
 
@@ -336,7 +344,7 @@ mod tests {
             Msg::Settings,
             Msg::NewProject,
             Msg::TabLayers,
-            Msg::DropShadow,
+            Msg::Settings,
         ] {
             set_lang(Lang::Ru);
             let ru = tr(m);

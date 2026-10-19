@@ -32,6 +32,23 @@ pub fn cursor_for(dir: ResizeDirection) -> CursorIcon {
     }
 }
 
+/// Maps a screen's cursor request to a window cursor.
+pub fn icon_of(c: crate::input::Cursor) -> CursorIcon {
+    use crate::input::Cursor;
+    match c {
+        Cursor::Default => CursorIcon::Default,
+        Cursor::Pointer => CursorIcon::Pointer,
+        Cursor::Grab => CursorIcon::Grab,
+        Cursor::Grabbing => CursorIcon::Grabbing,
+        Cursor::Crosshair => CursorIcon::Crosshair,
+        Cursor::Move => CursorIcon::Move,
+        Cursor::ResizeNs => CursorIcon::NsResize,
+        Cursor::ResizeEw => CursorIcon::EwResize,
+        Cursor::ResizeNesw => CursorIcon::NeswResize,
+        Cursor::ResizeNwse => CursorIcon::NwseResize,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

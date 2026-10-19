@@ -30,7 +30,7 @@ use crate::text::Font;
 use crate::theme::colors::{bg_app, hex, set_dark};
 use crate::titlebar::{BarState, HEIGHT as BAR_H, Part, TitleBar};
 
-const FONT_BYTES: &[u8] = include_bytes!("../assets/fonts/Inter.ttf");
+const FONT_BYTES: &[u8] = include_bytes!("../assets/fonts/GolosText.ttf");
 /// Logical pixels scrolled per mouse-wheel line.
 const WHEEL_LINE: f64 = 64.0;
 /// Logical width of the invisible resize border.

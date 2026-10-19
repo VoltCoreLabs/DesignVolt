@@ -70,6 +70,16 @@ impl Handle {
         Point::new(x, y)
     }
 
+    /// The edges of the box that this handle drags.
+    pub fn edges(self) -> dv_geom::Edges {
+        dv_geom::Edges {
+            left: self.left(),
+            right: self.right(),
+            top: self.top(),
+            bottom: self.bottom(),
+        }
+    }
+
     pub fn cursor(self) -> Cursor {
         match self {
             Handle::Nw | Handle::Se => Cursor::ResizeNwse,
@@ -184,6 +194,56 @@ pub fn map_point(old: Rect, new: Rect, p: Point) -> Point {
 pub fn scale(old: Rect, new: Rect) -> (f64, f64) {
     let f = |a: f64, b: f64| if a.abs() < 1e-9 { 1.0 } else { b / a };
     (f(old.width(), new.width()), f(old.height(), new.height()))
+}
+
+/// How far outside a corner (px) the pointer still grabs the rotation.
+pub const ROTATE_ZONE_PX: f64 = 24.0;
+
+/// Whether the screen point `p` is just outside a corner of the selection box `b`, where
+/// dragging rotates (as in Figma). Resize handles keep priority: callers test them first.
+pub fn rotate_zone_at(b: Rect, p: Point) -> bool {
+    if b.inflate(HANDLE_PX / 2.0, HANDLE_PX / 2.0).contains(p) {
+        return false;
+    }
+    [
+        Point::new(b.x0, b.y0),
+        Point::new(b.x1, b.y0),
+        Point::new(b.x1, b.y1),
+        Point::new(b.x0, b.y1),
+    ]
+    .iter()
+    .any(|c| (p.x - c.x).hypot(p.y - c.y) <= ROTATE_ZONE_PX)
+}
+
+/// Signed angle (degrees, clockwise on screen) that turns the direction `center → from`
+/// into `center → to`, in (-180, 180].
+pub fn angle_between(center: Point, from: Point, to: Point) -> f64 {
+    let a = (from.y - center.y).atan2(from.x - center.x);
+    let b = (to.y - center.y).atan2(to.x - center.x);
+    normalize_angle((b - a).to_degrees())
+}
+
+/// Brings an angle into (-180, 180].
+pub fn normalize_angle(deg: f64) -> f64 {
+    let mut a = deg % 360.0;
+    if a > 180.0 {
+        a -= 360.0;
+    } else if a <= -180.0 {
+        a += 360.0;
+    }
+    a
+}
+
+/// Rounds an angle to a multiple of `step` degrees.
+pub fn snap_angle(deg: f64, step: f64) -> f64 {
+    (deg / step).round() * step
+}
+
+/// `p` turned by `deg` degrees (clockwise on screen) around `center`.
+pub fn rotate_point(center: Point, p: Point, deg: f64) -> Point {
+    let (s, c) = deg.to_radians().sin_cos();
+    let (dx, dy) = (p.x - center.x, p.y - center.y);
+    Point::new(center.x + dx * c - dy * s, center.y + dx * s + dy * c)
 }
 
 #[cfg(test)]
@@ -302,5 +362,58 @@ mod tests {
         assert_eq!(Handle::Sw.cursor(), Cursor::ResizeNesw);
         assert_eq!(Handle::S.cursor(), Cursor::ResizeNs);
         assert_eq!(Handle::W.cursor(), Cursor::ResizeEw);
+    }
+
+    #[test]
+    fn the_rotate_zone_is_just_outside_the_corners() {
+        let b = r(100.0, 100.0, 300.0, 200.0);
+        assert!(
+            rotate_zone_at(b, Point::new(312.0, 88.0)),
+            "outside the top-right corner"
+        );
+        assert!(rotate_zone_at(b, Point::new(88.0, 212.0)));
+        assert!(
+            !rotate_zone_at(b, Point::new(302.0, 98.0)),
+            "that is the resize handle"
+        );
+        assert!(
+            !rotate_zone_at(b, Point::new(200.0, 150.0)),
+            "inside the box"
+        );
+        assert!(
+            !rotate_zone_at(b, Point::new(200.0, 80.0)),
+            "far from every corner"
+        );
+        assert!(!rotate_zone_at(b, Point::new(340.0, 60.0)), "too far");
+    }
+
+    #[test]
+    fn angles_are_signed_clockwise_and_normalized() {
+        let c = Point::new(0.0, 0.0);
+        let right = Point::new(10.0, 0.0);
+        let down = Point::new(0.0, 10.0);
+        assert!(
+            (angle_between(c, right, down) - 90.0).abs() < 1e-9,
+            "right to down is +90 on screen"
+        );
+        assert!((angle_between(c, down, right) + 90.0).abs() < 1e-9);
+        assert!((normalize_angle(270.0) + 90.0).abs() < 1e-9);
+        assert!((normalize_angle(-190.0) - 170.0).abs() < 1e-9);
+        assert_eq!(normalize_angle(180.0), 180.0);
+        assert_eq!(normalize_angle(-180.0), 180.0);
+        assert_eq!(snap_angle(37.0, 15.0), 30.0);
+        assert_eq!(snap_angle(38.0, 15.0), 45.0);
+        assert_eq!(snap_angle(-52.0, 15.0), -45.0);
+    }
+
+    #[test]
+    fn points_rotate_around_a_center() {
+        let p = rotate_point(Point::new(10.0, 10.0), Point::new(20.0, 10.0), 90.0);
+        assert!(
+            (p.x - 10.0).abs() < 1e-9 && (p.y - 20.0).abs() < 1e-9,
+            "{p:?}"
+        );
+        let q = rotate_point(Point::new(0.0, 0.0), Point::new(5.0, 0.0), 360.0);
+        assert!((q.x - 5.0).abs() < 1e-9 && q.y.abs() < 1e-9);
     }
 }

@@ -1,12 +1,12 @@
 //! Mouse interactions on the canvas: panning, selecting, moving, resizing, drawing shapes.
 
 use dv_core::{Geometry, NodeId, NodeKind};
-use dv_geom::{parent_delta, selection_bounds, to_parent_space, world_bounds};
+use dv_geom::{selection_bounds, to_parent_space, world_bounds};
 use dv_ui::input::Mods;
 use kurbo::{Point, Rect, Vec2};
 
 use super::canvas::frame_label_at;
-use super::handles::{Handle, MIN_SIZE, handle_at, map_point, resize_rect, scale};
+use super::handles::{Handle, MIN_SIZE, handle_at, rotate_zone_at};
 use super::ops;
 use super::panels;
 use super::state::{Editor, Tool};
@@ -14,7 +14,7 @@ use crate::i18n::{Msg, tr};
 use crate::input::Cursor;
 
 /// A drag shorter than this (screen px) is still a click.
-const DRAG_START_PX: f64 = 3.0;
+pub(super) const DRAG_START_PX: f64 = 3.0;
 /// Wheel sensitivity of the zoom (per logical px of scroll).
 const ZOOM_PER_PX: f64 = 0.0016;
 
@@ -39,12 +39,26 @@ pub enum Interaction {
         moved: bool,
         /// Shift+click on a selected shape removes it from the selection, unless it was dragged.
         deselect_on_click: Option<NodeId>,
+        /// Selection bounds when the drag started (page space) and what it can snap to.
+        bounds: Rect,
+        snap_to: Vec<Rect>,
     },
     Resize {
         handle: Handle,
         orig: Rect,
         originals: Vec<(NodeId, Geometry, Rect)>,
+        snap_to: Vec<Rect>,
         key: u64,
+    },
+    Rotate {
+        /// Rotation center (page space): the middle of the selection.
+        center: Point,
+        start: Point,
+        /// Node, original geometry and original center (page space).
+        originals: Vec<(NodeId, Geometry, Point)>,
+        key: u64,
+        /// The angle applied so far (degrees).
+        delta: f64,
     },
     Create {
         kind: NodeKind,
@@ -59,6 +73,13 @@ pub enum Interaction {
 impl Editor {
     pub(super) fn press(&mut self, mods: Mods) {
         self.refresh_index();
+        if self.press_in_prop_edit() {
+            return;
+        }
+        if let Some(i) = self.field_hit() {
+            self.start_prop_edit(i);
+            return;
+        }
         let l = self.layout();
         if let Some(i) = self.toolbar.hit(&l, self.mouse.x, self.mouse.y) {
             if let Some(tool) = Tool::from_index(i) {
@@ -144,6 +165,12 @@ impl Editor {
             self.start_resize(h);
             return;
         }
+        if let Some(b) = self.selection_screen_bounds()
+            && rotate_zone_at(b, cp)
+        {
+            self.start_rotate(world);
+            return;
+        }
         if let Some(id) = frame_label_at(self, cp) {
             let toggle = self.apply_pick(id, mods.shift);
             self.start_move(world, cp, toggle);
@@ -211,6 +238,7 @@ impl Editor {
                 .filter_map(|id| Some((id, page.node(id)?.geom)))
                 .collect()
         };
+        let (bounds, snap_to) = self.drag_snap_data();
         let key = self.next_drag_key();
         self.interaction = Some(Interaction::Move {
             start: world,
@@ -219,6 +247,8 @@ impl Editor {
             key,
             moved: false,
             deselect_on_click,
+            bounds,
+            snap_to,
         });
     }
 
@@ -237,11 +267,37 @@ impl Editor {
             (orig, list)
         };
         let key = self.next_drag_key();
+        let (_, snap_to) = self.drag_snap_data();
         self.interaction = Some(Interaction::Resize {
             handle,
             orig,
             originals,
             key,
+            snap_to,
+        });
+    }
+
+    fn start_rotate(&mut self, world: Point) {
+        let (center, originals) = {
+            let s = self.session.borrow();
+            let page = s.exec.doc().page();
+            let top = page.without_descendants(&self.selection);
+            let Some(bounds) = selection_bounds(page, &top) else {
+                return;
+            };
+            let list = top
+                .into_iter()
+                .filter_map(|id| Some((id, page.node(id)?.geom, world_bounds(page, id)?.center())))
+                .collect();
+            (bounds.center(), list)
+        };
+        let key = self.next_drag_key();
+        self.interaction = Some(Interaction::Rotate {
+            center,
+            start: world,
+            originals,
+            key,
+            delta: 0.0,
         });
     }
 
@@ -261,192 +317,9 @@ impl Editor {
         }
     }
 
-    /// Continues the running interaction after the pointer moved.
-    pub(super) fn drag_interaction(&mut self) {
-        let Some(inter) = self.interaction.take() else {
-            return;
-        };
-        let (cp, world, shift) = (self.canvas_point(), self.world_mouse(), self.mods.shift);
-        let next = match inter {
-            Interaction::Pan {
-                from,
-                pan0,
-                by_middle,
-            } => {
-                self.session.borrow_mut().vp.pan = pan0 + (cp - from);
-                Interaction::Pan {
-                    from,
-                    pan0,
-                    by_middle,
-                }
-            }
-            Interaction::Marquee {
-                start,
-                base,
-                additive,
-            } => {
-                self.update_marquee(start, world, &base, additive);
-                Interaction::Marquee {
-                    start,
-                    base,
-                    additive,
-                }
-            }
-            Interaction::Move {
-                start,
-                start_screen,
-                originals,
-                key,
-                moved,
-                deselect_on_click,
-            } => {
-                let moved = moved || (cp - start_screen).hypot() >= DRAG_START_PX;
-                if moved {
-                    self.apply_move(start, world, shift, &originals, key);
-                }
-                Interaction::Move {
-                    start,
-                    start_screen,
-                    originals,
-                    key,
-                    moved,
-                    deselect_on_click,
-                }
-            }
-            Interaction::Resize {
-                handle,
-                orig,
-                originals,
-                key,
-            } => {
-                self.apply_resize(handle, orig, world, shift, &originals, key);
-                Interaction::Resize {
-                    handle,
-                    orig,
-                    originals,
-                    key,
-                }
-            }
-            Interaction::Create {
-                kind,
-                start,
-                start_screen,
-                parent,
-                current,
-            } => {
-                let current = if current.is_some() || (cp - start_screen).hypot() >= DRAG_START_PX {
-                    Some(drawn_rect(start, world, shift))
-                } else {
-                    None
-                };
-                Interaction::Create {
-                    kind,
-                    start,
-                    start_screen,
-                    parent,
-                    current,
-                }
-            }
-        };
-        self.interaction = Some(next);
-    }
-
-    fn update_marquee(&mut self, start: Point, world: Point, base: &[NodeId], additive: bool) {
-        let rect = Rect::from_points(start, world);
-        let hits: Vec<NodeId> = {
-            let s = self.session.borrow();
-            let page = s.exec.doc().page();
-            self.index
-                .in_rect(page, rect)
-                .into_iter()
-                .filter(|id| page.node(*id).is_some_and(|n| n.parent.is_none()))
-                .collect()
-        };
-        let mut sel: Vec<NodeId> = if additive { base.to_vec() } else { Vec::new() };
-        for id in hits {
-            if !sel.contains(&id) {
-                sel.push(id);
-            }
-        }
-        self.selection = sel;
-    }
-
-    fn apply_move(
-        &mut self,
-        start: Point,
-        world: Point,
-        shift: bool,
-        originals: &[(NodeId, Geometry)],
-        key: u64,
-    ) {
-        let mut d = world - start;
-        if shift {
-            if d.x.abs() >= d.y.abs() {
-                d.y = 0.0;
-            } else {
-                d.x = 0.0;
-            }
-        }
-        let list: Vec<(NodeId, Geometry)> = {
-            let s = self.session.borrow();
-            let page = s.exec.doc().page();
-            originals
-                .iter()
-                .map(|(id, g)| {
-                    let pd = parent_delta(page, *id, d);
-                    (
-                        *id,
-                        Geometry {
-                            x: g.x + pd.x,
-                            y: g.y + pd.y,
-                            ..*g
-                        },
-                    )
-                })
-                .collect()
-        };
-        ops::set_geometry(&mut self.session.borrow_mut().exec, key, "Move", &list);
-    }
-
-    fn apply_resize(
-        &mut self,
-        handle: Handle,
-        orig: Rect,
-        world: Point,
-        keep_aspect: bool,
-        originals: &[(NodeId, Geometry, Rect)],
-        key: u64,
-    ) {
-        let new = resize_rect(handle, orig, world, keep_aspect);
-        let (sx, sy) = scale(orig, new);
-        let list: Vec<(NodeId, Geometry)> = {
-            let s = self.session.borrow();
-            let page = s.exec.doc().page();
-            originals
-                .iter()
-                .map(|(id, g, wb)| {
-                    let (w, h) = ((g.w * sx).max(MIN_SIZE), (g.h * sy).max(MIN_SIZE));
-                    let center = map_point(orig, new, wb.center());
-                    let parent = page.node(*id).and_then(|n| n.parent);
-                    let p = to_parent_space(page, parent, center);
-                    (
-                        *id,
-                        Geometry {
-                            x: p.x - w / 2.0,
-                            y: p.y - h / 2.0,
-                            w,
-                            h,
-                            rotation: g.rotation,
-                        },
-                    )
-                })
-                .collect()
-        };
-        ops::set_geometry(&mut self.session.borrow_mut().exec, key, "Resize", &list);
-    }
-
     /// The left mouse button was released.
     pub(super) fn release(&mut self) {
+        self.guides.clear();
         let Some(inter) = self.interaction.take() else {
             return;
         };
@@ -473,7 +346,9 @@ impl Editor {
                 }
                 self.session.borrow_mut().exec.break_merge();
             }
-            Interaction::Resize { .. } => self.session.borrow_mut().exec.break_merge(),
+            Interaction::Resize { .. } | Interaction::Rotate { .. } => {
+                self.session.borrow_mut().exec.break_merge();
+            }
             Interaction::Pan { .. } | Interaction::Marquee { .. } => {}
         }
     }
@@ -550,6 +425,7 @@ impl Editor {
                 Interaction::Pan { .. } => Cursor::Grabbing,
                 Interaction::Move { .. } => Cursor::Move,
                 Interaction::Resize { handle, .. } => handle.cursor(),
+                Interaction::Rotate { .. } => Cursor::Crosshair,
                 Interaction::Create { .. } => Cursor::Crosshair,
                 Interaction::Marquee { .. } => Cursor::Default,
             };
@@ -565,6 +441,9 @@ impl Editor {
                 Cursor::Default
             };
         }
+        if self.field_hit().is_some() {
+            return Cursor::Text;
+        }
         if !self.over_canvas() {
             return Cursor::Default;
         }
@@ -574,11 +453,13 @@ impl Editor {
         if self.tool.kind().is_some() {
             return Cursor::Crosshair;
         }
-        match self
-            .selection_screen_bounds()
-            .and_then(|b| handle_at(b, self.canvas_point()))
-        {
-            Some(h) => h.cursor(),
+        let cp = self.canvas_point();
+        match self.selection_screen_bounds() {
+            Some(b) => match handle_at(b, cp) {
+                Some(h) => h.cursor(),
+                None if rotate_zone_at(b, cp) => Cursor::Crosshair,
+                None => Cursor::Default,
+            },
             None => Cursor::Default,
         }
     }
@@ -591,7 +472,7 @@ impl Editor {
 }
 
 /// The rectangle drawn from `start` to `end`; with `square` the sides are equal.
-fn drawn_rect(start: Point, end: Point, square: bool) -> Rect {
+pub(super) fn drawn_rect(start: Point, end: Point, square: bool) -> Rect {
     if !square {
         return Rect::from_points(start, end);
     }

@@ -89,6 +89,10 @@ pub struct Editor {
     pub(super) index: SpatialIndex,
     pub(super) selection: Vec<NodeId>,
     pub(super) hover: Option<NodeId>,
+    /// The property field of the right panel that is being typed into.
+    pub(super) prop_edit: Option<super::props::PropEdit>,
+    /// Guide lines shown while a drag snaps to other objects.
+    pub(super) guides: Vec<dv_geom::Guide>,
     pub(super) interaction: Option<Interaction>,
     pub(super) space: bool,
     pub(super) drag_key: u64,
@@ -118,6 +122,8 @@ impl Editor {
             index,
             selection: Vec::new(),
             hover: None,
+            prop_edit: None,
+            guides: Vec::new(),
             interaction: None,
             space: false,
             drag_key: 0,
@@ -239,7 +245,11 @@ impl Screen for Editor {
             .session
             .borrow_mut()
             .tick(dt, self.interaction.is_some());
-        busy || saving || self.time < INTRO_END || self.interaction.is_some()
+        if self.selection.is_empty() {
+            self.cancel_prop_edit();
+        }
+        let editing = self.prop_edit.as_mut().is_some_and(|e| e.input.update(dt));
+        busy || saving || editing || self.time < INTRO_END || self.interaction.is_some()
     }
 
     fn mouse_moved(&mut self, x: f64, y: f64) {
@@ -273,6 +283,10 @@ impl Screen for Editor {
     fn key(&mut self, key: Key, mods: Mods) {
         self.mods = mods;
         self.handle_key(key, mods);
+    }
+
+    fn text(&mut self, s: &str) {
+        self.prop_text(s);
     }
 
     fn key_up(&mut self, key: Key) {

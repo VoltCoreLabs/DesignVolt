@@ -41,6 +41,7 @@ pub fn icon_of(c: crate::input::Cursor) -> CursorIcon {
         Cursor::Grab => CursorIcon::Grab,
         Cursor::Grabbing => CursorIcon::Grabbing,
         Cursor::Crosshair => CursorIcon::Crosshair,
+        Cursor::Text => CursorIcon::Text,
         Cursor::Move => CursorIcon::Move,
         Cursor::ResizeNs => CursorIcon::NsResize,
         Cursor::ResizeEw => CursorIcon::EwResize,

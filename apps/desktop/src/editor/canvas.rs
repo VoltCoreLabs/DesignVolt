@@ -135,6 +135,9 @@ fn paint_overlay(ed: &Editor, cx: &mut Cx, vp: &Viewport, page: &Page, size: (f6
         };
         cx.text(&l.text, LABEL_PX, l.rect.x0 + 2.0, l.rect.y1 - 5.0, color);
     }
+    for g in &ed.guides {
+        draw_guide(cx, vp, g);
+    }
     for id in &ed.selection {
         outline(cx, page, vp, *id, 1.5, accent(), 1.0);
     }
@@ -176,6 +179,21 @@ fn paint_overlay(ed: &Editor, cx: &mut Cx, vp: &Viewport, page: &Page, size: (f6
             cx.fill(r, 0.0, alpha(accent(), 0.08));
             cx.stroke(r, 0.0, 1.0, alpha(accent(), 0.8));
         }
+        Some(Interaction::Rotate {
+            delta, originals, ..
+        }) => {
+            // One shape shows its own angle, a group shows how far it was turned.
+            let angle = match originals[..] {
+                [(id, ..)] => page.node(id).map_or(*delta, |n| n.geom.rotation),
+                _ => *delta,
+            };
+            let p = ed.canvas_point();
+            angle_pill(
+                cx,
+                Point::new(p.x + 18.0, p.y + 18.0),
+                &format!("{}°", num(angle)),
+            );
+        }
         _ => {}
     }
     let _ = size;
@@ -193,6 +211,31 @@ fn size_pill(cx: &mut Cx, b: Rect, zoom: f64) {
     );
     cx.fill(pill, 6.0, hex(accent()));
     cx.text(&label, LABEL_PX, pill.x0 + 8.0, pill.y1 - 6.0, hex(WHITE));
+}
+
+/// A smart-guide line (page space) drawn in canvas screen space.
+fn draw_guide(cx: &mut Cx, vp: &Viewport, g: &dv_geom::Guide) {
+    let (a, b) = match g.axis {
+        dv_geom::Axis::Vertical => (Point::new(g.pos, g.from), Point::new(g.pos, g.to)),
+        dv_geom::Axis::Horizontal => (Point::new(g.from, g.pos), Point::new(g.to, g.pos)),
+    };
+    let (a, b) = (vp.to_screen(a), vp.to_screen(b));
+    let mut path = BezPath::new();
+    path.move_to(a);
+    path.line_to(b);
+    cx.stroke_path(&path, 1.0, hex(danger()));
+    for end in [a, b] {
+        let r = Rect::new(end.x - 3.0, end.y - 3.0, end.x + 3.0, end.y + 3.0);
+        cx.stroke(r, 0.0, 1.0, hex(danger()));
+    }
+}
+
+/// A small accent label (angle, size) at `at`.
+fn angle_pill(cx: &mut Cx, at: Point, label: &str) {
+    let w = cx.text_width(label, LABEL_PX);
+    let pill = Rect::new(at.x, at.y, at.x + w + 16.0, at.y + 20.0);
+    cx.fill(pill, 6.0, hex(accent()));
+    cx.text(label, LABEL_PX, pill.x0 + 8.0, pill.y1 - 6.0, hex(WHITE));
 }
 
 /// A number without a pointless fraction: 12, 12.5.

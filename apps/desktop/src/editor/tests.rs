@@ -451,3 +451,311 @@ fn the_canvas_has_no_edges_you_can_pan_and_zoom_far_away() {
     let id = draw_rect(&mut ed, (c.x, c.y), (c.x + 100.0, c.y + 50.0));
     assert!(ed.session.borrow().exec.doc().page().contains(id));
 }
+
+/// Drags with the rotate grip: starts just outside the top-right corner of the selection.
+fn rotate_drag(ed: &mut Editor, corner: (f64, f64), center: (f64, f64), degrees: f64, mods: Mods) {
+    let start = (corner.0 + 12.0 / 1.0, corner.1 - 12.0);
+    let v = (start.0 - center.0, start.1 - center.1);
+    let (s, c) = degrees.to_radians().sin_cos();
+    let end = (center.0 + v.0 * c - v.1 * s, center.1 + v.0 * s + v.1 * c);
+    mv(ed, start.0, start.1);
+    ed.click(mods);
+    mv(ed, (start.0 + end.0) / 2.0, (start.1 + end.1) / 2.0);
+    mv(ed, end.0, end.1);
+    ed.mouse_up();
+}
+
+fn rotation_of(ed: &Editor, id: NodeId) -> f64 {
+    ed.session
+        .borrow()
+        .exec
+        .doc()
+        .page()
+        .node(id)
+        .unwrap()
+        .geom
+        .rotation
+}
+
+#[test]
+fn dragging_outside_a_corner_rotates_the_shape_around_its_center() {
+    let mut ed = editor();
+    let id = draw_rect(&mut ed, (0.0, 0.0), (200.0, 100.0));
+    rotate_drag(&mut ed, (200.0, 0.0), (100.0, 50.0), 90.0, NONE);
+    assert!(
+        (rotation_of(&ed, id) - 90.0).abs() < 1e-6,
+        "{}",
+        rotation_of(&ed, id)
+    );
+    let (x, y, w, h) = geom(&ed, id);
+    assert!(
+        (x + w / 2.0 - 100.0).abs() < 1e-6 && (y + h / 2.0 - 50.0).abs() < 1e-6,
+        "center stays"
+    );
+    press_key(&mut ed, Key::Undo, CTRL);
+    assert_eq!(
+        rotation_of(&ed, id),
+        0.0,
+        "one undo reverts the whole rotation"
+    );
+}
+
+#[test]
+fn shift_snaps_the_rotation_to_fifteen_degrees() {
+    let mut ed = editor();
+    let id = draw_rect(&mut ed, (0.0, 0.0), (200.0, 100.0));
+    ed.mods = SHIFT;
+    rotate_drag(&mut ed, (200.0, 0.0), (100.0, 50.0), 50.0, SHIFT);
+    assert!(
+        (rotation_of(&ed, id) - 45.0).abs() < 1e-6,
+        "{}",
+        rotation_of(&ed, id)
+    );
+}
+
+#[test]
+fn rotating_twice_adds_up_and_stays_normalized() {
+    let mut ed = editor();
+    let id = draw_rect(&mut ed, (0.0, 0.0), (100.0, 100.0));
+    rotate_drag(&mut ed, (100.0, 0.0), (50.0, 50.0), 100.0, NONE);
+    assert!((rotation_of(&ed, id) - 100.0).abs() < 1e-6);
+    // The selection box is now the rotated shape's bounds; grab outside its top-right corner.
+    let b = ed.selection_screen_bounds().unwrap();
+    let z = ed.session.borrow().vp.zoom;
+    let corner = ((b.x1) / z - 330.0 / z, (b.y0) / z - 360.0 / z);
+    rotate_drag(&mut ed, corner, (50.0, 50.0), 100.0, NONE);
+    assert!(
+        (rotation_of(&ed, id) + 160.0).abs() < 1e-6,
+        "200 degrees wraps to -160: {}",
+        rotation_of(&ed, id)
+    );
+}
+
+#[test]
+fn rotating_a_group_turns_the_shapes_around_the_group_center() {
+    let mut ed = editor();
+    let a = draw_rect(&mut ed, (0.0, 0.0), (100.0, 100.0));
+    let b = draw_rect(&mut ed, (200.0, 0.0), (300.0, 100.0));
+    press_key(&mut ed, Key::SelectAll, CTRL);
+    rotate_drag(&mut ed, (300.0, 0.0), (150.0, 50.0), 180.0, NONE);
+    let center = |id| {
+        let (x, y, w, h) = geom(&ed, id);
+        (x + w / 2.0, y + h / 2.0)
+    };
+    let (ca, cb) = (center(a), center(b));
+    assert!(
+        (ca.0 - 250.0).abs() < 1e-6 && (ca.1 - 50.0).abs() < 1e-6,
+        "{ca:?}"
+    );
+    assert!(
+        (cb.0 - 50.0).abs() < 1e-6 && (cb.1 - 50.0).abs() < 1e-6,
+        "{cb:?}"
+    );
+    for id in [a, b] {
+        let turned = rotation_of(&ed, id).abs();
+        assert!(
+            (turned - 180.0).abs() < 1e-6,
+            "a half turn, either sign: {turned}"
+        );
+    }
+}
+
+#[test]
+fn moving_a_shape_snaps_its_edge_to_a_neighbour_and_shows_a_guide() {
+    let mut ed = editor();
+    let _a = draw_rect(&mut ed, (-200.0, 0.0), (-100.0, 100.0));
+    let b = draw_rect(&mut ed, (100.0, 0.0), (200.0, 100.0));
+    // Grab b in the middle and pull it left; its left edge would end 3 units from a's right edge.
+    mv(&mut ed, 150.0, 50.0);
+    ed.click(NONE);
+    mv(&mut ed, 50.0, 50.0);
+    mv(&mut ed, -47.0, 50.0);
+    assert!(!ed.guides.is_empty(), "a guide is visible while snapped");
+    ed.mouse_up();
+    assert_eq!(
+        geom(&ed, b),
+        (-100.0, 0.0, 100.0, 100.0),
+        "the left edge snapped onto x = -100"
+    );
+    assert!(ed.guides.is_empty(), "guides disappear when the drag ends");
+}
+
+#[test]
+fn holding_ctrl_turns_snapping_off() {
+    let mut ed = editor();
+    let _a = draw_rect(&mut ed, (-200.0, 0.0), (-100.0, 100.0));
+    let b = draw_rect(&mut ed, (100.0, 0.0), (200.0, 100.0));
+    ed.mods = CTRL;
+    drag(&mut ed, (150.0, 50.0), (-47.0, 50.0), CTRL);
+    assert_eq!(geom(&ed, b), (-97.0, 0.0, 100.0, 100.0));
+}
+
+#[test]
+fn the_snap_distance_is_measured_on_screen_not_in_page_units() {
+    let mut ed = editor();
+    // At 400 % zoom, 5 page units are 20 px: far too much to snap (the limit is 6 px).
+    ed.session
+        .borrow_mut()
+        .vp
+        .set_zoom_at(Point::new(330.0, 360.0), 4.0);
+    let _a = draw_rect(&mut ed, (0.0, 0.0), (20.0, 20.0));
+    let b = draw_rect(&mut ed, (30.0, 0.0), (50.0, 20.0));
+    drag(&mut ed, (40.0, 10.0), (35.0, 10.0), NONE);
+    assert_eq!(geom(&ed, b).0, 25.0, "no snap at 20 px distance");
+    // Within 1.5 units (6 px) it does snap.
+    drag(&mut ed, (35.0, 10.0), (31.0, 10.0), NONE);
+    assert_eq!(geom(&ed, b).0, 20.0, "21 snaps to a's right edge at 20");
+}
+
+#[test]
+fn resizing_snaps_the_dragged_edge_and_shift_aspect_does_not() {
+    let mut ed = editor();
+    let _a = draw_rect(&mut ed, (200.0, 0.0), (300.0, 100.0));
+    let b = draw_rect(&mut ed, (0.0, 0.0), (100.0, 100.0));
+    // Drag b's east handle to x = 197: it snaps to a's left edge at 200.
+    drag(&mut ed, (100.0, 50.0), (197.0, 50.0), NONE);
+    assert_eq!(geom(&ed, b), (0.0, 0.0, 200.0, 100.0));
+}
+
+#[test]
+fn moving_a_shape_does_not_snap_to_itself_or_to_its_own_children() {
+    let mut ed = editor();
+    press_key(&mut ed, Key::Char('f'), NONE);
+    drag(&mut ed, (0.0, 0.0), (400.0, 300.0), NONE);
+    let frame = *roots(&ed).last().unwrap();
+    draw_rect(&mut ed, (100.0, 100.0), (200.0, 160.0));
+    ed.selection = vec![frame];
+    // Dragging the frame by 3 units must move it by exactly 3: its child is not a snap target.
+    drag(&mut ed, (300.0, 250.0), (303.0, 250.0), NONE);
+    assert_eq!(geom(&ed, frame).0, 3.0);
+}
+
+/// Window position of the middle of property field `i` in the right panel.
+fn field_at(ed: &Editor, i: usize) -> (f64, f64) {
+    let c = super::panels::field_rect(ed.layout().right, i).center();
+    (c.x, c.y)
+}
+
+fn click_field(ed: &mut Editor, i: usize) {
+    let (x, y) = field_at(ed, i);
+    ed.mouse_moved(x, y);
+    ed.click(NONE);
+    ed.mouse_up();
+}
+
+fn type_and_enter(ed: &mut Editor, text: &str) {
+    ed.text(text);
+    press_key(ed, Key::Enter, NONE);
+}
+
+#[test]
+fn typing_a_width_resizes_the_selected_shape_in_one_undo_step() {
+    let mut ed = editor();
+    let id = draw_rect(&mut ed, (0.0, 0.0), (200.0, 100.0));
+    click_field(&mut ed, 2); // W
+    type_and_enter(&mut ed, "250");
+    assert_eq!(geom(&ed, id), (0.0, 0.0, 250.0, 100.0));
+    assert!(ed.prop_edit.is_none(), "Enter leaves the field");
+    press_key(&mut ed, Key::Undo, CTRL);
+    assert_eq!(geom(&ed, id).2, 200.0);
+}
+
+#[test]
+fn position_rotation_and_radius_can_be_typed() {
+    let mut ed = editor();
+    let id = draw_rect(&mut ed, (0.0, 0.0), (200.0, 100.0));
+    click_field(&mut ed, 0); // X
+    type_and_enter(&mut ed, "-40,5");
+    click_field(&mut ed, 1); // Y
+    type_and_enter(&mut ed, "12");
+    click_field(&mut ed, 4); // angle
+    type_and_enter(&mut ed, "30");
+    click_field(&mut ed, 5); // radius
+    type_and_enter(&mut ed, "16");
+    let s = ed.session.borrow();
+    let n = s.exec.doc().page().node(id).unwrap();
+    assert_eq!(
+        (n.geom.x, n.geom.y, n.geom.rotation, n.radius),
+        (-40.5, 12.0, 30.0, 16.0)
+    );
+}
+
+#[test]
+fn letters_are_ignored_and_an_empty_value_changes_nothing() {
+    let mut ed = editor();
+    let id = draw_rect(&mut ed, (0.0, 0.0), (200.0, 100.0));
+    click_field(&mut ed, 2);
+    ed.text("abc");
+    assert_eq!(
+        ed.prop_edit.as_ref().unwrap().input.text(),
+        "200",
+        "letters were not inserted"
+    );
+    press_key(&mut ed, Key::Backspace, NONE); // the whole value is selected
+    press_key(&mut ed, Key::Enter, NONE);
+    assert_eq!(geom(&ed, id).2, 200.0, "an empty field is not a number");
+}
+
+#[test]
+fn escape_cancels_and_clicking_the_canvas_applies() {
+    let mut ed = editor();
+    let id = draw_rect(&mut ed, (0.0, 0.0), (200.0, 100.0));
+    click_field(&mut ed, 3); // H
+    ed.text("500");
+    press_key(&mut ed, Key::Escape, NONE);
+    assert_eq!(geom(&ed, id).3, 100.0);
+    assert!(ed.prop_edit.is_none());
+
+    click_field(&mut ed, 3);
+    ed.text("300");
+    mv(&mut ed, -250.0, -250.0); // empty canvas: leaving the field applies the value
+    ed.click(NONE);
+    ed.mouse_up();
+    assert_eq!(geom(&ed, id).3, 300.0);
+}
+
+#[test]
+fn arrow_keys_step_the_value_and_tab_moves_to_the_next_field() {
+    let mut ed = editor();
+    let id = draw_rect(&mut ed, (0.0, 0.0), (200.0, 100.0));
+    click_field(&mut ed, 0); // X
+    press_key(&mut ed, Key::Up, NONE);
+    press_key(&mut ed, Key::Up, SHIFT);
+    assert_eq!(geom(&ed, id).0, 11.0, "+1 then +10");
+    press_key(&mut ed, Key::Down, NONE);
+    assert_eq!(geom(&ed, id).0, 10.0);
+    press_key(&mut ed, Key::Tab, NONE);
+    assert_eq!(ed.prop_edit.as_ref().unwrap().field, super::ops::Field::Y);
+    press_key(&mut ed, Key::Tab, SHIFT);
+    assert_eq!(ed.prop_edit.as_ref().unwrap().field, super::ops::Field::X);
+}
+
+#[test]
+fn typing_in_a_field_does_not_trigger_tool_shortcuts() {
+    let mut ed = editor();
+    draw_rect(&mut ed, (0.0, 0.0), (200.0, 100.0));
+    click_field(&mut ed, 2);
+    press_key(&mut ed, Key::Char('r'), NONE);
+    press_key(&mut ed, Key::Delete, NONE);
+    assert_eq!(ed.tool, super::state::Tool::Select);
+    assert_eq!(
+        roots(&ed).len(),
+        1,
+        "Delete edited the text instead of deleting the shape"
+    );
+}
+
+#[test]
+fn a_group_width_can_be_typed_and_fields_need_a_selection() {
+    let mut ed = editor();
+    let a = draw_rect(&mut ed, (0.0, 0.0), (100.0, 100.0));
+    let b = draw_rect(&mut ed, (200.0, 0.0), (300.0, 100.0));
+    press_key(&mut ed, Key::SelectAll, CTRL);
+    click_field(&mut ed, 2);
+    type_and_enter(&mut ed, "600");
+    assert_eq!(geom(&ed, a), (0.0, 0.0, 200.0, 100.0));
+    assert_eq!(geom(&ed, b), (400.0, 0.0, 200.0, 100.0));
+    ed.selection.clear();
+    click_field(&mut ed, 2);
+    assert!(ed.prop_edit.is_none(), "no selection, nothing to edit");
+}

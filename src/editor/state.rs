@@ -8,8 +8,7 @@ use super::toolbar::Toolbar;
 use super::{canvas, panels};
 use crate::anim::{ease_out_cubic, progress};
 use crate::draw::Cx;
-use crate::icons::Icons;
-use crate::text::Font;
+use crate::input::{Key, Screen, SharedAssets, Transition, Viewport};
 use crate::theme::colors::{BG_APP, hex};
 use crate::theme::motion::{PANEL_INTRO, STAGGER};
 
@@ -17,80 +16,86 @@ use crate::theme::motion::{PANEL_INTRO, STAGGER};
 const INTRO_END: f32 = PANEL_INTRO + 5.0 * STAGGER + 0.1;
 
 pub struct Editor {
-    font: Font,
-    icons: Icons,
+    assets: SharedAssets,
     toolbar: Toolbar,
     time: f32,
-    scale: f64,
-    size: (f64, f64),
+    vp: Viewport,
     mouse: (f64, f64),
+    next: Option<Transition>,
 }
 
 impl Editor {
-    pub fn new(font: Font) -> Self {
+    pub fn new(assets: SharedAssets) -> Self {
         Self {
-            font,
-            icons: Icons::new(),
+            assets,
             toolbar: Toolbar::new(),
             time: 0.0,
-            scale: 1.0,
-            size: (960.0, 640.0),
+            vp: Viewport::new(),
             mouse: (-1.0, -1.0),
+            next: None,
         }
-    }
-
-    /// `w`/`h` are physical pixels.
-    pub fn set_viewport(&mut self, w: u32, h: u32, scale: f64) {
-        self.scale = scale;
-        self.size = (w as f64 / scale, h as f64 / scale);
-    }
-
-    /// `x`/`y` are physical pixels.
-    pub fn mouse_moved(&mut self, x: f64, y: f64) {
-        self.mouse = (x / self.scale, y / self.scale);
-    }
-
-    pub fn mouse_left(&mut self) {
-        self.mouse = (-1.0, -1.0);
     }
 
     fn layout(&self) -> Layout {
-        Layout::new(self.size.0, self.size.1)
-    }
-
-    pub fn hovering_button(&self) -> bool {
-        self.toolbar.hit(&self.layout(), self.mouse.0, self.mouse.1).is_some()
-    }
-
-    pub fn click(&mut self) {
-        if let Some(i) = self.toolbar.hit(&self.layout(), self.mouse.0, self.mouse.1) {
-            self.toolbar.select(i);
-        }
-    }
-
-    /// Advances animations; returns true while another frame is needed.
-    pub fn update(&mut self, dt: f32) -> bool {
-        self.time += dt;
-        let hovered = self.toolbar.hit(&self.layout(), self.mouse.0, self.mouse.1);
-        let busy = self.toolbar.update(dt, hovered);
-        busy || self.time < INTRO_END
+        Layout::new(self.vp.w, self.vp.h)
     }
 
     /// Intro progress (0..=1) for an element with the given stagger index.
     fn intro(&self, index: f32) -> f32 {
         ease_out_cubic(progress(self.time, index * STAGGER, PANEL_INTRO))
     }
+}
 
-    pub fn draw(&self, scene: &mut Scene) {
+impl Screen for Editor {
+    fn set_viewport(&mut self, w: u32, h: u32, scale: f64) {
+        self.vp.set(w, h, scale);
+    }
+
+    fn update(&mut self, dt: f32) -> bool {
+        self.time += dt;
+        let hovered = self.toolbar.hit(&self.layout(), self.mouse.0, self.mouse.1);
+        let busy = self.toolbar.update(dt, hovered);
+        busy || self.time < INTRO_END
+    }
+
+    fn mouse_moved(&mut self, x: f64, y: f64) {
+        self.mouse = (x / self.vp.scale, y / self.vp.scale);
+    }
+
+    fn mouse_left(&mut self) {
+        self.mouse = (-1.0, -1.0);
+    }
+
+    fn click(&mut self) {
+        if let Some(i) = self.toolbar.hit(&self.layout(), self.mouse.0, self.mouse.1) {
+            self.toolbar.select(i);
+        }
+    }
+
+    fn key(&mut self, key: Key) {
+        if key == Key::Escape {
+            self.next = Some(Transition::BackToProjects);
+        }
+    }
+
+    fn pointer_hand(&self) -> bool {
+        self.toolbar.hit(&self.layout(), self.mouse.0, self.mouse.1).is_some()
+    }
+
+    fn take_transition(&mut self) -> Option<Transition> {
+        self.next.take()
+    }
+
+    fn draw(&self, scene: &mut Scene) {
         scene.reset();
         let layout = self.layout();
         let mut cx = Cx {
             scene,
-            font: &self.font,
-            icons: &self.icons,
-            xf: Affine::scale(self.scale),
+            font: &self.assets.font,
+            icons: &self.assets.icons,
+            xf: Affine::scale(self.vp.scale),
         };
-        let full = Rect::new(0.0, 0.0, self.size.0, self.size.1);
+        let full = Rect::new(0.0, 0.0, self.vp.w, self.vp.h);
         cx.fill(full, 0.0, hex(BG_APP));
 
         let p = self.intro(0.0);

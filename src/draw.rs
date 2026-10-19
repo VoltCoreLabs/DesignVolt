@@ -76,14 +76,6 @@ impl Cx<'_> {
         self.font.layout(s, size).1 as f64
     }
 
-    /// Text centered in `r` (single line).
-    pub fn text_centered(&mut self, s: &str, size: f32, r: Rect, c: Color) {
-        let w = self.text_width(s, size);
-        let x = r.x0 + (r.width() - w) / 2.0;
-        let y = r.center().y + size as f64 * 0.36;
-        self.text(s, size, x, y, c);
-    }
-
     pub fn icon(&mut self, icon: Icon, x: f64, y: f64, size: f64, c: Color) {
         let Some(path) = self.icons.get(icon) else { return };
         let t = self.xf * Affine::translate((x, y)) * Affine::scale(size / VIEWBOX);

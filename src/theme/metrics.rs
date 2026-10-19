@@ -5,7 +5,6 @@ pub const LEFT_W: f64 = 240.0;
 pub const RIGHT_W: f64 = 280.0;
 
 pub const GAP: f64 = 8.0;
-pub const PAD: f64 = 12.0;
 
 pub const R_FIELD: f64 = 6.0;
 pub const R_BUTTON: f64 = 8.0;

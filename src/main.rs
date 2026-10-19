@@ -3,8 +3,12 @@ mod app;
 mod draw;
 mod editor;
 mod icons;
+mod input;
+mod screens;
+mod store;
 mod text;
 mod theme;
+mod widgets;
 
 fn main() {
     let event_loop = winit::event_loop::EventLoop::new().expect("event loop");

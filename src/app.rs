@@ -1,5 +1,7 @@
-//! Window, GPU surface and the frame loop.
+//! Window, GPU surface, screen switching and the frame loop.
 
+use std::cell::RefCell;
+use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -9,14 +11,22 @@ use vello::wgpu::{self, CurrentSurfaceTexture, PresentMode};
 use vello::{AaConfig, RenderParams, Renderer, RendererOptions, Scene};
 use winit::application::ApplicationHandler;
 use winit::dpi::LogicalSize;
-use winit::event::{ElementState, MouseButton, WindowEvent};
+use winit::event::{ElementState, Ime, MouseButton, MouseScrollDelta, WindowEvent};
 use winit::event_loop::ActiveEventLoop;
+use winit::keyboard::{Key as WKey, NamedKey};
 use winit::window::{CursorIcon, Window, WindowId};
 
-use crate::text::Font;
 use crate::editor::Editor;
+use crate::icons::Icons;
+use crate::input::{Assets, Key, Screen, SharedAssets, Transition};
+use crate::screens::projects::Projects;
+use crate::screens::welcome::Welcome;
+use crate::store::{Store, default_dir};
+use crate::text::Font;
 
 const FONT_BYTES: &[u8] = include_bytes!("../assets/fonts/Inter.ttf");
+/// Logical pixels scrolled per mouse-wheel line.
+const WHEEL_LINE: f64 = 64.0;
 
 struct Gfx {
     window: Arc<Window>,
@@ -28,19 +38,55 @@ pub struct App {
     ctx: RenderContext,
     gfx: Option<Gfx>,
     scene: Scene,
-    ui: Editor,
+    assets: SharedAssets,
+    store: Rc<RefCell<Store>>,
+    screen: Box<dyn Screen>,
     last: Instant,
 }
 
 impl App {
     pub fn new() -> Self {
+        let assets = Rc::new(Assets {
+            font: Font::from_bytes(FONT_BYTES).expect("embedded font"),
+            icons: Icons::new(),
+        });
+        let store = Rc::new(RefCell::new(Store::load(&default_dir())));
+        let screen: Box<dyn Screen> = if store.borrow().name.is_some() {
+            Box::new(Projects::new(assets.clone(), store.clone()))
+        } else {
+            Box::new(Welcome::new(assets.clone()))
+        };
         Self {
             ctx: RenderContext::new(),
             gfx: None,
             scene: Scene::new(),
-            ui: Editor::new(Font::from_bytes(FONT_BYTES).expect("embedded font")),
+            assets,
+            store,
+            screen,
             last: Instant::now(),
         }
+    }
+
+    fn switch(&mut self, t: Transition) {
+        self.screen = match t {
+            Transition::SetName(name) => {
+                let mut s = self.store.borrow_mut();
+                s.set_name(&name);
+                if let Err(e) = s.save() {
+                    eprintln!("could not save profile: {e}");
+                }
+                drop(s);
+                Box::new(Projects::new(self.assets.clone(), self.store.clone()))
+            }
+            Transition::OpenProject(_) => Box::new(Editor::new(self.assets.clone())),
+            Transition::BackToProjects => Box::new(Projects::new(self.assets.clone(), self.store.clone())),
+        };
+        if let Some(gfx) = &self.gfx {
+            let size = gfx.window.inner_size();
+            self.screen.set_viewport(size.width, size.height, gfx.window.scale_factor());
+            gfx.window.request_redraw();
+        }
+        self.last = Instant::now();
     }
 
     fn render(&mut self) {
@@ -53,8 +99,8 @@ impl App {
         let dt = now.duration_since(self.last).as_secs_f32().min(0.05);
         self.last = now;
 
-        let animating = self.ui.update(dt);
-        self.ui.draw(&mut self.scene);
+        let animating = self.screen.update(dt);
+        self.screen.draw(&mut self.scene);
 
         let handle = &self.ctx.devices[gfx.surface.dev_id];
         let frame = match gfx.surface.surface.get_current_texture() {
@@ -99,6 +145,29 @@ impl App {
             gfx.window.request_redraw();
         }
     }
+
+    fn handle_key(&mut self, event: &winit::event::KeyEvent) {
+        if let WKey::Named(named) = &event.logical_key {
+            let key = match named {
+                NamedKey::Backspace => Some(Key::Backspace),
+                NamedKey::Delete => Some(Key::Delete),
+                NamedKey::ArrowLeft => Some(Key::Left),
+                NamedKey::ArrowRight => Some(Key::Right),
+                NamedKey::Home => Some(Key::Home),
+                NamedKey::End => Some(Key::End),
+                NamedKey::Enter => Some(Key::Enter),
+                NamedKey::Escape => Some(Key::Escape),
+                _ => None,
+            };
+            if let Some(k) = key {
+                self.screen.key(k);
+                return;
+            }
+        }
+        if let Some(text) = &event.text {
+            self.screen.text(text);
+        }
+    }
 }
 
 impl ApplicationHandler for App {
@@ -108,8 +177,10 @@ impl ApplicationHandler for App {
         }
         let attrs = Window::default_attributes()
             .with_title("DesignVolt")
-            .with_inner_size(LogicalSize::new(960.0, 640.0));
+            .with_inner_size(LogicalSize::new(1180.0, 760.0))
+            .with_min_inner_size(LogicalSize::new(900.0, 600.0));
         let window = Arc::new(event_loop.create_window(attrs).expect("window"));
+        window.set_ime_allowed(true);
         let size = window.inner_size();
         let surface = pollster::block_on(self.ctx.create_surface(
             window.clone(),
@@ -127,7 +198,7 @@ impl ApplicationHandler for App {
             },
         )
         .expect("renderer");
-        self.ui
+        self.screen
             .set_viewport(size.width, size.height, window.scale_factor());
         self.last = Instant::now();
         window.request_redraw();
@@ -140,31 +211,46 @@ impl ApplicationHandler for App {
             WindowEvent::CloseRequested => event_loop.exit(),
             WindowEvent::Resized(size) if size.width > 0 && size.height > 0 => {
                 self.ctx.resize_surface(&mut gfx.surface, size.width, size.height);
-                self.ui
+                self.screen
                     .set_viewport(size.width, size.height, gfx.window.scale_factor());
-                gfx.window.request_redraw();
             }
             WindowEvent::CursorMoved { position, .. } => {
-                self.ui.mouse_moved(position.x, position.y);
-                gfx.window.set_cursor(if self.ui.hovering_button() {
+                self.screen.mouse_moved(position.x, position.y);
+                gfx.window.set_cursor(if self.screen.pointer_hand() {
                     CursorIcon::Pointer
                 } else {
                     CursorIcon::Default
                 });
-                gfx.window.request_redraw();
             }
-            WindowEvent::CursorLeft { .. } => {
-                self.ui.mouse_left();
-                gfx.window.request_redraw();
+            WindowEvent::CursorLeft { .. } => self.screen.mouse_left(),
+            WindowEvent::MouseInput { state: ElementState::Pressed, button: MouseButton::Left, .. } => {
+                self.screen.click();
             }
-            WindowEvent::MouseInput { state, button: MouseButton::Left, .. } => {
-                if state == ElementState::Pressed {
-                    self.ui.click();
+            WindowEvent::MouseWheel { delta, .. } => {
+                let dy = match delta {
+                    MouseScrollDelta::LineDelta(_, y) => y as f64 * WHEEL_LINE,
+                    MouseScrollDelta::PixelDelta(p) => p.y / gfx.window.scale_factor(),
+                };
+                self.screen.scroll(dy);
+            }
+            WindowEvent::KeyboardInput { event, .. } if event.state == ElementState::Pressed => {
+                self.handle_key(&event);
+            }
+            WindowEvent::Ime(Ime::Commit(text)) => self.screen.text(&text),
+            WindowEvent::RedrawRequested => {
+                self.render();
+                if let Some(t) = self.screen.take_transition() {
+                    self.switch(t);
                 }
-                gfx.window.request_redraw();
+                return;
             }
-            WindowEvent::RedrawRequested => self.render(),
-            _ => {}
+            _ => return,
+        }
+        if let Some(t) = self.screen.take_transition() {
+            self.switch(t);
+        }
+        if let Some(gfx) = &self.gfx {
+            gfx.window.request_redraw();
         }
     }
 }

@@ -1,4 +1,4 @@
-﻿#![forbid(unsafe_code)]
+#![forbid(unsafe_code)]
 
 mod app;
 mod chrome;
@@ -16,4 +16,3 @@ fn main() {
     let mut app = app::App::new();
     event_loop.run_app(&mut app).expect("run app");
 }
-

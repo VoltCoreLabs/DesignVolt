@@ -1,0 +1,9 @@
+[package]
+name = "dv-geom"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+dv-core.workspace = true
+kurbo.workspace = true
+rstar = "0.13"

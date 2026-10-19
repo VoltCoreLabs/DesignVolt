@@ -77,7 +77,7 @@ impl Projects {
         self.scroll.target = 0.0;
         self.sort_open = false;
         self.menu = None;
-        self.confirm_empty = false;
+        self.modal = None;
         self.clear_selection();
     }
 
@@ -260,7 +260,7 @@ impl Projects {
 
     pub fn empty_trash(&mut self) {
         self.store.borrow_mut().lib.empty_trash();
-        self.confirm_empty = false;
+        self.modal = None;
         self.clear_selection();
         self.save();
         let store = self.store.borrow();

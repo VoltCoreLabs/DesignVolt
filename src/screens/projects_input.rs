@@ -18,6 +18,17 @@ pub fn star_rect(card: Rect) -> Rect {
     )
 }
 
+/// Selection checkbox in the top-left corner of a card (a bit larger than the drawn circle).pub fn check_rect(card: Rect) -> Rect {    Rect::new(card.x0 + 14.0, card.y0 + 13.0, card.x0 + 46.0, card.y0 + 45.0)}
+/// Selection checkbox in the top-left corner of a card (a bit larger than the drawn circle).
+pub fn check_rect(card: Rect) -> Rect {
+    Rect::new(
+        card.x0 + 14.0,
+        card.y0 + 13.0,
+        card.x0 + 46.0,
+        card.y0 + 45.0,
+    )
+}
+
 /// Area of a card where its name is edited.
 pub fn name_rect(card: Rect) -> Rect {
     Rect::new(
@@ -30,7 +41,8 @@ pub fn name_rect(card: Rect) -> Rect {
 
 impl Projects {
     fn hovered_item(&self) -> Option<Item> {
-        let blocked = self.sort_open
+        let blocked = self.modal.is_some()
+            || self.sort_open
             || self.drag.is_some()
             || self.rename.is_some()
             || self.menu_contains(self.mouse)
@@ -108,11 +120,14 @@ impl Screen for Projects {
         let l = self.layout();
         let hovered = self.hovered_item();
         let all = matches!(self.loc, Location::All(_));
-        let mut busy = self.search.update(dt);
+        let mut busy = self.search.update(dt) | self.modal_update(dt);
+        busy |= self.new_project.update(
+            dt,
+            self.modal.is_none() && self.main_button_active() && self.at(l.new_project),
+        );
         busy |= self
-            .new_project
-            .update(dt, self.main_button_active() && self.at(l.new_project));
-        busy |= self.new_folder.update(dt, all && self.at(l.new_folder));
+            .new_folder
+            .update(dt, self.modal.is_none() && all && self.at(l.new_folder));
         if let Some((_, input)) = self.rename.as_mut() {
             busy |= input.update(dt);
         }
@@ -187,6 +202,9 @@ impl Screen for Projects {
     }
 
     fn click(&mut self, mods: Mods) {
+        if self.modal_click() {
+            return;
+        }
         let l = self.layout();
         if self.menu.is_some() {
             match self.menu_hit() {
@@ -208,7 +226,6 @@ impl Screen for Projects {
         if self.bar_click() {
             return;
         }
-        let was_confirming = std::mem::take(&mut self.confirm_empty);
         if self.sort_open {
             let row = (self.mouse.y - l.sort_menu.y0 - 8.0) / 32.0;
             if l.sort_menu.contains(self.mouse) && (0.0..3.0).contains(&row) {
@@ -243,8 +260,7 @@ impl Screen for Projects {
         if self.main_button_active() && self.at(l.new_project) {
             self.new_project.press();
             match self.loc {
-                Location::Trash if was_confirming => self.empty_trash(),
-                Location::Trash => self.confirm_empty = true,
+                Location::Trash => self.open_empty_trash_modal(),
                 _ => self.create_project(),
             }
             return;
@@ -258,6 +274,18 @@ impl Screen for Projects {
                 .press_at(font, self.mouse.x - l.search.x0, mods.shift);
         } else if let Some(item) = self.hovered_item() {
             self.search.focused = false;
+            let on_check = self
+                .card_of(item)
+                .map(check_rect)
+                .is_some_and(|r| r.contains(self.mouse));
+            if on_check {
+                if mods.shift {
+                    self.range_select(item);
+                } else {
+                    self.toggle_select(item);
+                }
+                return;
+            }
             let star = self.card_of(item).map(star_rect);
             match (item, star) {
                 (Item::Project(id), Some(s))
@@ -282,6 +310,9 @@ impl Screen for Projects {
     }
 
     fn right_click(&mut self, _mods: Mods) {
+        if self.modal.is_some() {
+            return;
+        }
         if self.rename.is_some() {
             self.commit_rename();
         }
@@ -308,6 +339,12 @@ impl Screen for Projects {
     }
 
     fn key(&mut self, key: Key, mods: Mods) {
+        if self.modal.is_some() {
+            if key == Key::Escape {
+                self.modal = None;
+            }
+            return;
+        }
         if self.rename.is_some() {
             match key {
                 Key::Enter => self.commit_rename(),
@@ -335,7 +372,6 @@ impl Screen for Projects {
                 } else if !self.selected.is_empty() {
                     self.clear_selection();
                 }
-                self.confirm_empty = false;
                 self.search.focused = false;
             }
             Key::SelectAll => self.select_all(),
@@ -348,6 +384,9 @@ impl Screen for Projects {
     }
 
     fn text(&mut self, s: &str) {
+        if self.modal.is_some() {
+            return;
+        }
         if let Some((_, input)) = self.rename.as_mut() {
             input.insert(s);
         } else if self.search.focused {
@@ -357,6 +396,9 @@ impl Screen for Projects {
     }
 
     fn pointer_hand(&self) -> bool {
+        if self.modal.is_some() {
+            return self.modal_hand();
+        }
         let l = self.layout();
         if self.menu.is_some() {
             return self.menu_hit().is_some();

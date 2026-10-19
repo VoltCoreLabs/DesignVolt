@@ -1,5 +1,6 @@
 mod canvas;
 mod drag;
+mod flip;
 mod handles;
 mod interact;
 mod keys;

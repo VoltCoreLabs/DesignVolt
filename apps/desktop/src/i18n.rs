@@ -114,6 +114,9 @@ pub enum Msg {
     NothingSelected,
     Mixed,
     SectionFill,
+    SectionPosition,
+    SectionLayout,
+    SectionAppearance,
 }
 
 pub fn tr(m: Msg) -> &'static str {
@@ -208,6 +211,9 @@ pub fn tr(m: Msg) -> &'static str {
         Msg::NothingSelected => pick("Ничего не выбрано", "Nothing selected"),
         Msg::Mixed => pick("Разные", "Mixed"),
         Msg::SectionFill => pick("Заливка", "Fill"),
+        Msg::SectionPosition => pick("Позиция", "Position"),
+        Msg::SectionLayout => pick("Макет", "Layout"),
+        Msg::SectionAppearance => pick("Внешний вид", "Appearance"),
     }
 }
 

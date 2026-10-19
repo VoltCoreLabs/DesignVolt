@@ -175,12 +175,7 @@ impl TitleBar {
         // Center: logo mark + app name.
         let name_w = cx.text_width(APP_NAME, FONT_MD);
         let x = w / 2.0 - (name_w + 24.0) / 2.0;
-        cx.fill_grad(
-            Rect::new(x, 12.0, x + 16.0, 28.0),
-            5.0,
-            hex(accent_from()),
-            hex(accent_to()),
-        );
+        cx.fill(Rect::new(x, 12.0, x + 16.0, 28.0), 5.0, hex(accent()));
         cx.text(APP_NAME, FONT_MD, x + 24.0, 25.0, hex(text_primary()));
 
         // Left: home button and location.

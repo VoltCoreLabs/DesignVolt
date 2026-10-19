@@ -21,12 +21,7 @@ fn tab(cx: &mut Cx, label: &str, x: f64, y: f64, active: bool) -> f64 {
     };
     let w = cx.text(label, FONT_UI, x, y + 18.0, color);
     if active {
-        cx.fill_grad(
-            Rect::new(x, y + 27.0, x + w, y + 29.0),
-            1.0,
-            hex(accent_from()),
-            hex(accent_to()),
-        );
+        cx.fill(Rect::new(x, y + 27.0, x + w, y + 29.0), 1.0, hex(accent()));
     }
     w
 }
@@ -93,7 +88,7 @@ pub fn topbar(cx: &mut Cx, r: Rect) {
 
     let share_w = 29.0 + cx.text_width(tr(Msg::Share), FONT_UI) + 14.0;
     let share = Rect::new(r.x1 - 12.0 - share_w, 7.0, r.x1 - 12.0, 33.0);
-    cx.fill_grad(share, R_BUTTON, hex(accent_from()), hex(accent_to()));
+    cx.fill(share, R_BUTTON, hex(accent()));
     cx.icon(Icon::Share, share.x0 + 10.0, 13.0, 14.0, hex(WHITE));
     cx.text(tr(Msg::Share), FONT_UI, share.x0 + 29.0, 24.0, hex(WHITE));
     cx.text(
@@ -238,9 +233,9 @@ pub fn right_panel(cx: &mut Cx, r: Rect) {
         hex(text_secondary()),
     );
     let sw = Rect::new(x0 + 12.0, y0 + 208.0, x0 + 32.0, y0 + 228.0);
-    cx.fill_grad(sw, R_FIELD, hex(accent_from()), hex(accent_to()));
+    cx.fill(sw, R_FIELD, hex(accent()));
     cx.text(
-        &format!("{:06X}", accent_from()),
+        &format!("{:06X}", accent()),
         FONT_UI,
         x0 + 42.0,
         y0 + 222.0,

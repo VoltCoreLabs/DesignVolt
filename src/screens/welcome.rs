@@ -120,7 +120,7 @@ impl Screen for Welcome {
         cx.layer(full, p, (0.0, 16.0 * (1.0 - p as f64)), |cx| {
             let logo = Rect::new(x, l.card.y0 + 36.0, x + 44.0, l.card.y0 + 80.0);
             cx.shadow(logo, 12.0, alpha(accent(), 0.5), 14.0, 6.0);
-            cx.fill_grad(logo, 12.0, hex(accent_from()), hex(accent_to()));
+            cx.fill(logo, 12.0, hex(accent()));
             cx.text(
                 tr(Msg::WelcomeTitle),
                 20.0,

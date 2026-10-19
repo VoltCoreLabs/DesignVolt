@@ -40,7 +40,7 @@ pub fn draw(cx: &mut Cx, r: Rect) {
             frame.x0 + 200.0,
             frame.y0 + 150.0,
         );
-        cx.fill_grad(rect, 16.0, hex(accent_from()), hex(accent_to()));
+        cx.fill(rect, 16.0, hex(accent()));
         cx.circle(
             frame.x1 - 70.0,
             frame.y0 + 120.0,

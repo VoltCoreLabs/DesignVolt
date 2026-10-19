@@ -68,6 +68,10 @@ pub enum Msg {
     MenuFavorite,
     MenuUnfavorite,
     MenuDelete,
+    MenuDuplicate,
+    CopySuffix,
+    EmptyTrash,
+    ConfirmEmptyTrash,
     MenuRestore,
     MenuDeleteForever,
     MenuConfirmDelete,
@@ -146,6 +150,10 @@ pub fn tr(m: Msg) -> &'static str {
         Msg::MenuFavorite => pick("В избранное", "Add to favorites"),
         Msg::MenuUnfavorite => pick("Убрать из избранного", "Remove from favorites"),
         Msg::MenuDelete => pick("Удалить", "Delete"),
+        Msg::MenuDuplicate => pick("Дублировать", "Duplicate"),
+        Msg::CopySuffix => pick("копия", "copy"),
+        Msg::EmptyTrash => pick("Очистить корзину", "Empty trash"),
+        Msg::ConfirmEmptyTrash => pick("Точно очистить?", "Really empty?"),
         Msg::MenuRestore => pick("Восстановить", "Restore"),
         Msg::MenuDeleteForever => pick("Удалить навсегда", "Delete forever"),
         Msg::MenuConfirmDelete => pick("Точно удалить?", "Really delete?"),
@@ -212,6 +220,14 @@ fn ru_form(n: u64) -> usize {
     }
 }
 
+/// "Выбрано: 3" / "Selected: 3".
+pub fn selected_count(n: u64) -> String {
+    match lang() {
+        Lang::Ru => format!("Выбрано: {n}"),
+        Lang::En => format!("Selected: {n}"),
+    }
+}
+
 /// "1 элемент", "2 элемента", "5 элементов" / "1 item", "2 items".
 pub fn items_count(n: u64) -> String {
     match lang() {
@@ -268,6 +284,7 @@ mod tests {
         assert_eq!(word(22), "22 элемента");
         assert_eq!(word(111), "111 элементов");
         assert_eq!(word(101), "101 элемент");
+        assert_eq!(selected_count(3), "Выбрано: 3");
         assert_eq!(items_count(1), "1 элемент");
         assert_eq!(items_count(3), "3 элемента");
         assert_eq!(items_count(12), "12 элементов");

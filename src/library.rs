@@ -37,6 +37,25 @@ pub enum SortKey {
     Created,
 }
 
+impl SortKey {
+    pub fn code(self) -> &'static str {
+        match self {
+            SortKey::Name => "name",
+            SortKey::Modified => "modified",
+            SortKey::Created => "created",
+        }
+    }
+
+    pub fn from_code(s: &str) -> Option<Self> {
+        match s.trim() {
+            "name" => Some(SortKey::Name),
+            "modified" => Some(SortKey::Modified),
+            "created" => Some(SortKey::Created),
+            _ => None,
+        }
+    }
+}
+
 /// What the user is looking at.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Location {
@@ -173,6 +192,13 @@ impl Library {
         }
     }
 
+    pub fn set_favorite(&mut self, id: u64, favorite: bool) {
+        if let Some(p) = self.project_mut(id) {
+            p.favorite = favorite;
+        }
+    }
+
+    #[cfg(test)]
     pub fn toggle_favorite(&mut self, id: u64) {
         if let Some(p) = self.project_mut(id) {
             p.favorite = !p.favorite;
@@ -304,6 +330,126 @@ impl Library {
                 self.folders.retain(|f| !doomed.contains(&f.id));
             }
         }
+    }
+
+    /// Copies a project next to the original; the copy is named "<name> (<suffix>)".
+    pub fn duplicate_project(&mut self, id: u64, now: u64, suffix: &str) -> Option<u64> {
+        let src = self.project(id)?.clone();
+        let new_id = self.next_id();
+        let name = self.copy_name(&src.name, suffix, |s| {
+            self.projects.iter().any(|p| p.name == s)
+        });
+        self.projects.push(Project {
+            id: new_id,
+            name,
+            created: now,
+            modified: now,
+            folder: src.folder,
+            favorite: false,
+            deleted: None,
+        });
+        Some(new_id)
+    }
+
+    /// Copies a folder with everything inside it (trashed content is not copied).
+    pub fn duplicate_folder(&mut self, id: u64, now: u64, suffix: &str) -> Option<u64> {
+        let src = self.folder(id)?.clone();
+        let name = self.copy_name(&src.name, suffix, |s| {
+            self.folders.iter().any(|f| f.name == s)
+        });
+        let new_id = self.create_folder_named(name, now, src.parent);
+        self.copy_children(id, new_id, now);
+        Some(new_id)
+    }
+
+    fn create_folder_named(&mut self, name: String, now: u64, parent: Option<u64>) -> u64 {
+        let id = self.next_id();
+        self.folders.push(Folder {
+            id,
+            name,
+            created: now,
+            parent,
+            deleted: None,
+        });
+        id
+    }
+
+    fn copy_children(&mut self, from: u64, to: u64, now: u64) {
+        let projects: Vec<Project> = self
+            .projects
+            .iter()
+            .filter(|p| p.folder == Some(from) && p.deleted.is_none())
+            .cloned()
+            .collect();
+        for p in projects {
+            let id = self.next_id();
+            self.projects.push(Project {
+                id,
+                folder: Some(to),
+                created: now,
+                modified: now,
+                ..p
+            });
+        }
+        let folders: Vec<Folder> = self
+            .folders
+            .iter()
+            .filter(|f| f.parent == Some(from) && f.deleted.is_none())
+            .cloned()
+            .collect();
+        for f in folders {
+            let old = f.id;
+            let new = self.create_folder_named(f.name, now, Some(to));
+            self.copy_children(old, new, now);
+        }
+    }
+
+    fn copy_name(&self, base: &str, suffix: &str, taken: impl Fn(&str) -> bool) -> String {
+        let room = NAME_MAX.saturating_sub(suffix.chars().count() + 6);
+        let base: String = base.chars().take(room.max(1)).collect();
+        let first = format!("{base} ({suffix})");
+        if !taken(&first) {
+            return first;
+        }
+        let mut n = 2;
+        while taken(&format!("{base} ({suffix} {n})")) {
+            n += 1;
+        }
+        format!("{base} ({suffix} {n})")
+    }
+
+    /// Deletes everything that sits in the trash.
+    pub fn empty_trash(&mut self) {
+        let items: Vec<Item> = self
+            .view(Location::Trash, SortKey::Name, true, "")
+            .iter()
+            .map(|e| e.item())
+            .collect();
+        for item in items {
+            self.purge(item);
+        }
+    }
+
+    /// Drops items that lie inside another folder of the same list (group operations
+    /// on a folder already include its content).
+    pub fn prune_nested(&self, items: &[Item]) -> Vec<Item> {
+        let folders: Vec<u64> = items
+            .iter()
+            .filter_map(|i| match i {
+                Item::Folder(id) => Some(*id),
+                Item::Project(_) => None,
+            })
+            .collect();
+        items
+            .iter()
+            .copied()
+            .filter(|i| {
+                let parent = self.parent_of(*i);
+                !folders.iter().any(|f| {
+                    parent.is_some_and(|p| self.is_inside(p, *f)) && Item::Folder(*f) != *i
+                })
+            })
+            .collect()
     }
 
     /// Visible direct children of a folder.
@@ -628,5 +774,104 @@ mod tests {
         assert!(l.breadcrumb(None).is_empty());
         assert_eq!(l.child_count(a), 1);
         assert_eq!(l.child_count(b), 1);
+    }
+
+    #[test]
+    fn duplicate_project_makes_an_independent_copy() {
+        let mut l = lib();
+        let f = l.create_folder(1, "F", None);
+        let p = l.create_project(2, "Logo", Some(f));
+        l.toggle_favorite(p);
+        l.touch(p, 50);
+        let c = l.duplicate_project(p, 100, "copy").unwrap();
+        let copy = l.project(c).unwrap();
+        assert_eq!(copy.name, "Logo 1 (copy)");
+        assert_eq!(copy.folder, Some(f));
+        assert!(!copy.favorite);
+        assert_eq!((copy.created, copy.modified), (100, 100));
+        let c2 = l.duplicate_project(p, 101, "copy").unwrap();
+        assert_eq!(l.project(c2).unwrap().name, "Logo 1 (copy 2)");
+        assert!(l.duplicate_project(999, 1, "copy").is_none());
+    }
+
+    #[test]
+    fn duplicate_folder_copies_nested_content_but_not_trash() {
+        let mut l = lib();
+        let a = l.create_folder(1, "A", None);
+        let b = l.create_folder(2, "B", Some(a));
+        l.create_project(3, "p", Some(a));
+        let q = l.create_project(4, "q", Some(b));
+        let gone = l.create_project(5, "gone", Some(a));
+        l.trash(Item::Project(gone), 9);
+        let copy = l.duplicate_folder(a, 100, "copy").unwrap();
+        assert_ne!(copy, a);
+        assert_eq!(l.folder(copy).unwrap().name, "A 1 (copy)");
+        // Copy has one project and one sub-folder with one project; the trashed one stays out.
+        assert_eq!(l.child_count(copy), 2);
+        let sub = l
+            .folders
+            .iter()
+            .find(|f| f.parent == Some(copy))
+            .unwrap()
+            .id;
+        assert_ne!(sub, b);
+        assert_eq!(l.child_count(sub), 1);
+        assert_eq!(l.project(q).unwrap().folder, Some(b), "original untouched");
+    }
+
+    #[test]
+    fn copy_name_is_cut_to_fit_the_limit() {
+        let mut l = lib();
+        let p = l.create_project(1, &"x".repeat(60), None);
+        l.rename(Item::Project(p), &"y".repeat(NAME_MAX));
+        let c = l.duplicate_project(p, 2, "copy").unwrap();
+        assert!(l.project(c).unwrap().name.chars().count() <= NAME_MAX);
+    }
+
+    #[test]
+    fn empty_trash_removes_only_deleted_items() {
+        let mut l = lib();
+        let f = l.create_folder(1, "F", None);
+        l.create_project(2, "inside", Some(f));
+        let keep = l.create_project(3, "keep", None);
+        let gone = l.create_project(4, "gone", None);
+        l.trash(Item::Folder(f), 5);
+        l.trash(Item::Project(gone), 6);
+        l.empty_trash();
+        assert!(l.folders.is_empty());
+        assert_eq!(l.projects.len(), 1);
+        assert_eq!(l.projects[0].id, keep);
+        assert_eq!(l.trash_count(), 0);
+    }
+
+    #[test]
+    fn prune_nested_drops_items_inside_selected_folders() {
+        let mut l = lib();
+        let a = l.create_folder(1, "A", None);
+        let b = l.create_folder(2, "B", Some(a));
+        let p = l.create_project(3, "p", Some(b));
+        let q = l.create_project(4, "q", None);
+        let all = [
+            Item::Folder(a),
+            Item::Folder(b),
+            Item::Project(p),
+            Item::Project(q),
+        ];
+        assert_eq!(
+            l.prune_nested(&all),
+            vec![Item::Folder(a), Item::Project(q)]
+        );
+        assert_eq!(
+            l.prune_nested(&[Item::Folder(b), Item::Project(p)]),
+            vec![Item::Folder(b)]
+        );
+    }
+
+    #[test]
+    fn sort_key_codes_roundtrip() {
+        for k in [SortKey::Name, SortKey::Modified, SortKey::Created] {
+            assert_eq!(SortKey::from_code(k.code()), Some(k));
+        }
+        assert_eq!(SortKey::from_code("size"), None);
     }
 }

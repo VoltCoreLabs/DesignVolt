@@ -65,8 +65,7 @@ impl Toolbar {
         let first = layout.tools[0];
         let px = first.x0 + self.pill.pos as f64 * (TOOL_SIZE + TOOL_GAP);
         let pill = Rect::new(px, first.y0, px + TOOL_SIZE, first.y1);
-        cx.shadow(pill, R_BUTTON, alpha(accent(), 0.55), 10.0, 4.0);
-        cx.fill_grad(pill, R_BUTTON, hex(accent_from()), hex(accent_to()));
+        cx.fill(pill, R_BUTTON, hex(accent()));
 
         for (i, t) in layout.tools.iter().enumerate() {
             let h = self.hover[i].pos.clamp(0.0, 1.0);

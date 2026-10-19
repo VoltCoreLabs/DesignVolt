@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::i18n::Lang;
-use crate::library::Library;
+use crate::library::{Library, SortKey};
 use crate::library_io::{folders_text, parse_folders, parse_projects, projects_text};
 
 pub const NAME_MAX_CHARS: usize = 20;
@@ -19,6 +19,8 @@ pub struct Store {
     pub lib: Library,
     pub dark: bool,
     pub lang: Lang,
+    pub sort_key: SortKey,
+    pub sort_asc: bool,
 }
 
 pub fn now_secs() -> u64 {
@@ -67,6 +69,8 @@ impl Store {
             lib: Library::default(),
             dark: false,
             lang: Lang::Ru,
+            sort_key: SortKey::Modified,
+            sort_asc: false,
         }
     }
 
@@ -75,6 +79,12 @@ impl Store {
         for line in text.lines() {
             match line.split_once('=') {
                 Some(("theme", v)) => self.dark = v.trim() == "dark",
+                Some(("sort", v)) => {
+                    if let Some(k) = SortKey::from_code(v) {
+                        self.sort_key = k;
+                    }
+                }
+                Some(("order", v)) => self.sort_asc = v.trim() == "asc",
                 Some(("lang", v)) => {
                     if let Some(l) = Lang::from_code(v) {
                         self.lang = l;
@@ -87,7 +97,16 @@ impl Store {
 
     fn settings_text(&self) -> String {
         let theme = if self.dark { "dark" } else { "light" };
-        format!("theme={theme}\nlang={}\n", self.lang.code())
+        let order = if self.sort_asc { "asc" } else { "desc" };
+        format!(
+            "theme={theme}
+lang={}
+sort={}
+order={order}
+",
+            self.lang.code(),
+            self.sort_key.code()
+        )
     }
 
     pub fn save(&self) -> std::io::Result<()> {
@@ -218,6 +237,32 @@ mod tests {
         let s = Store::load(&dir);
         assert!(s.dark);
         assert_eq!(s.lang, Lang::Ru);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn sort_defaults_and_roundtrip() {
+        let dir = temp_dir("sort");
+        let mut s = Store::load(&dir);
+        assert_eq!(s.sort_key, SortKey::Modified);
+        assert!(!s.sort_asc);
+        s.sort_key = SortKey::Name;
+        s.sort_asc = true;
+        s.save().unwrap();
+        let back = Store::load(&dir);
+        assert_eq!(back.sort_key, SortKey::Name);
+        assert!(back.sort_asc);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn bad_sort_values_fall_back_to_defaults() {
+        let dir = temp_dir("badsort");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("settings.txt"), "sort=size\norder=sideways\n").unwrap();
+        let s = Store::load(&dir);
+        assert_eq!(s.sort_key, SortKey::Modified);
+        assert!(!s.sort_asc);
         let _ = fs::remove_dir_all(&dir);
     }
 }

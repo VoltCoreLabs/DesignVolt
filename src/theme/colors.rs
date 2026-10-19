@@ -8,7 +8,6 @@ use vello::peniko::color::AlphaColor;
 
 pub struct Palette {
     pub bg_app: u32,
-    pub bg_app2: u32,
     pub bg_canvas: u32,
     pub bg_panel: u32,
     pub bg_raised: u32,
@@ -16,8 +15,6 @@ pub struct Palette {
     pub text_primary: u32,
     pub text_secondary: u32,
     pub text_disabled: u32,
-    pub accent_from: u32,
-    pub accent_to: u32,
     pub accent: u32,
     pub danger: u32,
     /// Base color for borders, dividers and subtle overlays (white on dark, navy on light).
@@ -28,7 +25,6 @@ pub struct Palette {
 
 pub static DARK: Palette = Palette {
     bg_app: 0x0A0C14,
-    bg_app2: 0x16122B,
     bg_canvas: 0x0E1019,
     bg_panel: 0x141725,
     bg_raised: 0x1B1F31,
@@ -36,8 +32,6 @@ pub static DARK: Palette = Palette {
     text_primary: 0xF5F6FF,
     text_secondary: 0x969CBE,
     text_disabled: 0x5A6080,
-    accent_from: 0x6366F1,
-    accent_to: 0xA855F7,
     accent: 0x7C5CFF,
     danger: 0xF87171,
     overlay: 0xFFFFFF,
@@ -46,7 +40,6 @@ pub static DARK: Palette = Palette {
 
 pub static LIGHT: Palette = Palette {
     bg_app: 0xF3F6FC,
-    bg_app2: 0xE3ECFB,
     bg_canvas: 0xE9EEF7,
     bg_panel: 0xFFFFFF,
     bg_raised: 0xF1F4FA,
@@ -54,8 +47,6 @@ pub static LIGHT: Palette = Palette {
     text_primary: 0x0F172A,
     text_secondary: 0x5B6478,
     text_disabled: 0x9AA3B8,
-    accent_from: 0x2563EB,
-    accent_to: 0x4F8CFF,
     accent: 0x2563EB,
     danger: 0xEF4444,
     overlay: 0x0F172A,
@@ -84,7 +75,6 @@ macro_rules! tokens {
 
 tokens!(
     bg_app,
-    bg_app2,
     bg_canvas,
     bg_panel,
     bg_raised,
@@ -92,8 +82,6 @@ tokens!(
     text_primary,
     text_secondary,
     text_disabled,
-    accent_from,
-    accent_to,
     accent,
     danger,
     overlay,
@@ -154,8 +142,8 @@ mod tests {
 
     #[test]
     fn white_on_accent_is_readable() {
-        assert!(contrast(WHITE, LIGHT.accent_from) >= 4.5);
-        assert!(contrast(WHITE, DARK.accent_from) >= 4.0);
+        assert!(contrast(WHITE, LIGHT.accent) >= 4.5);
+        assert!(contrast(WHITE, DARK.accent) >= 4.0);
     }
 
     #[test]

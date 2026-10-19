@@ -53,6 +53,10 @@ impl TextInput {
         self.edit.text()
     }
 
+    pub fn select_all(&mut self) {
+        self.edit.select_all();
+    }
+
     pub fn is_blank(&self) -> bool {
         self.edit.text().trim().is_empty()
     }

@@ -77,6 +77,21 @@ impl Cx<'_> {
         self.font.layout(s, size).1 as f64
     }
 
+    /// Cuts `s` with an ellipsis so that it fits in `max_w` logical px.
+    pub fn fit(&self, s: &str, size: f32, max_w: f64) -> String {
+        if self.text_width(s, size) <= max_w {
+            return s.to_string();
+        }
+        let mut out = s.to_string();
+        while out.pop().is_some() {
+            let candidate = format!("{}…", out.trim_end());
+            if self.text_width(&candidate, size) <= max_w {
+                return candidate;
+            }
+        }
+        String::new()
+    }
+
     pub fn icon(&mut self, icon: Icon, x: f64, y: f64, size: f64, c: Color) {
         let Some(path) = self.icons.get(icon) else {
             return;

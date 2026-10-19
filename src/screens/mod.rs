@@ -1,5 +1,8 @@
 mod backdrop;
 pub mod projects;
+mod projects_cards;
+mod projects_input;
+mod projects_menu;
 mod projects_paint;
 pub mod settings;
 pub mod welcome;

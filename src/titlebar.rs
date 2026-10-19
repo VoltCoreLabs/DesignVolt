@@ -200,7 +200,7 @@ impl TitleBar {
         let Some(label) = state.label else { return };
         let t = self.label_in.pos.clamp(0.0, 1.0);
         let max_w = (w / 2.0 - name_w / 2.0 - 24.0 - (r.home.x1 + 28.0)).max(40.0);
-        let text = fit(cx, label, FONT_UI, max_w - 24.0);
+        let text = cx.fit(label, FONT_UI, max_w - 24.0);
         let tw = cx.text_width(&text, FONT_UI);
         let chip = Rect::new(
             r.home.x1 + 8.0,
@@ -225,21 +225,6 @@ impl TitleBar {
             },
         );
     }
-}
-
-/// Cuts `s` with an ellipsis so that it fits in `max_w`.
-fn fit(cx: &Cx, s: &str, size: f32, max_w: f64) -> String {
-    if cx.text_width(s, size) <= max_w {
-        return s.to_string();
-    }
-    let mut out: String = s.to_string();
-    while out.pop().is_some() {
-        let candidate = format!("{}…", out.trim_end());
-        if cx.text_width(&candidate, size) <= max_w {
-            return candidate;
-        }
-    }
-    String::new()
 }
 
 fn mix_color(a: u32, b: u32, t: f32) -> vello::peniko::Color {

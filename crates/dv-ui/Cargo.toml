@@ -1,0 +1,9 @@
+[package]
+name = "dv-ui"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+arboard.workspace = true
+skrifa.workspace = true
+vello.workspace = true

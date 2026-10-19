@@ -1,0 +1,14 @@
+[package]
+name = "designvolt"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "designvolt"
+path = "src/main.rs"
+
+[dependencies]
+dv-ui.workspace = true
+pollster.workspace = true
+vello.workspace = true
+winit.workspace = true

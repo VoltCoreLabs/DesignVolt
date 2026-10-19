@@ -1,5 +1,7 @@
 mod backdrop;
 pub mod projects;
+mod projects_actions;
+mod projects_bar;
 mod projects_cards;
 mod projects_input;
 mod projects_menu;

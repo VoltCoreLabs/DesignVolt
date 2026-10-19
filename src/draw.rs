@@ -2,11 +2,11 @@
 
 use vello::Scene;
 use vello::kurbo::{Affine, Circle, Rect, RoundedRect, Stroke};
-use vello::peniko::{BlendMode, Color, Fill, Gradient};
+use vello::peniko::{BlendMode, Color, Fill};
 
 use crate::icons::{Icon, Icons, VIEWBOX};
 use crate::text::Font;
-use crate::theme::colors::{WHITE, alpha, bg_panel, hex, overlay, palette};
+use crate::theme::colors::{alpha, bg_panel, hex, overlay, palette};
 
 pub struct Cx<'a> {
     pub scene: &'a mut Scene,
@@ -36,12 +36,6 @@ impl Cx<'_> {
     pub fn fill(&mut self, r: Rect, radius: f64, c: Color) {
         let shape = RoundedRect::from_rect(r, radius);
         self.scene.fill(Fill::NonZero, self.xf, c, None, &shape);
-    }
-
-    pub fn fill_grad(&mut self, r: Rect, radius: f64, from: Color, to: Color) {
-        let g = Gradient::new_linear((r.x0, r.y0), (r.x1, r.y1)).with_stops([from, to]);
-        let shape = RoundedRect::from_rect(r, radius);
-        self.scene.fill(Fill::NonZero, self.xf, &g, None, &shape);
     }
 
     pub fn stroke(&mut self, r: Rect, radius: f64, width: f64, c: Color) {
@@ -100,18 +94,12 @@ impl Cx<'_> {
         self.scene.fill(Fill::NonZero, t, c, None, path);
     }
 
-    /// Glass surface (imitation until the backdrop blur pass exists, see D-006).
+    /// Glass surface (imitation until the backdrop blur pass exists, see D-006): translucent
+    /// panel color, soft shadow and a thin border.
     pub fn glass(&mut self, r: Rect, radius: f64) {
-        self.shadow(r, radius, alpha(0x000000, 0.5), 22.0, 10.0);
-        self.fill(r, radius, alpha(bg_panel(), 0.78));
-        let shape = RoundedRect::from_rect(r, radius);
-        let top = Gradient::new_linear((0.0, r.y0), (0.0, r.y1))
-            .with_stops([alpha(WHITE, 0.10), alpha(WHITE, 0.0)]);
-        self.scene.fill(Fill::NonZero, self.xf, &top, None, &shape);
-        let rim = Gradient::new_linear((0.0, r.y0), (0.0, r.y1))
-            .with_stops([alpha(overlay(), 0.28), alpha(overlay(), 0.06)]);
-        self.scene
-            .stroke(&Stroke::new(1.0), self.xf, &rim, None, &shape);
+        self.shadow(r, radius, alpha(0x000000, 0.35), 22.0, 10.0);
+        self.fill(r, radius, alpha(bg_panel(), 0.82));
+        self.stroke(r, radius, 1.0, alpha(overlay(), 0.14));
     }
 }
 

@@ -62,8 +62,7 @@ impl Segmented {
 
         let px = rect.x0 + 4.0 + self.pill.pos as f64 * seg_w;
         let pill = Rect::new(px, rect.y0 + 4.0, px + seg_w, rect.y1 - 4.0);
-        cx.shadow(pill, R_BUTTON, alpha(accent(), 0.40), 8.0, 3.0);
-        cx.fill_grad(pill, R_BUTTON, hex(accent_from()), hex(accent_to()));
+        cx.fill(pill, R_BUTTON, hex(accent()));
 
         for (i, opt) in options.iter().enumerate() {
             let cell = Rect::new(

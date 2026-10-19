@@ -1,4 +1,4 @@
-//! Shared decorative background: dark gradient with two soft accent glows.
+//! Shared plain background of the full-page screens.
 
 use vello::kurbo::Rect;
 
@@ -7,12 +7,5 @@ use crate::input::Viewport;
 use crate::theme::colors::*;
 
 pub fn draw(cx: &mut Cx, vp: Viewport) {
-    let full = Rect::new(0.0, 0.0, vp.w, vp.h);
-    cx.fill_grad(full, 0.0, hex(bg_app()), hex(bg_app2()));
-    let glow = |cx: &mut Cx, x: f64, y: f64, r: f64, c: u32, a: f32| {
-        let rect = Rect::new(x - r, y - r, x + r, y + r);
-        cx.shadow(rect, r, alpha(c, a), r * 0.9, 0.0);
-    };
-    glow(cx, vp.w * 0.15, vp.h * 0.1, 140.0, accent_from(), 0.22);
-    glow(cx, vp.w * 0.88, vp.h * 0.92, 160.0, accent_to(), 0.18);
+    cx.fill(Rect::new(0.0, 0.0, vp.w, vp.h), 0.0, hex(bg_app()));
 }

@@ -57,6 +57,7 @@ impl Projects {
                 matches!(item, Item::Folder(_)),
             );
         }
+        self.paint_bar(&mut cx);
         self.paint_menu(&mut cx);
     }
 
@@ -115,7 +116,7 @@ impl Projects {
         );
         let (ax, ay) = (chip.x0 + 28.0, chip.center().y);
         let avatar = Rect::new(ax - 16.0, ay - 16.0, ax + 16.0, ay + 16.0);
-        cx.fill_grad(avatar, 16.0, hex(accent_from()), hex(accent_to()));
+        cx.fill(avatar, 16.0, hex(accent()));
         let initial: String = name
             .chars()
             .next()
@@ -193,19 +194,22 @@ impl Projects {
             hex(text_secondary()),
         );
         if all {
-            self.new_folder.draw_secondary(
-                cx,
-                l.new_folder,
-                tr(Msg::NewFolder),
-                Some(Icon::FolderPlus),
-            );
-            self.new_project.draw(
-                cx,
-                l.new_project,
-                tr(Msg::NewProject),
-                Some(Icon::Plus),
-                true,
-            );
+            let folder = tr(Msg::NewFolder);
+            self.new_folder
+                .draw_secondary(cx, l.new_folder, folder, Some(Icon::FolderPlus));
+            let label = tr(Msg::NewProject);
+            self.new_project
+                .draw(cx, l.new_project, label, Some(Icon::Plus), true);
+        } else if self.loc == Location::Trash && self.store.borrow().lib.trash_count() > 0 {
+            if self.confirm_empty {
+                let label = tr(Msg::ConfirmEmptyTrash);
+                self.new_project
+                    .draw_danger(cx, l.new_project, label, Some(Icon::Trash));
+            } else {
+                let label = tr(Msg::EmptyTrash);
+                self.new_project
+                    .draw_secondary(cx, l.new_project, label, Some(Icon::Trash));
+            }
         }
     }
 
@@ -264,6 +268,8 @@ impl Projects {
                     drop: matches!((item, target), (Item::Folder(id), Some(Some(t))) if *id == t),
                     renaming: self.rename.as_ref().is_some_and(|(it, _)| it == item),
                     in_trash: self.loc == Location::Trash,
+                    selected: self.selected.contains(item),
+                    selecting: !self.selected.is_empty(),
                 };
                 let alpha_k = born
                     * if lifted {
@@ -273,7 +279,7 @@ impl Projects {
                     } else {
                         1.0
                     };
-                let dy = -5.0 * hover as f64 + 18.0 * (1.0 - born as f64);
+                let dy = 8.0 * (1.0 - born as f64);
                 cx.layer(r.inflate(24.0, 24.0), alpha_k, (0.0, dy), |cx| match item {
                     Item::Project(id) => {
                         if let Some(p) = store.lib.project(*id) {
@@ -308,7 +314,7 @@ impl Projects {
         let c = area.center();
         let badge = Rect::new(c.x - 32.0, c.y - 96.0, c.x + 32.0, c.y - 32.0);
         cx.shadow(badge, 20.0, alpha(accent(), 0.45), 18.0, 8.0);
-        cx.fill_grad(badge, 20.0, hex(accent_from()), hex(accent_to()));
+        cx.fill(badge, 20.0, hex(accent()));
         cx.icon(icon, c.x - 14.0, c.y - 78.0, 28.0, hex(WHITE));
         let mut lines = vec![(tr(title), 18.0, 0.0, text_primary())];
         if let Some(s) = sub {

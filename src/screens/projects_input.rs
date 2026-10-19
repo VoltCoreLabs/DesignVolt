@@ -33,7 +33,8 @@ impl Projects {
         let blocked = self.sort_open
             || self.drag.is_some()
             || self.rename.is_some()
-            || self.menu_contains(self.mouse);
+            || self.menu_contains(self.mouse)
+            || self.over_bar();
         if blocked {
             None
         } else {
@@ -41,17 +42,59 @@ impl Projects {
         }
     }
 
+    fn over_bar(&self) -> bool {
+        self.bar_layout().is_some_and(|b| self.at(b.rect))
+    }
+
     fn rename_rect(&self) -> Option<Rect> {
         let (item, _) = self.rename.as_ref()?;
         self.card_of(*item).map(name_rect)
+    }
+
+    /// The button in the header's top-right corner is "New project" or, in the trash, "Empty trash".
+    fn main_button_active(&self) -> bool {
+        match self.loc {
+            Location::All(_) => true,
+            Location::Trash => self.store.borrow().lib.trash_count() > 0,
+            _ => false,
+        }
     }
 
     fn header_hand(&self, l: &Layout) -> bool {
         let all = matches!(self.loc, Location::All(_));
         self.at(l.search)
             || self.at(l.sort_button)
-            || (all && (self.at(l.new_project) || self.at(l.new_folder)))
+            || (all && self.at(l.new_folder))
+            || (self.main_button_active() && self.at(l.new_project))
             || (all && self.crumbs().iter().any(|c| self.at(c.rect)))
+    }
+
+    /// Handles a click on the selection bar; returns true when the bar consumed it.
+    fn bar_click(&mut self) -> bool {
+        let Some(bar) = self.bar_layout() else {
+            return false;
+        };
+        if !self.at(bar.rect) {
+            return false;
+        }
+        if self.at(bar.close) {
+            self.clear_selection();
+            return true;
+        }
+        let hit = bar
+            .buttons
+            .iter()
+            .find(|(_, r)| self.at(*r))
+            .map(|(a, _)| *a);
+        if let Some(action) = hit {
+            if action == super::projects_menu::Action::DeleteForever && !self.bar_confirm {
+                self.bar_confirm = true;
+            } else {
+                let items = self.selected.clone();
+                self.apply(action, &items);
+            }
+        }
+        true
     }
 }
 
@@ -66,7 +109,9 @@ impl Screen for Projects {
         let hovered = self.hovered_item();
         let all = matches!(self.loc, Location::All(_));
         let mut busy = self.search.update(dt);
-        busy |= self.new_project.update(dt, all && self.at(l.new_project));
+        busy |= self
+            .new_project
+            .update(dt, self.main_button_active() && self.at(l.new_project));
         busy |= self.new_folder.update(dt, all && self.at(l.new_folder));
         if let Some((_, input)) = self.rename.as_mut() {
             busy |= input.update(dt);
@@ -84,6 +129,7 @@ impl Screen for Projects {
             c.hover.step(dt);
             busy |= !c.hover.settled() || c.age < PANEL_INTRO + 0.1;
         }
+        self.prune_selection();
         let max = self.max_scroll(items.len());
         self.scroll.target = self.scroll.target.clamp(0.0, max);
         self.scroll.step(dt);
@@ -123,14 +169,19 @@ impl Screen for Projects {
         }
         if let Some(item) = self.drag.take() {
             if let Some(target) = self.drop_target(item) {
-                self.drop_item(item, target);
+                self.drop_items(item, target);
             }
             return;
         }
-        if let Some(p) = self.press.take()
-            && self.item_at(self.mouse) == Some(p.item)
-            && self.loc != Location::Trash
-        {
+        let Some(p) = self.press.take() else { return };
+        if self.item_at(self.mouse) != Some(p.item) {
+            return;
+        }
+        if p.mods.shift {
+            self.range_select(p.item);
+        } else if p.mods.ctrl || !self.selected.is_empty() {
+            self.toggle_select(p.item);
+        } else if self.loc != Location::Trash {
             self.open_item(p.item);
         }
     }
@@ -154,6 +205,10 @@ impl Screen for Projects {
             }
             self.commit_rename();
         }
+        if self.bar_click() {
+            return;
+        }
+        let was_confirming = std::mem::take(&mut self.confirm_empty);
         if self.sort_open {
             let row = (self.mouse.y - l.sort_menu.y0 - 8.0) / 32.0;
             if l.sort_menu.contains(self.mouse) && (0.0..3.0).contains(&row) {
@@ -179,16 +234,20 @@ impl Screen for Projects {
                 self.go(Location::All(c.folder));
                 return;
             }
-            if self.at(l.new_project) {
-                self.new_project.press();
-                self.create_project();
-                return;
-            }
             if self.at(l.new_folder) {
                 self.new_folder.press();
                 self.create_folder();
                 return;
             }
+        }
+        if self.main_button_active() && self.at(l.new_project) {
+            self.new_project.press();
+            match self.loc {
+                Location::Trash if was_confirming => self.empty_trash(),
+                Location::Trash => self.confirm_empty = true,
+                _ => self.create_project(),
+            }
+            return;
         }
         if self.at(l.sort_button) {
             self.sort_open = true;
@@ -210,11 +269,15 @@ impl Screen for Projects {
                     self.press = Some(Press {
                         item,
                         at: self.mouse,
+                        mods,
                     })
                 }
             }
         } else {
             self.search.focused = false;
+            if !mods.ctrl && !mods.shift {
+                self.clear_selection();
+            }
         }
     }
 
@@ -224,11 +287,18 @@ impl Screen for Projects {
         }
         self.sort_open = false;
         self.menu = match self.item_at(self.mouse) {
-            Some(item) if !self.menu_contains(self.mouse) => Some(MenuState {
-                item,
-                pos: self.mouse,
-                confirm: false,
-            }),
+            Some(item) if !self.menu_contains(self.mouse) => {
+                let items = if self.selected.contains(&item) {
+                    self.selected.clone()
+                } else {
+                    vec![item]
+                };
+                Some(MenuState {
+                    items,
+                    pos: self.mouse,
+                    confirm: false,
+                })
+            }
             _ => None,
         };
     }
@@ -238,23 +308,42 @@ impl Screen for Projects {
     }
 
     fn key(&mut self, key: Key, mods: Mods) {
-        if let Some((_, input)) = self.rename.as_mut() {
+        if self.rename.is_some() {
             match key {
                 Key::Enter => self.commit_rename(),
                 Key::Escape => self.rename = None,
-                k => input.key(k, mods),
+                k => {
+                    if let Some((_, input)) = self.rename.as_mut() {
+                        input.key(k, mods);
+                    }
+                }
             }
             return;
         }
-        if key == Key::Escape {
-            self.menu = None;
-            self.drag = None;
-            self.press = None;
-            self.sort_open = false;
-            self.search.focused = false;
-        } else if self.search.focused {
+        if self.search.focused && key != Key::Escape {
             self.search.key(key, mods);
             self.scroll.target = 0.0;
+            return;
+        }
+        match key {
+            Key::Escape => {
+                if self.menu.is_some() || self.sort_open || self.drag.is_some() {
+                    self.menu = None;
+                    self.sort_open = false;
+                    self.drag = None;
+                    self.press = None;
+                } else if !self.selected.is_empty() {
+                    self.clear_selection();
+                }
+                self.confirm_empty = false;
+                self.search.focused = false;
+            }
+            Key::SelectAll => self.select_all(),
+            Key::Delete if !self.selected.is_empty() && self.loc != Location::Trash => {
+                let items = self.selected.clone();
+                self.apply(super::projects_menu::Action::Delete, &items);
+            }
+            _ => {}
         }
     }
 
@@ -272,13 +361,16 @@ impl Screen for Projects {
         if self.menu.is_some() {
             return self.menu_hit().is_some();
         }
+        if let Some(bar) = self.bar_layout()
+            && self.at(bar.rect)
+        {
+            return self.at(bar.close) || bar.buttons.iter().any(|(_, r)| self.at(*r));
+        }
         self.drag.is_some()
             || self.header_hand(&l)
             || self.at(self.profile_chip())
             || (0..NAV.len()).any(|i| self.at(self.nav_row(i)))
-            || self
-                .hovered_item()
-                .is_some_and(|_| self.loc != Location::Trash)
+            || self.hovered_item().is_some()
     }
 
     fn take_transition(&mut self) -> Option<Transition> {

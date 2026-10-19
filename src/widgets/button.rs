@@ -1,6 +1,6 @@
-//! Gradient button with hover scale/glow springs and a short press pulse.
+//! Flat accent button: hover lightens the fill, press darkens it; no scaling or glow.
 
-use vello::kurbo::{Affine, Rect, Vec2};
+use vello::kurbo::Rect;
 
 use crate::anim::Spring;
 use crate::draw::Cx;
@@ -41,12 +41,17 @@ impl Button {
     }
 
     pub fn draw(&self, cx: &mut Cx, r: Rect, label: &str, icon: Option<Icon>, enabled: bool) {
-        self.draw_styled(cx, r, label, icon, enabled, false);
+        self.draw_styled(cx, r, label, icon, enabled, Style::Primary);
     }
 
-    /// Quiet button: raised background and border instead of the accent gradient.
+    /// Quiet button: raised background and border instead of the accent fill.
     pub fn draw_secondary(&self, cx: &mut Cx, r: Rect, label: &str, icon: Option<Icon>) {
-        self.draw_styled(cx, r, label, icon, true, true);
+        self.draw_styled(cx, r, label, icon, true, Style::Secondary);
+    }
+
+    /// Red button for destructive confirmations.
+    pub fn draw_danger(&self, cx: &mut Cx, r: Rect, label: &str, icon: Option<Icon>) {
+        self.draw_styled(cx, r, label, icon, true, Style::Danger);
     }
 
     fn draw_styled(
@@ -56,33 +61,32 @@ impl Button {
         label: &str,
         icon: Option<Icon>,
         enabled: bool,
-        secondary: bool,
+        style: Style,
     ) {
         let (h, p) = if enabled {
-            (self.hover.pos as f64, self.press.pos as f64)
+            (
+                self.hover.pos.clamp(0.0, 1.0),
+                self.press.pos.clamp(0.0, 1.0),
+            )
         } else {
             (0.0, 0.0)
         };
-        let k = 1.0 + 0.03 * h - 0.05 * p;
-        let c = r.center();
-        let old = cx.xf;
-        cx.xf = old
-            * Affine::translate(Vec2::new(c.x, c.y))
-            * Affine::scale(k)
-            * Affine::translate(Vec2::new(-c.x, -c.y));
-
         let a = if enabled { 1.0 } else { 0.35 };
+        let secondary = style == Style::Secondary;
         if secondary {
             cx.fill(r, R_BUTTON, hex(bg_raised()));
-            cx.fill(r, R_BUTTON, alpha(accent(), 0.10 * h as f32));
-            cx.stroke(r, R_BUTTON, 1.0, alpha(overlay(), 0.12 + 0.2 * h as f32));
+            cx.fill(r, R_BUTTON, alpha(accent(), 0.10 * h));
+            cx.stroke(r, R_BUTTON, 1.0, alpha(overlay(), 0.12 + 0.12 * h));
         } else {
-            if enabled {
-                let glow = alpha(accent(), (0.30 + 0.30 * h as f32).min(0.7));
-                cx.shadow(r, R_BUTTON, glow, 14.0 + 8.0 * h, 6.0);
-            }
-            cx.fill_grad(r, R_BUTTON, alpha(accent_from(), a), alpha(accent_to(), a));
-            cx.fill(r, R_BUTTON, alpha(WHITE, 0.10 * h as f32));
+            // Calm feedback: the fill only gets lighter on hover and darker on press.
+            let base = if style == Style::Danger {
+                danger()
+            } else {
+                accent()
+            };
+            cx.fill(r, R_BUTTON, alpha(base, a));
+            cx.fill(r, R_BUTTON, alpha(WHITE, 0.12 * h));
+            cx.fill(r, R_BUTTON, alpha(0x000000, 0.14 * p));
         }
 
         let text_w = cx.text_width(label, FONT_MD);
@@ -104,6 +108,12 @@ impl Button {
             r.center().y + FONT_MD as f64 * 0.36,
             color,
         );
-        cx.xf = old;
     }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Style {
+    Primary,
+    Secondary,
+    Danger,
 }

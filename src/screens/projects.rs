@@ -10,9 +10,9 @@ use vello::kurbo::{Point, Rect};
 
 use crate::anim::Spring;
 use crate::i18n::{Msg, tr};
-use crate::input::{SharedAssets, Transition, Viewport};
+use crate::input::{Mods, SharedAssets, Transition, Viewport};
 use crate::library::{Item, Location, SortKey};
-use crate::store::{Store, now_secs};
+use crate::store::Store;
 use crate::theme::motion::*;
 use crate::widgets::button::Button;
 use crate::widgets::text_input::TextInput;
@@ -45,10 +45,12 @@ pub struct CardAnim {
 pub struct Press {
     pub item: Item,
     pub at: Point,
+    pub mods: Mods,
 }
 
 pub struct MenuState {
-    pub item: Item,
+    /// What the action applies to: the whole selection or just `item`.
+    pub items: Vec<Item>,
     pub pos: Point,
     /// "Delete forever" was clicked once and waits for the second click.
     pub confirm: bool,
@@ -79,6 +81,13 @@ pub struct Projects {
     pub drag: Option<Item>,
     pub menu: Option<MenuState>,
     pub rename: Option<(Item, TextInput)>,
+    /// Selected cards in selection order; `anchor` is the start of Shift-ranges.
+    pub selected: Vec<Item>,
+    pub anchor: Option<Item>,
+    /// "Empty trash" waits for a second click.
+    pub confirm_empty: bool,
+    /// "Delete forever" in the selection bar waits for a second click.
+    pub bar_confirm: bool,
     pub next: Option<Transition>,
 }
 
@@ -113,6 +122,10 @@ impl Projects {
                 })
                 .collect()
         };
+        let (sort_key, ascending) = {
+            let s = store.borrow();
+            (s.sort_key, s.sort_asc)
+        };
         Self {
             assets,
             store,
@@ -122,8 +135,8 @@ impl Projects {
             search: TextInput::new(40, Msg::SearchProjects, false),
             new_project: Button::new(),
             new_folder: Button::new(),
-            sort_key: SortKey::Modified,
-            ascending: false,
+            sort_key,
+            ascending,
             sort_open: false,
             loc: Location::All(None),
             scroll: Spring::new(0.0, MOVE_STIFFNESS, MOVE_DAMPING),
@@ -132,6 +145,10 @@ impl Projects {
             drag: None,
             menu: None,
             rename: None,
+            selected: Vec::new(),
+            anchor: None,
+            confirm_empty: false,
+            bar_confirm: false,
             next: None,
         }
     }
@@ -259,145 +276,6 @@ impl Projects {
             .iter()
             .position(|i| *i == item)
             .map(|i| self.card_rect(i))
-    }
-
-    /// Where the dragged item would land: a folder card or a breadcrumb segment.
-    pub fn drop_target(&self, item: Item) -> Option<Option<u64>> {
-        let store = self.store.borrow();
-        for c in self.crumbs() {
-            if c.rect.contains(self.mouse) && store.lib.can_move(item, c.folder) {
-                return Some(c.folder);
-            }
-        }
-        if let Some(Item::Folder(id)) = self.item_at(self.mouse)
-            && store.lib.can_move(item, Some(id))
-        {
-            return Some(Some(id));
-        }
-        None
-    }
-
-    fn save(&self) {
-        self.store.borrow().save_logged();
-    }
-
-    pub fn open_item(&mut self, item: Item) {
-        match item {
-            Item::Project(id) => {
-                self.store.borrow_mut().lib.touch(id, now_secs());
-                self.save();
-                self.next = Some(Transition::OpenProject(id));
-            }
-            Item::Folder(id) => self.go(Location::All(Some(id))),
-        }
-    }
-
-    pub fn go(&mut self, loc: Location) {
-        self.loc = loc;
-        self.scroll.pos = 0.0;
-        self.scroll.target = 0.0;
-        self.sort_open = false;
-        self.menu = None;
-    }
-
-    pub fn create_project(&mut self) {
-        let folder = self.current_folder();
-        let id = self.store.borrow_mut().lib.create_project(
-            now_secs(),
-            tr(Msg::UntitledProject),
-            folder,
-        );
-        self.save();
-        self.cards.insert(
-            Item::Project(id),
-            CardAnim {
-                hover: hover_spring(),
-                age: 0.0,
-            },
-        );
-        self.search.focused = false;
-        self.sort_key = SortKey::Created;
-        self.ascending = false;
-        self.scroll.target = 0.0;
-    }
-
-    pub fn create_folder(&mut self) {
-        let parent = self.current_folder();
-        let id =
-            self.store
-                .borrow_mut()
-                .lib
-                .create_folder(now_secs(), tr(Msg::UntitledFolder), parent);
-        self.save();
-        self.cards.insert(
-            Item::Folder(id),
-            CardAnim {
-                hover: hover_spring(),
-                age: 0.0,
-            },
-        );
-        self.search.focused = false;
-        self.scroll.target = 0.0;
-        self.start_rename(Item::Folder(id));
-    }
-
-    pub fn start_rename(&mut self, item: Item) {
-        let current = self.store.borrow().lib.name_of(item).map(str::to_string);
-        let Some(name) = current else { return };
-        let mut input = TextInput::new(crate::library::NAME_MAX, Msg::UntitledProject, false);
-        input.insert(&name);
-        input.select_all();
-        input.focused = true;
-        self.rename = Some((item, input));
-        self.menu = None;
-    }
-
-    pub fn commit_rename(&mut self) {
-        let Some((item, input)) = self.rename.take() else {
-            return;
-        };
-        let changed = self.store.borrow_mut().lib.rename(item, input.text());
-        if changed {
-            self.save();
-        }
-    }
-
-    pub fn drop_item(&mut self, item: Item, target: Option<u64>) {
-        if self.store.borrow_mut().lib.move_to(item, target) {
-            self.save();
-        }
-    }
-
-    pub fn toggle_favorite(&mut self, id: u64) {
-        self.store.borrow_mut().lib.toggle_favorite(id);
-        self.save();
-    }
-
-    pub fn trash(&mut self, item: Item) {
-        self.store.borrow_mut().lib.trash(item, now_secs());
-        self.save();
-    }
-
-    pub fn restore(&mut self, item: Item) {
-        self.store.borrow_mut().lib.restore(item);
-        self.save();
-    }
-
-    pub fn purge(&mut self, item: Item) {
-        self.store.borrow_mut().lib.purge(item);
-        self.cards.remove(&item);
-        self.save();
-    }
-
-    pub fn pick_sort(&mut self, key: SortKey) {
-        if key == self.sort_key {
-            self.ascending = !self.ascending;
-        } else {
-            self.sort_key = key;
-            self.ascending = key == SortKey::Name;
-        }
-        self.sort_open = false;
-        self.scroll.target = 0.0;
     }
 }
 

@@ -24,6 +24,8 @@ pub enum Icon {
     Sun,
     Moon,
     Gear,
+    Duplicate,
+    Check,
     Star,
     StarFill,
     Folder,
@@ -142,6 +144,14 @@ const SOURCES: &[(Icon, &str)] = &[
     (
         Icon::OpenOut,
         include_str!("../assets/icons/phosphor/arrow-square-out.svg"),
+    ),
+    (
+        Icon::Duplicate,
+        include_str!("../assets/icons/phosphor/copy.svg"),
+    ),
+    (
+        Icon::Check,
+        include_str!("../assets/icons/phosphor/check.svg"),
     ),
 ];
 

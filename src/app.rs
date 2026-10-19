@@ -3,7 +3,6 @@
 use std::sync::Arc;
 use std::time::Instant;
 
-use vello::kurbo::Point;
 use vello::peniko::Color;
 use vello::util::{RenderContext, RenderSurface};
 use vello::wgpu::{self, CurrentSurfaceTexture, PresentMode};
@@ -15,14 +14,9 @@ use winit::event_loop::ActiveEventLoop;
 use winit::window::{CursorIcon, Window, WindowId};
 
 use crate::text::Font;
-use crate::ui::Ui;
+use crate::editor::Editor;
 
-const FONTS: &[&str] = &[
-    "C:/Windows/Fonts/segoeuib.ttf",
-    "C:/Windows/Fonts/segoeui.ttf",
-    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-    "/System/Library/Fonts/Helvetica.ttc",
-];
+const FONT_BYTES: &[u8] = include_bytes!("../assets/fonts/Inter.ttf");
 
 struct Gfx {
     window: Arc<Window>,
@@ -34,7 +28,7 @@ pub struct App {
     ctx: RenderContext,
     gfx: Option<Gfx>,
     scene: Scene,
-    ui: Ui,
+    ui: Editor,
     last: Instant,
 }
 
@@ -44,7 +38,7 @@ impl App {
             ctx: RenderContext::new(),
             gfx: None,
             scene: Scene::new(),
-            ui: Ui::new(Font::load(FONTS)),
+            ui: Editor::new(Font::from_bytes(FONT_BYTES).expect("embedded font")),
             last: Instant::now(),
         }
     }
@@ -151,8 +145,8 @@ impl ApplicationHandler for App {
                 gfx.window.request_redraw();
             }
             WindowEvent::CursorMoved { position, .. } => {
-                self.ui.mouse = Point::new(position.x, position.y);
-                gfx.window.set_cursor(if self.ui.hovered() {
+                self.ui.mouse_moved(position.x, position.y);
+                gfx.window.set_cursor(if self.ui.hovering_button() {
                     CursorIcon::Pointer
                 } else {
                     CursorIcon::Default
@@ -160,18 +154,12 @@ impl ApplicationHandler for App {
                 gfx.window.request_redraw();
             }
             WindowEvent::CursorLeft { .. } => {
-                self.ui.mouse = Point::new(-1.0, -1.0);
+                self.ui.mouse_left();
                 gfx.window.request_redraw();
             }
             WindowEvent::MouseInput { state, button: MouseButton::Left, .. } => {
-                match state {
-                    ElementState::Pressed => {
-                        self.ui.pressed = true;
-                        if self.ui.hovered() {
-                            self.ui.click();
-                        }
-                    }
-                    ElementState::Released => self.ui.pressed = false,
+                if state == ElementState::Pressed {
+                    self.ui.click();
                 }
                 gfx.window.request_redraw();
             }

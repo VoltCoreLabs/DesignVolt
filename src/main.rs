@@ -1,7 +1,10 @@
 mod anim;
 mod app;
+mod draw;
+mod editor;
+mod icons;
 mod text;
-mod ui;
+mod theme;
 
 fn main() {
     let event_loop = winit::event_loop::EventLoop::new().expect("event loop");

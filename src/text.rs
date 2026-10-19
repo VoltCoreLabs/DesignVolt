@@ -12,11 +12,9 @@ pub struct Font {
 }
 
 impl Font {
-    /// Loads the first available font file from `paths`.
-    pub fn load(paths: &[&str]) -> Option<Self> {
-        let bytes = paths.iter().find_map(|p| std::fs::read(p).ok())?;
-        FontRef::from_index(&bytes, 0).ok()?;
-        let blob = Blob::new(Arc::new(bytes));
+    pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
+        FontRef::from_index(bytes, 0).ok()?;
+        let blob = Blob::new(Arc::new(bytes.to_vec()));
         Some(Self { data: FontData::new(blob, 0) })
     }
 

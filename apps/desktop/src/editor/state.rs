@@ -66,6 +66,16 @@ impl Tool {
     }
 }
 
+/// The frame around the selection (see `Editor::selection_frame`).
+pub struct SelFrame {
+    /// Corners: top-left, top-right, bottom-right, bottom-left.
+    pub quad: super::handles::Quad,
+    /// Rotation of the frame in degrees (0 for an upright box).
+    pub rotation: f64,
+    /// The shape the frame belongs to when exactly one shape is selected.
+    pub node: Option<NodeId>,
+}
+
 /// One line of the layers panel.
 pub struct LayerRow {
     pub id: NodeId,
@@ -216,6 +226,34 @@ impl Editor {
             s.vp.to_screen(Point::new(b.x1, b.y1)),
         );
         Some(Rect::new(p0.x, p0.y, p1.x, p1.y))
+    }
+
+    /// The frame drawn around the selection, in canvas screen space. One shape gets its own
+    /// (possibly rotated) outline, so the handles sit on the shape itself; several shapes
+    /// share an upright box around all of them.
+    pub(super) fn selection_frame(&self) -> Option<SelFrame> {
+        let s = self.session.borrow();
+        let page = s.exec.doc().page();
+        let tops = page.without_descendants(&self.selection);
+        if let [id] = tops[..] {
+            let corners = dv_geom::world_corners(page, id)?;
+            let quad = corners.map(|p| s.vp.to_screen(p));
+            let rotation = (quad[1].y - quad[0].y)
+                .atan2(quad[1].x - quad[0].x)
+                .to_degrees();
+            return Some(SelFrame {
+                quad,
+                rotation,
+                node: Some(id),
+            });
+        }
+        drop(s);
+        let b = self.selection_screen_bounds()?;
+        Some(SelFrame {
+            quad: super::handles::rect_quad(b),
+            rotation: 0.0,
+            node: None,
+        })
     }
 
     fn intro(&self, index: f32) -> f32 {

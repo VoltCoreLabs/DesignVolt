@@ -454,7 +454,10 @@ fn the_canvas_has_no_edges_you_can_pan_and_zoom_far_away() {
 
 /// Drags with the rotate grip: starts just outside the top-right corner of the selection.
 fn rotate_drag(ed: &mut Editor, corner: (f64, f64), center: (f64, f64), degrees: f64, mods: Mods) {
-    let start = (corner.0 + 12.0 / 1.0, corner.1 - 12.0);
+    // Start 17 px outside the corner, on the line from the center through the corner.
+    let d = (corner.0 - center.0, corner.1 - center.1);
+    let len = d.0.hypot(d.1).max(1e-9);
+    let start = (corner.0 + d.0 / len * 17.0, corner.1 + d.1 / len * 17.0);
     let v = (start.0 - center.0, start.1 - center.1);
     let (s, c) = degrees.to_radians().sin_cos();
     let end = (center.0 + v.0 * c - v.1 * s, center.1 + v.0 * s + v.1 * c);
@@ -519,10 +522,10 @@ fn rotating_twice_adds_up_and_stays_normalized() {
     let id = draw_rect(&mut ed, (0.0, 0.0), (100.0, 100.0));
     rotate_drag(&mut ed, (100.0, 0.0), (50.0, 50.0), 100.0, NONE);
     assert!((rotation_of(&ed, id) - 100.0).abs() < 1e-6);
-    // The selection box is now the rotated shape's bounds; grab outside its top-right corner.
-    let b = ed.selection_screen_bounds().unwrap();
-    let z = ed.session.borrow().vp.zoom;
-    let corner = ((b.x1) / z - 330.0 / z, (b.y0) / z - 360.0 / z);
+    // The frame follows the turned shape: grab outside its (rotated) top-right corner.
+    let frame = ed.selection_frame().unwrap();
+    let corner = ed.session.borrow().vp.to_world(frame.quad[1]);
+    let corner = (corner.x, corner.y);
     rotate_drag(&mut ed, corner, (50.0, 50.0), 100.0, NONE);
     assert!(
         (rotation_of(&ed, id) + 160.0).abs() < 1e-6,
@@ -758,4 +761,194 @@ fn a_group_width_can_be_typed_and_fields_need_a_selection() {
     ed.selection.clear();
     click_field(&mut ed, 2);
     assert!(ed.prop_edit.is_none(), "no selection, nothing to edit");
+}
+
+/// The selection frame and handles of a rotated shape.
+fn rotated_rect(ed: &mut Editor) -> NodeId {
+    let id = draw_rect(ed, (0.0, 0.0), (200.0, 100.0));
+    click_field(ed, 4);
+    type_and_enter(ed, "90");
+    id
+}
+
+#[test]
+fn handles_sit_on_the_outline_of_a_rotated_shape() {
+    let mut ed = editor();
+    rotated_rect(&mut ed);
+    let frame = ed.selection_frame().unwrap();
+    assert!(
+        (frame.rotation.abs() - 90.0).abs() < 1e-6,
+        "{}",
+        frame.rotation
+    );
+    // A 200 x 100 box turned 90 degrees around (100, 50): its corners are (150, -50),
+    // (150, 150), (50, 150) and (50, -50) in page space; the handles follow them.
+    let to_page = |p: kurbo::Point| ed.session.borrow().vp.to_world(p);
+    let corners: Vec<(f64, f64)> = frame
+        .quad
+        .iter()
+        .map(|p| {
+            let w = to_page(*p);
+            (w.x.round(), w.y.round())
+        })
+        .collect();
+    assert_eq!(
+        corners,
+        vec![(150.0, -50.0), (150.0, 150.0), (50.0, 150.0), (50.0, -50.0)]
+    );
+    let east = super::handles::Handle::E.position_on(&frame.quad);
+    let e = to_page(east);
+    assert!(
+        (e.x - 100.0).abs() < 1e-6 && (e.y - 150.0).abs() < 1e-6,
+        "east handle: {e:?}"
+    );
+}
+
+#[test]
+fn dragging_a_handle_of_a_rotated_shape_resizes_it_along_its_own_axis() {
+    let mut ed = editor();
+    let id = rotated_rect(&mut ed);
+    // The shape's own east side is now at the bottom of the page (y = 150): pull it down by 100.
+    drag(&mut ed, (100.0, 150.0), (100.0, 250.0), NONE);
+    let (x, y, w, h) = geom(&ed, id);
+    assert!(
+        (w - 300.0).abs() < 1e-6 && (h - 100.0).abs() < 1e-6,
+        "{w} x {h}"
+    );
+    assert!(
+        (rotation_of(&ed, id) - 90.0).abs() < 1e-6,
+        "rotation is kept"
+    );
+    // The opposite (west) side stays at y = -50, so the center moves down by 50.
+    assert!((x + w / 2.0 - 100.0).abs() < 1e-6 && (y + h / 2.0 - 100.0).abs() < 1e-6);
+    press_key(&mut ed, Key::Undo, CTRL);
+    assert_eq!(geom(&ed, id).2, 200.0, "one undo");
+}
+
+#[test]
+fn the_old_bounding_box_position_is_no_longer_a_handle() {
+    let mut ed = editor();
+    let id = rotated_rect(&mut ed);
+    // The bounding box of the turned shape reaches x = 150 at y = 50 (the middle of its right
+    // side), but the shape itself has no handle there: pressing it must not resize.
+    drag(&mut ed, (150.0, 50.0), (180.0, 50.0), NONE);
+    assert_eq!(geom(&ed, id).2, 200.0);
+}
+
+#[test]
+fn the_rotate_zone_follows_the_rotated_corners() {
+    let mut ed = editor();
+    let id = rotated_rect(&mut ed);
+    // Just outside the shape's own corner at (150, -50) the rotate grip starts a rotation.
+    rotate_drag(&mut ed, (150.0, -50.0), (100.0, 50.0), 30.0, NONE);
+    assert!(
+        (rotation_of(&ed, id) - 120.0).abs() < 1e-6,
+        "{}",
+        rotation_of(&ed, id)
+    );
+}
+
+#[test]
+fn resize_cursors_turn_with_the_shape() {
+    use super::handles::Handle;
+    use crate::input::Cursor;
+    assert_eq!(Handle::E.cursor_rotated(0.0), Cursor::ResizeEw);
+    assert_eq!(Handle::E.cursor_rotated(90.0), Cursor::ResizeNs);
+    assert_eq!(Handle::Se.cursor_rotated(0.0), Cursor::ResizeNwse);
+    assert_eq!(Handle::Se.cursor_rotated(90.0), Cursor::ResizeNesw);
+    assert_eq!(Handle::N.cursor_rotated(45.0), Cursor::ResizeNesw);
+    assert_eq!(Handle::W.cursor_rotated(-90.0), Cursor::ResizeNs);
+}
+
+/// Drags a fresh 100 x 60 rectangle (placed at x = 100) so that its left edge ends 3 units to
+/// the right of `edge_x`, and returns where the shape actually stopped.
+fn drag_b_towards(ed: &mut Editor, edge_x: f64) -> f64 {
+    let b = draw_rect(ed, (100.0, 0.0), (200.0, 60.0));
+    let target_left = edge_x + 3.0;
+    drag(
+        ed,
+        (150.0, 30.0),
+        (150.0 + (target_left - 100.0), 30.0),
+        NONE,
+    );
+    geom(ed, b).0
+}
+
+#[test]
+fn guides_snap_to_frames() {
+    let mut ed = editor();
+    press_key(&mut ed, Key::Char('f'), NONE);
+    drag(&mut ed, (-250.0, 0.0), (-100.0, 150.0), NONE);
+    assert_eq!(drag_b_towards(&mut ed, -100.0), -100.0);
+}
+
+#[test]
+fn guides_snap_to_ellipses() {
+    let mut ed = editor();
+    press_key(&mut ed, Key::Char('o'), NONE);
+    drag(&mut ed, (-250.0, 0.0), (-100.0, 100.0), NONE);
+    assert_eq!(drag_b_towards(&mut ed, -100.0), -100.0);
+}
+
+#[test]
+fn guides_snap_to_locked_shapes() {
+    let mut ed = editor();
+    let a = draw_rect(&mut ed, (-250.0, 0.0), (-100.0, 100.0));
+    let lock = dv_core::Props {
+        locked: Some(true),
+        ..dv_core::Props::default()
+    };
+    ed.session
+        .borrow_mut()
+        .exec
+        .execute("Lock", dv_core::Command::SetProps { id: a, props: lock })
+        .unwrap();
+    ed.selection.clear();
+    assert_eq!(drag_b_towards(&mut ed, -100.0), -100.0);
+}
+
+#[test]
+fn guides_snap_to_shapes_nested_inside_frames() {
+    let mut ed = editor();
+    press_key(&mut ed, Key::Char('f'), NONE);
+    drag(&mut ed, (-300.0, -200.0), (0.0, 200.0), NONE);
+    draw_rect(&mut ed, (-200.0, -50.0), (-100.0, 50.0)); // a child of the frame
+    ed.selection.clear();
+    // Dragging towards the child's right edge (x = -100) snaps to it, not only to the frame.
+    assert_eq!(drag_b_towards(&mut ed, -100.0), -100.0);
+}
+
+#[test]
+fn guides_snap_to_the_bounds_of_rotated_shapes() {
+    let mut ed = editor();
+    draw_rect(&mut ed, (-250.0, 0.0), (-150.0, 100.0));
+    click_field(&mut ed, 4);
+    type_and_enter(&mut ed, "45");
+    ed.selection.clear();
+    // The turned square reaches x = -200 + 70.71 = -129.29 on its right.
+    let right = -200.0 + 50.0 * 2f64.sqrt();
+    let x = drag_b_towards(&mut ed, right);
+    assert!((x - right).abs() < 1e-6, "{x} vs {right}");
+}
+
+#[test]
+fn clicking_inside_the_edited_value_places_the_caret_there() {
+    let mut ed = editor();
+    let id = draw_rect(&mut ed, (0.0, 0.0), (200.0, 100.0));
+    click_field(&mut ed, 2); // W = 200, all selected
+    let rect = super::panels::field_rect(ed.layout().right, 2);
+    // A click at the start of the value puts the caret before the first digit.
+    ed.mouse_moved(rect.x0 + super::panels::VALUE_X, rect.center().y);
+    ed.click(NONE);
+    ed.mouse_up();
+    ed.text("9");
+    assert_eq!(ed.prop_edit.as_ref().unwrap().input.text(), "9200");
+    // A click near the right edge puts it after the last digit.
+    ed.mouse_moved(rect.x1 - 4.0, rect.center().y);
+    ed.click(NONE);
+    ed.mouse_up();
+    press_key(&mut ed, Key::Backspace, NONE);
+    assert_eq!(ed.prop_edit.as_ref().unwrap().input.text(), "920");
+    press_key(&mut ed, Key::Enter, NONE);
+    assert_eq!(geom(&ed, id).2, 920.0);
 }

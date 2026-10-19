@@ -1,7 +1,8 @@
 //! Typing numbers into the property fields of the right panel (X, Y, W, H, angle, radius).
 
 use dv_ui::input::{Key, Mods};
-use dv_ui::widgets::text_input::TextInput;
+use dv_ui::theme::metrics::FONT_UI;
+use dv_ui::widgets::text_input::{PAD_X, TextInput};
 
 use super::ops::{self, Field};
 use super::panels;
@@ -62,7 +63,9 @@ impl Editor {
         let current = edit.field.index();
         if self.field_hit() == Some(current) {
             let rect = panels::field_rect(self.layout().right, current);
-            let (font, x, shift) = (&self.assets.font, self.mouse.x - rect.x0, self.mods.shift);
+            // The text starts `VALUE_X` into the field; the input measures from its own padding.
+            let x = self.mouse.x - rect.x0 - panels::VALUE_X + PAD_X;
+            let (font, shift) = (&self.assets.font, self.mods.shift);
             if let Some(edit) = self.prop_edit.as_mut() {
                 edit.input.press_at(font, x, shift);
             }
@@ -79,7 +82,7 @@ impl Editor {
         let text = panels::field_value(self, i)
             .map(edit_text)
             .unwrap_or_default();
-        let mut input = TextInput::new(MAX_CHARS, false);
+        let mut input = TextInput::new(MAX_CHARS, false).with_font_size(FONT_UI);
         input.insert(&text);
         input.select_all();
         input.focused = true;
@@ -160,7 +163,7 @@ impl Editor {
             field,
             value,
         );
-        let mut input = TextInput::new(MAX_CHARS, false);
+        let mut input = TextInput::new(MAX_CHARS, false).with_font_size(FONT_UI);
         input.insert(&edit_text(value));
         input.select_all();
         input.focused = true;

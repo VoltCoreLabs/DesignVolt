@@ -7,7 +7,7 @@ use kurbo::{Point, Rect};
 use super::handles::{
     Handle, angle_between, normalize_angle, resize_rect, rotate_point, snap_angle,
 };
-use super::interact::{DRAG_START_PX, Interaction, drawn_rect};
+use super::interact::{DRAG_START_PX, Interaction, ResizeOneDrag, drawn_rect};
 use super::ops;
 
 /// Shift snaps rotation to multiples of this angle (degrees).
@@ -122,6 +122,10 @@ impl Editor {
                     key,
                     snap_to,
                 }
+            }
+            Interaction::ResizeOne(d) => {
+                self.apply_resize_one(world, shift, d);
+                Interaction::ResizeOne(d)
             }
             Interaction::Rotate {
                 center,
@@ -255,6 +259,35 @@ impl Editor {
             ops::resized(s.exec.doc().page(), originals, orig, new)
         };
         ops::set_geometry(&mut self.session.borrow_mut().exec, key, "Resize", &list);
+    }
+
+    /// Resizes one rotated shape: the pointer is taken into the shape's own axes (as they were
+    /// when the drag started), the opposite side stays where it is on the page.
+    fn apply_resize_one(&mut self, cursor: Point, keep_aspect: bool, d: ResizeOneDrag) {
+        self.guides.clear();
+        let local = d.world.inverse() * cursor;
+        let orig = Rect::new(0.0, 0.0, d.geom.w, d.geom.h);
+        let new = resize_rect(d.handle, orig, local, keep_aspect);
+        let center = d.world * new.center();
+        let geom = {
+            let s = self.session.borrow();
+            let page = s.exec.doc().page();
+            let parent = page.node(d.id).and_then(|n| n.parent);
+            let c = to_parent_space(page, parent, center);
+            Geometry {
+                x: c.x - new.width() / 2.0,
+                y: c.y - new.height() / 2.0,
+                w: new.width(),
+                h: new.height(),
+                rotation: d.geom.rotation,
+            }
+        };
+        ops::set_geometry(
+            &mut self.session.borrow_mut().exec,
+            d.key,
+            "Resize",
+            &[(d.id, geom)],
+        );
     }
 
     /// Turns the selection around its center so that the pointer keeps its angle. Shift snaps

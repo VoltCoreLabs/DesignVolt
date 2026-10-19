@@ -17,7 +17,7 @@ use crate::theme::motion::{HOVER_DAMPING, HOVER_STIFFNESS};
 const BLINK_PERIOD: f32 = 1.1;
 const MULTI_CLICK: Duration = Duration::from_millis(400);
 /// Horizontal text padding inside the field.
-const PAD_X: f64 = 14.0;
+pub const PAD_X: f64 = 14.0;
 
 pub struct TextInput {
     edit: Edit,
@@ -29,6 +29,8 @@ pub struct TextInput {
     blink: f32,
     last_press: Option<(Instant, usize)>,
     clicks: u8,
+    /// Font size of the text (px).
+    size: f32,
 }
 
 impl TextInput {
@@ -43,6 +45,7 @@ impl TextInput {
             blink: 0.0,
             last_press: None,
             clicks: 0,
+            size: FONT_MD,
         }
     }
 
@@ -105,7 +108,7 @@ impl TextInput {
         let mut prev = 0.0;
         for i in 1..=chars.len() {
             let prefix: String = chars[..i].iter().collect();
-            let w = font.layout(&prefix, FONT_MD).1 as f64;
+            let w = font.layout(&prefix, self.size).1 as f64;
             if target < (prev + w) / 2.0 {
                 return i - 1;
             }
@@ -140,6 +143,42 @@ impl TextInput {
         }
     }
 
+    /// Sets the font size (px) of the text; the default is the body size.
+    pub fn with_font_size(mut self, size: f32) -> Self {
+        self.size = size;
+        self
+    }
+
+    /// Draws only the editable text, the selection and the caret, with the text starting at `x`
+    /// on `baseline`; the field's own background and label stay as the caller drew them.
+    /// `r` gives the vertical extent of the selection and the caret.
+    pub fn draw_inline(&self, cx: &mut Cx, r: Rect, x: f64, baseline: f64) {
+        let text = self.edit.text();
+        let width_of = |cx: &Cx, n: usize| {
+            let s: String = text.chars().take(n).collect();
+            cx.text_width(&s, self.size)
+        };
+        let (a, b) = self.edit.range();
+        if self.focused && a != b {
+            let sel = Rect::new(
+                x + width_of(cx, a),
+                r.y0 + 5.0,
+                x + width_of(cx, b),
+                r.y1 - 5.0,
+            );
+            cx.fill(sel, 2.0, alpha(accent(), 0.35));
+        }
+        cx.text(text, self.size, x, baseline, hex(text_primary()));
+        if self.focused && a == b && self.blink < BLINK_PERIOD / 2.0 {
+            let pos = x + width_of(cx, self.edit.cursor());
+            cx.fill(
+                Rect::new(pos, r.y0 + 6.0, pos + 1.5, r.y1 - 6.0),
+                0.75,
+                hex(accent()),
+            );
+        }
+    }
+
     /// Returns true while an animation is running.
     pub fn update(&mut self, dt: f32) -> bool {
         self.focus.target = if self.focused { 1.0 } else { 0.0 };
@@ -156,11 +195,11 @@ impl TextInput {
         if f > 0.0 {
             cx.stroke(r.inflate(1.0, 1.0), R_BUTTON + 1.0, 1.5, alpha(accent(), f));
         }
-        let (x, base) = (r.x0 + PAD_X, r.center().y + FONT_MD as f64 * 0.36);
+        let (x, base) = (r.x0 + PAD_X, r.center().y + self.size as f64 * 0.36);
         let text = self.edit.text();
         let width_of = |cx: &Cx, n: usize| {
             let s: String = text.chars().take(n).collect();
-            cx.text_width(&s, FONT_MD)
+            cx.text_width(&s, self.size)
         };
 
         let (a, b) = self.edit.range();
@@ -174,9 +213,9 @@ impl TextInput {
             cx.fill(sel, 3.0, alpha(accent(), 0.35));
         }
         if text.is_empty() {
-            cx.text(placeholder, FONT_MD, x, base, hex(text_disabled()));
+            cx.text(placeholder, self.size, x, base, hex(text_disabled()));
         } else {
-            cx.text(text, FONT_MD, x, base, hex(text_primary()));
+            cx.text(text, self.size, x, base, hex(text_primary()));
         }
         if self.show_counter {
             let c = format!("{}/{}", self.edit.len(), self.max_chars);

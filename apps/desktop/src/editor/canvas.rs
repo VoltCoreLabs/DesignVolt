@@ -146,9 +146,10 @@ fn paint_overlay(ed: &Editor, cx: &mut Cx, vp: &Viewport, page: &Page, size: (f6
         if ed.selection.len() > 1 {
             cx.stroke(b, 0.0, 1.0, alpha(accent(), 0.8));
         }
-        if !moving {
+        if !moving && let Some(frame) = ed.selection_frame() {
+            // The handles sit on the frame, which follows a rotated shape.
             for h in Handle::ALL {
-                let p = h.position(b);
+                let p = h.position_on(&frame.quad);
                 let r = Rect::new(
                     p.x - HANDLE_PX / 2.0,
                     p.y - HANDLE_PX / 2.0,

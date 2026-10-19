@@ -35,6 +35,10 @@ pub enum Icon {
     Undo,
     CaretRight,
     OpenOut,
+    FlipH,
+    FlipV,
+    RotateCw,
+    RotateCcw,
 }
 
 const SOURCES: &[(Icon, &str)] = &[
@@ -161,6 +165,22 @@ const SOURCES: &[(Icon, &str)] = &[
     (
         Icon::Check,
         include_str!("../../../assets/icons/phosphor/check.svg"),
+    ),
+    (
+        Icon::FlipH,
+        include_str!("../../../assets/icons/phosphor/flip-horizontal.svg"),
+    ),
+    (
+        Icon::FlipV,
+        include_str!("../../../assets/icons/phosphor/flip-vertical.svg"),
+    ),
+    (
+        Icon::RotateCw,
+        include_str!("../../../assets/icons/phosphor/arrow-clockwise.svg"),
+    ),
+    (
+        Icon::RotateCcw,
+        include_str!("../../../assets/icons/phosphor/arrow-counter-clockwise.svg"),
     ),
 ];
 

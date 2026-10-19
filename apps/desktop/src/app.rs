@@ -335,8 +335,12 @@ impl App {
                 None => icon_of(self.screen.cursor()),
             }
         };
+        let hide = self.resize_dir().is_none()
+            && self.bar.hit(self.logical_width(), home).is_none()
+            && self.screen.cursor() == crate::input::Cursor::Rotate;
         if let Some(g) = &self.gfx {
             g.window.set_cursor(icon);
+            g.window.set_cursor_visible(!hide);
         }
     }
 

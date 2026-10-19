@@ -7,6 +7,7 @@ use dv_core::{NodeId, NodeKind, Page};
 use dv_geom::world_affine;
 use dv_render::Viewport;
 use dv_ui::draw::Cx;
+use dv_ui::icons::Icon;
 use dv_ui::theme::colors::*;
 use dv_ui::theme::metrics::*;
 use kurbo::{Affine, BezPath, Point, Rect};
@@ -15,6 +16,7 @@ use super::handles::{HANDLE_PX, Handle};
 use super::interact::Interaction;
 use super::state::Editor;
 use crate::i18n::{Msg, objects_count, tr};
+use crate::input::Cursor;
 
 const LABEL_PX: f32 = 11.0;
 
@@ -197,7 +199,19 @@ fn paint_overlay(ed: &Editor, cx: &mut Cx, vp: &Viewport, page: &Page, size: (f6
         }
         _ => {}
     }
+    if ed.editor_cursor() == Cursor::Rotate {
+        rotate_badge(cx, ed.canvas_point());
+    }
     let _ = size;
+}
+
+/// The turn cursor: a curved arrow on a round white badge, drawn in place of the system cursor.
+fn rotate_badge(cx: &mut Cx, p: Point) {
+    const R: f64 = 13.0;
+    let r = Rect::new(p.x - R, p.y - R, p.x + R, p.y + R);
+    cx.fill(r, R, alpha(WHITE, 0.96));
+    cx.stroke(r, R, 1.0, alpha(overlay(), 0.35));
+    cx.icon(Icon::RotateCw, p.x - 8.0, p.y - 8.0, 16.0, hex(0x1B1F31));
 }
 
 /// "W × H" label under the selection box.

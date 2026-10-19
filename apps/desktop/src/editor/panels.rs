@@ -10,6 +10,7 @@ use kurbo::{Point, Rect};
 use vello::peniko::Color as VColor;
 
 use super::canvas::num;
+use super::flip::Action;
 use super::session::SaveState;
 use super::state::Editor;
 use crate::i18n::{Msg, objects_count, tr};
@@ -61,13 +62,58 @@ fn kind_icon(kind: NodeKind) -> Icon {
     }
 }
 
-/// Rectangle of the `i`-th property field of the right panel (two columns, three rows).
-pub fn field_rect(right: Rect, i: usize) -> Rect {
-    let (x0, x1, y0) = (right.x0 + 1.0, right.x1, right.y0);
+/// Height of a section header (its divider and title) in the right panel.
+const SEC_HEAD: f64 = 30.0;
+const ROW: f64 = FIELD_H + GAP;
+/// Tops of the sections of the right panel, from the top of the panel.
+const POS_TOP: f64 = 78.0;
+const LAYOUT_TOP: f64 = POS_TOP + SEC_HEAD + 2.0 * ROW + 4.0;
+const APPEAR_TOP: f64 = LAYOUT_TOP + SEC_HEAD + ROW + 4.0;
+const FILL_TOP: f64 = APPEAR_TOP + SEC_HEAD + ROW + 4.0;
+
+/// A cell of the two-column grid of a section: column `col`, row `row`.
+fn cell(right: Rect, top: f64, row: usize, col: usize) -> Rect {
+    let (x0, x1) = (right.x0 + 1.0, right.x1);
     let fw = (x1 - x0 - 24.0 - GAP) / 2.0;
-    let fx = x0 + 12.0 + (i % 2) as f64 * (fw + GAP);
-    let fy = y0 + 80.0 + (i / 2) as f64 * (FIELD_H + GAP);
+    let fx = x0 + 12.0 + col as f64 * (fw + GAP);
+    let fy = right.y0 + top + SEC_HEAD + row as f64 * ROW;
     Rect::new(fx, fy, fx + fw, fy + FIELD_H)
+}
+
+/// Rectangle of the `i`-th property field of the right panel: X, Y and the angle in Position,
+/// W and H in Layout, the radius in Appearance.
+pub fn field_rect(right: Rect, i: usize) -> Rect {
+    match i {
+        0 | 1 => cell(right, POS_TOP, 0, i),
+        2 => cell(right, POS_TOP, 1, 0),
+        3 | 4 => cell(right, LAYOUT_TOP, 0, i - 3),
+        _ => cell(right, APPEAR_TOP, 0, 0),
+    }
+}
+
+/// The `k`-th of the buttons that turn and mirror the selection (next to the angle field).
+pub fn action_rect(right: Rect, k: usize) -> Rect {
+    let cell = cell(right, POS_TOP, 1, 1);
+    let n = Action::ALL.len() as f64;
+    let w = (cell.width() - 2.0 * (n - 1.0)) / n;
+    let x = cell.x0 + k as f64 * (w + 2.0);
+    Rect::new(x, cell.y0, x + w, cell.y1)
+}
+
+fn action_icon(a: Action) -> Icon {
+    match a {
+        Action::TurnLeft => Icon::RotateCcw,
+        Action::TurnRight => Icon::RotateCw,
+        Action::FlipHorizontal => Icon::FlipH,
+        Action::FlipVertical => Icon::FlipV,
+    }
+}
+
+fn section_title(cx: &mut Cx, x0: f64, x1: f64, y: f64, label: &str, divider_line: bool) {
+    if divider_line {
+        divider(cx, x0, x1, y);
+    }
+    cx.text(label, FONT_SM, x0 + 12.0, y + 22.0, hex(text_secondary()));
 }
 
 /// The numeric value shown in the `i`-th field (`None` when the selection has mixed values).
@@ -266,6 +312,27 @@ pub fn right_panel(cx: &mut Cx, r: Rect, ed: &Editor) {
     let title = cx.fit(&info.title, FONT_MD, x1 - x0 - 24.0 - 24.0);
     cx.text(&title, FONT_MD, x0 + 34.0, y0 + 64.0, hex(text_primary()));
 
+    let titles = [
+        (POS_TOP, Msg::SectionPosition),
+        (LAYOUT_TOP, Msg::SectionLayout),
+        (APPEAR_TOP, Msg::SectionAppearance),
+    ];
+    for (top, msg) in titles {
+        section_title(cx, x0, x1, y0 + top, tr(msg), top > POS_TOP);
+    }
+    for (k, action) in Action::ALL.into_iter().enumerate() {
+        let rect = action_rect(r, k);
+        let hot = rect.contains(ed.mouse);
+        let (bg, fg) = if hot {
+            (hex(bg_hover()), hex(text_primary()))
+        } else {
+            (hex(bg_raised()), hex(text_secondary()))
+        };
+        cx.fill(rect, R_FIELD, bg);
+        let c = rect.center();
+        cx.icon(action_icon(action), c.x - 7.0, c.y - 7.0, 14.0, fg);
+    }
+
     for (i, (label, value, _)) in info.fields.iter().enumerate() {
         let rect = field_rect(r, i);
         match &ed.prop_edit {
@@ -280,7 +347,7 @@ pub fn right_panel(cx: &mut Cx, r: Rect, ed: &Editor) {
         }
     }
 
-    let fills_y = y0 + 80.0 + 3.0 * (FIELD_H + GAP) + 8.0;
+    let fills_y = y0 + FILL_TOP;
     divider(cx, x0, x1, fills_y);
     cx.text(
         tr(Msg::SectionFill),
@@ -356,9 +423,9 @@ fn selection_info(ed: &Editor) -> Option<Info> {
             fields: vec![
                 ("X", num(n.geom.x), Some(n.geom.x)),
                 ("Y", num(n.geom.y), Some(n.geom.y)),
+                ("°", num(n.geom.rotation), Some(n.geom.rotation)),
                 ("W", num(n.geom.w), Some(n.geom.w)),
                 ("H", num(n.geom.h), Some(n.geom.h)),
-                ("°", num(n.geom.rotation), Some(n.geom.rotation)),
                 ("R", num(n.radius), Some(n.radius)),
             ],
             fill: n.fill.map_or(Fill::None, Fill::Solid),
@@ -380,9 +447,9 @@ fn selection_info(ed: &Editor) -> Option<Info> {
                 fields: vec![
                     ("X", num(b.x0), Some(b.x0)),
                     ("Y", num(b.y0), Some(b.y0)),
+                    ("°", mixed.clone(), None),
                     ("W", num(b.width()), Some(b.width())),
                     ("H", num(b.height()), Some(b.height())),
-                    ("°", mixed.clone(), None),
                     ("R", mixed, None),
                 ],
                 fill,

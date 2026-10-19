@@ -63,6 +63,8 @@ pub enum Cursor {
     ResizeEw,
     ResizeNesw,
     ResizeNwse,
+    /// Turning a shape: the editor draws its own arrow, the system cursor is hidden.
+    Rotate,
 }
 
 pub trait Screen {

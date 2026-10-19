@@ -92,6 +92,10 @@ impl Editor {
             self.start_prop_edit(i);
             return;
         }
+        if let Some(action) = self.action_hit() {
+            self.run_action(action);
+            return;
+        }
         let l = self.layout();
         if let Some(i) = self.toolbar.hit(&l, self.mouse.x, self.mouse.y) {
             if let Some(tool) = Tool::from_index(i) {
@@ -463,7 +467,7 @@ impl Editor {
                     let rotation = self.selection_frame().map_or(0.0, |f| f.rotation);
                     d.handle.cursor_rotated(rotation)
                 }
-                Interaction::Rotate { .. } => Cursor::Crosshair,
+                Interaction::Rotate { .. } => Cursor::Rotate,
                 Interaction::Create { .. } => Cursor::Crosshair,
                 Interaction::Marquee { .. } => Cursor::Default,
             };
@@ -482,6 +486,9 @@ impl Editor {
         if self.field_hit().is_some() {
             return Cursor::Text;
         }
+        if self.action_hit().is_some() {
+            return Cursor::Pointer;
+        }
         if !self.over_canvas() {
             return Cursor::Default;
         }
@@ -495,7 +502,7 @@ impl Editor {
         match self.selection_frame() {
             Some(f) => match handle_at_quad(&f.quad, cp) {
                 Some(h) => h.cursor_rotated(f.rotation),
-                None if rotate_zone_at_quad(&f.quad, cp) => Cursor::Crosshair,
+                None if rotate_zone_at_quad(&f.quad, cp) => Cursor::Rotate,
                 None => Cursor::Default,
             },
             None => Cursor::Default,

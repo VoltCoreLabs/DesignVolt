@@ -655,7 +655,7 @@ fn type_and_enter(ed: &mut Editor, text: &str) {
 fn typing_a_width_resizes_the_selected_shape_in_one_undo_step() {
     let mut ed = editor();
     let id = draw_rect(&mut ed, (0.0, 0.0), (200.0, 100.0));
-    click_field(&mut ed, 2); // W
+    click_field(&mut ed, 3); // W
     type_and_enter(&mut ed, "250");
     assert_eq!(geom(&ed, id), (0.0, 0.0, 250.0, 100.0));
     assert!(ed.prop_edit.is_none(), "Enter leaves the field");
@@ -671,7 +671,7 @@ fn position_rotation_and_radius_can_be_typed() {
     type_and_enter(&mut ed, "-40,5");
     click_field(&mut ed, 1); // Y
     type_and_enter(&mut ed, "12");
-    click_field(&mut ed, 4); // angle
+    click_field(&mut ed, 2); // angle
     type_and_enter(&mut ed, "30");
     click_field(&mut ed, 5); // radius
     type_and_enter(&mut ed, "16");
@@ -687,7 +687,7 @@ fn position_rotation_and_radius_can_be_typed() {
 fn letters_are_ignored_and_an_empty_value_changes_nothing() {
     let mut ed = editor();
     let id = draw_rect(&mut ed, (0.0, 0.0), (200.0, 100.0));
-    click_field(&mut ed, 2);
+    click_field(&mut ed, 3);
     ed.text("abc");
     assert_eq!(
         ed.prop_edit.as_ref().unwrap().input.text(),
@@ -703,13 +703,13 @@ fn letters_are_ignored_and_an_empty_value_changes_nothing() {
 fn escape_cancels_and_clicking_the_canvas_applies() {
     let mut ed = editor();
     let id = draw_rect(&mut ed, (0.0, 0.0), (200.0, 100.0));
-    click_field(&mut ed, 3); // H
+    click_field(&mut ed, 4); // H
     ed.text("500");
     press_key(&mut ed, Key::Escape, NONE);
     assert_eq!(geom(&ed, id).3, 100.0);
     assert!(ed.prop_edit.is_none());
 
-    click_field(&mut ed, 3);
+    click_field(&mut ed, 4);
     ed.text("300");
     mv(&mut ed, -250.0, -250.0); // empty canvas: leaving the field applies the value
     ed.click(NONE);
@@ -737,7 +737,7 @@ fn arrow_keys_step_the_value_and_tab_moves_to_the_next_field() {
 fn typing_in_a_field_does_not_trigger_tool_shortcuts() {
     let mut ed = editor();
     draw_rect(&mut ed, (0.0, 0.0), (200.0, 100.0));
-    click_field(&mut ed, 2);
+    click_field(&mut ed, 3);
     press_key(&mut ed, Key::Char('r'), NONE);
     press_key(&mut ed, Key::Delete, NONE);
     assert_eq!(ed.tool, super::state::Tool::Select);
@@ -754,19 +754,19 @@ fn a_group_width_can_be_typed_and_fields_need_a_selection() {
     let a = draw_rect(&mut ed, (0.0, 0.0), (100.0, 100.0));
     let b = draw_rect(&mut ed, (200.0, 0.0), (300.0, 100.0));
     press_key(&mut ed, Key::SelectAll, CTRL);
-    click_field(&mut ed, 2);
+    click_field(&mut ed, 3);
     type_and_enter(&mut ed, "600");
     assert_eq!(geom(&ed, a), (0.0, 0.0, 200.0, 100.0));
     assert_eq!(geom(&ed, b), (400.0, 0.0, 200.0, 100.0));
     ed.selection.clear();
-    click_field(&mut ed, 2);
+    click_field(&mut ed, 3);
     assert!(ed.prop_edit.is_none(), "no selection, nothing to edit");
 }
 
 /// The selection frame and handles of a rotated shape.
 fn rotated_rect(ed: &mut Editor) -> NodeId {
     let id = draw_rect(ed, (0.0, 0.0), (200.0, 100.0));
-    click_field(ed, 4);
+    click_field(ed, 2);
     type_and_enter(ed, "90");
     id
 }
@@ -922,7 +922,7 @@ fn guides_snap_to_shapes_nested_inside_frames() {
 fn guides_snap_to_the_bounds_of_rotated_shapes() {
     let mut ed = editor();
     draw_rect(&mut ed, (-250.0, 0.0), (-150.0, 100.0));
-    click_field(&mut ed, 4);
+    click_field(&mut ed, 2);
     type_and_enter(&mut ed, "45");
     ed.selection.clear();
     // The turned square reaches x = -200 + 70.71 = -129.29 on its right.
@@ -935,8 +935,8 @@ fn guides_snap_to_the_bounds_of_rotated_shapes() {
 fn clicking_inside_the_edited_value_places_the_caret_there() {
     let mut ed = editor();
     let id = draw_rect(&mut ed, (0.0, 0.0), (200.0, 100.0));
-    click_field(&mut ed, 2); // W = 200, all selected
-    let rect = super::panels::field_rect(ed.layout().right, 2);
+    click_field(&mut ed, 3); // W = 200, all selected
+    let rect = super::panels::field_rect(ed.layout().right, 3);
     // A click at the start of the value puts the caret before the first digit.
     ed.mouse_moved(rect.x0 + super::panels::VALUE_X, rect.center().y);
     ed.click(NONE);
@@ -951,4 +951,76 @@ fn clicking_inside_the_edited_value_places_the_caret_there() {
     assert_eq!(ed.prop_edit.as_ref().unwrap().input.text(), "920");
     press_key(&mut ed, Key::Enter, NONE);
     assert_eq!(geom(&ed, id).2, 920.0);
+}
+
+fn click_action(ed: &mut Editor, k: usize) {
+    let c = super::panels::action_rect(ed.layout().right, k).center();
+    ed.mouse_moved(c.x, c.y);
+    ed.click(NONE);
+    ed.mouse_up();
+}
+
+#[test]
+fn the_turn_buttons_rotate_the_selection_by_a_quarter_in_both_directions() {
+    let mut ed = editor();
+    let id = draw_rect(&mut ed, (0.0, 0.0), (100.0, 50.0));
+    click_action(&mut ed, 1);
+    assert_eq!(geom_rotation(&ed, id), 90.0);
+    click_action(&mut ed, 0);
+    click_action(&mut ed, 0);
+    assert_eq!(geom_rotation(&ed, id), -90.0);
+    ed.session.borrow_mut().exec.undo();
+    assert_eq!(geom_rotation(&ed, id), 0.0, "each click is one undo step");
+}
+
+#[test]
+fn the_flip_buttons_mirror_the_selection() {
+    let mut ed = editor();
+    let a = draw_rect(&mut ed, (0.0, 0.0), (10.0, 10.0));
+    let b = draw_rect(&mut ed, (90.0, 40.0), (100.0, 50.0));
+    ed.selection = vec![a, b];
+    click_action(&mut ed, 2);
+    assert_eq!((geom(&ed, a).0, geom(&ed, b).0), (90.0, 0.0));
+    click_action(&mut ed, 3);
+    assert_eq!((geom(&ed, a).1, geom(&ed, b).1), (40.0, 0.0));
+}
+
+#[test]
+fn the_buttons_do_nothing_without_a_selection_and_do_not_overlap_the_fields() {
+    let mut ed = editor();
+    let right = ed.layout().right;
+    for k in 0..4 {
+        for i in 0..6 {
+            let (a, f) = (
+                super::panels::action_rect(right, k),
+                super::panels::field_rect(right, i),
+            );
+            assert!(a.intersect(f).area() == 0.0, "button {k} vs field {i}");
+        }
+    }
+    ed.mouse_moved(right.x0 + 40.0, right.y0 + 200.0);
+    assert!(ed.action_hit().is_none());
+}
+
+#[test]
+fn the_rotate_zone_shows_the_turn_cursor() {
+    let mut ed = editor();
+    draw_rect(&mut ed, (0.0, 0.0), (100.0, 100.0));
+    let q = ed.selection_frame().unwrap().quad;
+    let c = ed.layout().canvas;
+    let p = q[1] + (q[1] - Point::new(50.0, 50.0)).normalize() * 17.0;
+    ed.mouse_moved(c.x0 + p.x, c.y0 + p.y);
+    assert_eq!(ed.editor_cursor(), crate::input::Cursor::Rotate);
+}
+
+fn geom_rotation(ed: &Editor, id: NodeId) -> f64 {
+    ed.session
+        .borrow()
+        .exec
+        .doc()
+        .page()
+        .node(id)
+        .unwrap()
+        .geom
+        .rotation
 }

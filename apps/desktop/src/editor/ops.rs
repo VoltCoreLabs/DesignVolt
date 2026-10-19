@@ -264,13 +264,13 @@ pub enum Field {
 }
 
 impl Field {
-    /// In the order of the panel: two columns, three rows.
+    /// In the order of the panel: Position (X, Y, angle), Layout (W, H), Appearance (radius).
     pub const ALL: [Field; 6] = [
         Field::X,
         Field::Y,
+        Field::Rotation,
         Field::W,
         Field::H,
-        Field::Rotation,
         Field::Radius,
     ];
 

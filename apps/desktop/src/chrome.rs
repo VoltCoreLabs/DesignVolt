@@ -47,6 +47,7 @@ pub fn icon_of(c: crate::input::Cursor) -> CursorIcon {
         Cursor::ResizeEw => CursorIcon::EwResize,
         Cursor::ResizeNesw => CursorIcon::NeswResize,
         Cursor::ResizeNwse => CursorIcon::NwseResize,
+        Cursor::Rotate => CursorIcon::Default,
     }
 }
 

@@ -2,7 +2,7 @@
 
 use vello::kurbo::Rect;
 
-use super::projects_input::{name_rect, star_rect};
+use super::projects_input::{check_rect, name_rect, star_rect};
 use crate::draw::Cx;
 use crate::i18n::{ago, edited, items_count};
 use crate::icons::Icon;
@@ -50,7 +50,8 @@ fn checkbox(cx: &mut Cx, card: Rect, look: &CardLook) {
     if !look.selecting && look.hover < 0.05 {
         return;
     }
-    let (cxm, cym) = (card.x0 + 30.0, card.y0 + 29.0);
+    let c = check_rect(card).center();
+    let (cxm, cym) = (c.x, c.y);
     let k = if look.selecting { 1.0 } else { look.hover };
     if look.selected {
         cx.circle(cxm, cym, 11.0, hex(accent()));

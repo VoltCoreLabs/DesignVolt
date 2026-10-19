@@ -84,8 +84,8 @@ pub struct Projects {
     /// Selected cards in selection order; `anchor` is the start of Shift-ranges.
     pub selected: Vec<Item>,
     pub anchor: Option<Item>,
-    /// "Empty trash" waits for a second click.
-    pub confirm_empty: bool,
+    /// Confirmation dialog (modal) that blocks the rest of the screen.
+    pub modal: Option<super::projects_modal::Modal>,
     /// "Delete forever" in the selection bar waits for a second click.
     pub bar_confirm: bool,
     pub next: Option<Transition>,
@@ -147,7 +147,7 @@ impl Projects {
             rename: None,
             selected: Vec::new(),
             anchor: None,
-            confirm_empty: false,
+            modal: None,
             bar_confirm: false,
             next: None,
         }

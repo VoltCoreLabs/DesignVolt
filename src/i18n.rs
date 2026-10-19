@@ -71,7 +71,8 @@ pub enum Msg {
     MenuDuplicate,
     CopySuffix,
     EmptyTrash,
-    ConfirmEmptyTrash,
+    ModalEmptyTitle,
+    Cancel,
     MenuRestore,
     MenuDeleteForever,
     MenuConfirmDelete,
@@ -153,7 +154,8 @@ pub fn tr(m: Msg) -> &'static str {
         Msg::MenuDuplicate => pick("Дублировать", "Duplicate"),
         Msg::CopySuffix => pick("копия", "copy"),
         Msg::EmptyTrash => pick("Очистить корзину", "Empty trash"),
-        Msg::ConfirmEmptyTrash => pick("Точно очистить?", "Really empty?"),
+        Msg::ModalEmptyTitle => pick("Очистить корзину?", "Empty the trash?"),
+        Msg::Cancel => pick("Отмена", "Cancel"),
         Msg::MenuRestore => pick("Восстановить", "Restore"),
         Msg::MenuDeleteForever => pick("Удалить навсегда", "Delete forever"),
         Msg::MenuConfirmDelete => pick("Точно удалить?", "Really delete?"),
@@ -217,6 +219,19 @@ fn ru_form(n: u64) -> usize {
         (_, 1) => 0,
         (_, 2..=4) => 1,
         _ => 2,
+    }
+}
+
+/// Text of the "empty trash" confirmation for `n` items.
+pub fn empty_trash_body(n: u64) -> String {
+    match lang() {
+        Lang::Ru => format!(
+            "Элементов в корзине: {n}. Они будут удалены навсегда, это действие нельзя отменить."
+        ),
+        Lang::En => format!(
+            "The trash holds {n} item{}. They will be deleted forever and this cannot be undone.",
+            if n == 1 { "" } else { "s" }
+        ),
     }
 }
 

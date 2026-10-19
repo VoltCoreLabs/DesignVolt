@@ -5,6 +5,7 @@ mod projects_bar;
 mod projects_cards;
 mod projects_input;
 mod projects_menu;
+mod projects_modal;
 mod projects_paint;
 pub mod settings;
 pub mod welcome;

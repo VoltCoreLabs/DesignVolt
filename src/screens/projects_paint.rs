@@ -59,6 +59,7 @@ impl Projects {
         }
         self.paint_bar(&mut cx);
         self.paint_menu(&mut cx);
+        self.paint_modal(&mut cx);
     }
 
     fn nav_active(&self, loc: Location) -> bool {
@@ -201,15 +202,9 @@ impl Projects {
             self.new_project
                 .draw(cx, l.new_project, label, Some(Icon::Plus), true);
         } else if self.loc == Location::Trash && self.store.borrow().lib.trash_count() > 0 {
-            if self.confirm_empty {
-                let label = tr(Msg::ConfirmEmptyTrash);
-                self.new_project
-                    .draw_danger(cx, l.new_project, label, Some(Icon::Trash));
-            } else {
-                let label = tr(Msg::EmptyTrash);
-                self.new_project
-                    .draw_secondary(cx, l.new_project, label, Some(Icon::Trash));
-            }
+            let label = tr(Msg::EmptyTrash);
+            self.new_project
+                .draw_secondary(cx, l.new_project, label, Some(Icon::Trash));
         }
     }
 

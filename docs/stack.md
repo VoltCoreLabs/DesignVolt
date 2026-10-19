@@ -24,4 +24,4 @@ Not in the stack: egui, iced, slint, dioxus, tauri, webview, tiny-skia, skia-saf
 Animation (springs, easing, scheduler) is written in-house in `dv-ui`. No animation crates.
 
 ## Добавлено позже
-- rboard (без default-features) — буфер обмена, текст (D-011).
+- `arboard` (без default-features) — буфер обмена, текст (D-011).

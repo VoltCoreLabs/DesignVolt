@@ -1,23 +1,55 @@
-# Design system and animation
+# Дизайн-система и анимации
 
-Lives in `dv-ui`. Written by hand on top of Masonry; no external widget kits.
+Живёт в `dv-ui` (пока `src/theme/`, `src/editor/`). Пишется вручную поверх Vello (позже Masonry); готовых виджет-китов нет. Решения: D-004 в `docs/decisions.md`.
 
-## Tokens
+## Принципы
+- Тёмная тема по умолчанию (светлая позже, токены называем семантически).
+- Мягкий скруглённый стиль; **glass только для плавающих слоёв** (тулбар, меню, поповеры, модалки, тултипы, командная палитра). Основные панели и поля плоские — дёшево для рендера.
+- Все значения (цвета, размеры, радиусы, тени, длительности) — только токены `src/theme/`. Никаких захардкоженных значений в виджетах.
+- Удобство и практичность выше красоты: крупные цели клика, понятные состояния.
 
-All visual values come from tokens: colors (light and dark), spacing scale, radii, shadows, type scale, durations, easings. Widgets never hardcode them.
+## Цвета (`theme/colors.rs`)
+| Токен | Значение | Применение |
+|---|---|---|
+| `BG_APP` | `#0A0C14` | фон окна |
+| `BG_CANVAS` | `#0E1019` | холст |
+| `BG_PANEL` | `#141725` | боковые панели |
+| `BG_RAISED` | `#1B1F31` | карточки, поля ввода |
+| `BG_HOVER` | `#232842` | hover |
+| `BORDER_SUBTLE` / `BORDER_STRONG` | белый @ 8% / 16% | разделители / обводки полей |
+| `TEXT_PRIMARY` / `TEXT_SECONDARY` / `TEXT_DISABLED` | `#F5F6FF` / `#969CBE` / `#5A6080` | текст |
+| `ACCENT_FROM` → `ACCENT_TO` | `#6366F1` → `#A855F7` | кнопки, активные элементы |
+| `ACCENT` | `#7C5CFF` | рамка выделения, кольцо фокуса |
+| `SUCCESS` / `WARNING` / `DANGER` | `#34D399` / `#FBBF24` / `#F87171` | статусы |
 
-## Animation engine (in-house)
+## Типографика и размеры (`theme/metrics.rs`)
+- Шрифт **Inter** (OFL, `assets/fonts/`), запасной — Segoe UI. Основной размер UI — 12 px; шкала 11/12/13/14/16/20/28.
+- Сетка отступов 4 px: 4, 8, 12, 16, 24.
+- Радиусы: 6 (поля), 8 (кнопки, строки), 12 (карточки, панели), 16 (модалки, крупные кнопки).
+- Высоты: строка слоя 28, поле 28, кнопка 32.
 
-- `Animated<T>`: a value that moves toward a target over time.
-- Spring physics (stiffness, damping, mass) as the default; easing curves for fixed-duration cases.
-- Retargeting keeps current velocity (interrupting an animation must not jump).
-- Color transitions interpolate in OKLab/OKLCH.
-- Frame scheduler: requests the next frame only while at least one animation is active.
+## Раскладка редактора (как в Figma)
+- Верхняя панель 40 px: меню, файл/страница, участники, Share, зум.
+- Слева 240 px: Pages, вкладки Layers / Assets, поиск по слоям.
+- Справа 280 px: Design / Prototype / Inspect, секции свойств, Variables, Agent.
+- Центр: бесконечный холст; снизу по центру плавающий glass-тулбар.
+- Стартовый экран: навигация слева, поиск и сортировка сверху, сетка файлов и папок, кнопка «Новый файл».
 
-## Widget states
+## Glass
+Решение: настоящий backdrop blur (D-006). Полупрозрачный `BG_PANEL` (70–80%), тонкая обводка, верхний градиентный блик, размытая тень; под слоем — размытая копия фона (свой проход wgpu, пониженное разрешение, только под видимыми glass-слоями). Пока блюр не готов, glass рисуется имитацией через единый `glass_panel`.
 
-hover, pressed, focused, disabled and selected transition smoothly, never instantly.
+## Анимации (движок свой, `src/anim.rs`)
+- `Spring`: hover 260/22, press 520/28 (stiffness/damping). Перенацеливание сохраняет скорость.
+- `ease_out_cubic`, `progress(t, delay, duration)` для появления.
+- Длительности: 120 мс hover, 200 мс панели, 300 мс модалки/появление.
+- Кадры запрашиваются, только пока что-то анимируется.
+- Состояния hover, pressed, focus, disabled, selected — всегда плавные.
 
-## Core widget set (needed for a Figma-like editor)
+## Набор виджетов (нужен для редактора)
+Button, IconButton, Toggle, TextInput, scrubbable NumberField, Slider, Dropdown, Tooltip, ContextMenu, Tabs, Panel, дерево слоёв (drag-and-drop, rename, hide/lock), цветовой пикер с градиентами.
 
-Button, icon button, toggle, text input, scrubbable number field (drag to change value), slider, dropdown, tooltip, context menu, layer tree (drag-and-drop, rename, hide/lock), color picker with gradients, tabs, panels with resizable splitters.
+## Иконки
+Phosphor (SVG, MIT), D-005. SVG-path → `kurbo::BezPath::from_svg` → заливка Vello; 16 px, цвет из токенов.
+
+## Тема
+Только тёмная сейчас; светлая после M2 (D-007).

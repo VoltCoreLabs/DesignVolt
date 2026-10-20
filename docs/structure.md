@@ -27,7 +27,7 @@ DesignVolt/
    ├─ library.rs, library_io.rs, store.rs         проекты и папки (модель), файлы данных, профиль и настройки
    ├─ screens/                                    welcome, settings, projects (+ _actions, _bar, _cards, _input, _menu, _modal, _paint)
    └─ editor/                                     state, interact (мышь), keys (клавиши), canvas, panels, toolbar,
-                                                  layout, handles (маркеры), ops (операции над документом), session (файл и автосохранение), tests
+                                                  layout, handles (маркеры), ops (операции над документом), ops_clip (буфер), ops_order (порядок слоёв), session (файл и автосохранение), tests
 ```
 
 ## Правила масштабирования

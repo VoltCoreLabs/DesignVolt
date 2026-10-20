@@ -6,6 +6,7 @@ use kurbo::{Point, Rect};
 
 use super::interact::Interaction;
 use super::ops;
+use super::ops_order::Order;
 use super::state::{Editor, Tool};
 
 /// Zoom step of the keyboard shortcuts.
@@ -30,6 +31,12 @@ impl Editor {
             Key::Undo => self.undo(),
             Key::Redo => self.redo(),
             Key::SelectAll => self.select_all(),
+            Key::Copy => self.copy_selection(),
+            Key::Cut => {
+                self.copy_selection();
+                self.delete_selection();
+            }
+            Key::Paste => self.paste(),
             Key::Char(c) => self.char_shortcut(c, mods),
             _ => {}
         }
@@ -39,6 +46,16 @@ impl Editor {
         if mods.ctrl {
             match c {
                 'd' => self.duplicate_selection(),
+                ']' => self.reorder_selection(if mods.shift {
+                    Order::Front
+                } else {
+                    Order::Forward
+                }),
+                '[' => self.reorder_selection(if mods.shift {
+                    Order::Back
+                } else {
+                    Order::Backward
+                }),
                 'b' if mods.shift => self.stress_page(),
                 '=' => self.zoom_center(ZOOM_STEP),
                 '-' => self.zoom_center(1.0 / ZOOM_STEP),
@@ -134,6 +151,25 @@ impl Editor {
         let copies = ops::duplicate(&mut self.session.borrow_mut().exec, &self.selection);
         if !copies.is_empty() {
             self.selection = copies;
+        }
+    }
+
+    fn copy_selection(&mut self) {
+        if !self.selection.is_empty() {
+            self.clip.copy(&self.session.borrow().exec, &self.selection);
+        }
+    }
+
+    fn paste(&mut self) {
+        let made = self.clip.paste(&mut self.session.borrow_mut().exec);
+        if !made.is_empty() {
+            self.selection = made;
+        }
+    }
+
+    fn reorder_selection(&mut self, mode: Order) {
+        if !self.selection.is_empty() {
+            super::ops_order::reorder(&mut self.session.borrow_mut().exec, &self.selection, mode);
         }
     }
 

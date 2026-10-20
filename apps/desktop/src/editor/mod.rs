@@ -1,6 +1,7 @@
 mod canvas;
 mod color_fmt;
 mod drag;
+mod dropdown;
 mod flip;
 mod handles;
 mod interact;
@@ -15,6 +16,7 @@ mod ops_order;
 mod ops_paint;
 mod paint_edit;
 mod paint_fx;
+mod paint_layout;
 mod paint_ui;
 mod panels;
 mod picker;

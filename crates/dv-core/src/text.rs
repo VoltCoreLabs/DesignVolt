@@ -18,7 +18,8 @@ use std::fmt;
 use crate::paint::Paint;
 
 use crate::document::{
-    Color, Document, Geometry, Node, NodeId, NodeKind, Page, Shadow, Stroke, StrokeStyle,
+    Color, Document, Effect, EffectKind, Geometry, Node, NodeId, NodeKind, Page, Stroke,
+    StrokeStyle,
 };
 
 const MAGIC: &str = "designvolt-document";
@@ -111,9 +112,24 @@ pub fn to_text(doc: &Document) -> String {
             let stroke = n.stroke.map_or("-".to_string(), |s| {
                 format!("{}:{}:{}", color_code(s.color), s.width, s.style.code())
             });
-            let shadow = n.shadow.map_or("-".to_string(), |s| {
-                format!("{}:{}:{}:{}", color_code(s.color), s.x, s.y, s.blur)
-            });
+            let effects = if n.effects.is_empty() {
+                "-".to_string()
+            } else {
+                n.effects
+                    .iter()
+                    .map(|e| {
+                        format!(
+                            "{}:{}:{}:{}:{}",
+                            e.kind.code(),
+                            color_code(e.color),
+                            e.x,
+                            e.y,
+                            e.blur
+                        )
+                    })
+                    .collect::<Vec<_>>()
+                    .join("|")
+            };
             out.push_str(&format!(
                 "node\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
                 id.0,
@@ -130,7 +146,7 @@ pub fn to_text(doc: &Document) -> String {
                 stroke,
                 escape(&n.name),
                 n.opacity,
-                shadow
+                effects
             ));
         }
     }
@@ -200,16 +216,33 @@ fn attach(page: &mut Page, id: NodeId, node: Node, line: usize) -> Result<(), Pa
     Ok(())
 }
 
-fn parse_shadow(s: &str) -> Option<Shadow> {
-    let mut p = s.split(':');
-    let color = color_from(p.next()?)?;
-    let mut num = || p.next()?.parse::<f64>().ok().filter(|v| v.is_finite());
-    Some(Shadow {
+/// One effect: `kind:color:x:y:blur`; older files had a lone drop shadow as `color:x:y:blur`.
+fn parse_effect(s: &str) -> Option<Effect> {
+    let mut p: Vec<&str> = s.split(':').collect();
+    let kind = match EffectKind::from_code(p[0]) {
+        Some(k) => {
+            p.remove(0);
+            k
+        }
+        None => EffectKind::DropShadow,
+    };
+    let mut it = p.into_iter();
+    let color = color_from(it.next()?)?;
+    let mut num = || it.next()?.parse::<f64>().ok().filter(|v| v.is_finite());
+    Some(Effect {
+        kind,
         color,
         x: num()?,
         y: num()?,
         blur: num()?.max(0.0),
     })
+}
+
+fn parse_effects(s: &str) -> Vec<Effect> {
+    if s == "-" {
+        return Vec::new();
+    }
+    s.split('|').filter_map(parse_effect).collect()
 }
 
 fn parse_node<'a>(
@@ -272,10 +305,10 @@ fn parse_node<'a>(
         .and_then(|s| s.parse::<f64>().ok())
         .filter(|v| v.is_finite())
         .map_or(1.0, |v| v.clamp(0.0, 1.0));
-    let shadow = f.next().and_then(parse_shadow);
+    let effects = f.next().map(parse_effects).unwrap_or_default();
     let mut node = Node::new(kind, name, geom);
     node.opacity = opacity;
-    node.shadow = shadow;
+    node.effects = effects;
     node.fill = fill;
     node.stroke = stroke;
     node.radius = radius;
@@ -338,12 +371,16 @@ mod tests {
                 style: StrokeStyle::Dashed,
             })),
             opacity: Some(0.4),
-            shadow: Some(Some(Shadow {
-                color: Color::rgb(9, 8, 7),
-                x: -2.5,
-                y: 6.0,
-                blur: 12.0,
-            })),
+            effects: Some(vec![
+                Effect {
+                    color: Color::rgb(9, 8, 7),
+                    x: -2.5,
+                    y: 6.0,
+                    blur: 12.0,
+                    ..Effect::new(EffectKind::InnerShadow)
+                },
+                Effect::new(EffectKind::LayerBlur),
+            ]),
             radius: Some(8.25),
             locked: Some(true),
             visible: Some(false),
@@ -359,7 +396,29 @@ mod tests {
         assert!(n.locked && !n.visible && n.fill.is_none());
         assert_eq!(n.stroke.unwrap().width, 2.5);
         assert_eq!(n.stroke.unwrap().style, StrokeStyle::Dashed);
-        assert_eq!((n.opacity, n.shadow.unwrap().blur), (0.4, 12.0));
+        assert_eq!(
+            (n.opacity, n.effects.len(), n.effects[0].blur),
+            (0.4, 2, 12.0)
+        );
+        assert_eq!(n.effects[0].kind, EffectKind::InnerShadow);
+    }
+
+    #[test]
+    fn a_lone_shadow_of_the_previous_format_loads_as_a_drop_shadow() {
+        let text = format!(
+            "{MAGIC}	{VERSION}
+name	x
+page	p
+node	1	0	rect	0	0	10	10	0	0	3	ff0000ff	-	n	0.5	000000ff:1:2:3
+"
+        );
+        let doc = from_text(&text).unwrap();
+        let n = doc.page().node(NodeId(1)).unwrap();
+        assert_eq!(n.effects.len(), 1);
+        assert_eq!(
+            (n.effects[0].kind, n.effects[0].y, n.effects[0].blur),
+            (EffectKind::DropShadow, 2.0, 3.0)
+        );
     }
 
     #[test]
@@ -373,7 +432,7 @@ node	1	0	rect	0	0	10	10	0	0	3	ff0000ff	00ff00ff:2	old
         );
         let doc = from_text(&text).unwrap();
         let n = doc.page().node(NodeId(1)).unwrap();
-        assert_eq!((n.opacity, n.shadow), (1.0, None));
+        assert_eq!((n.opacity, n.effects.len()), (1.0, 0));
         assert_eq!(n.stroke.unwrap().style, StrokeStyle::Solid);
         assert_eq!(n.name, "old");
     }

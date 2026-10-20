@@ -5,7 +5,6 @@ use dv_ui::theme::metrics::{FIELD_H, TOPBAR_H};
 use kurbo::{Point, Rect};
 
 use super::color_fmt::Mode;
-use super::paint_ui::{Slot, anchor};
 
 pub const W: f64 = 300.0;
 const PAD: f64 = 12.0;
@@ -128,7 +127,7 @@ fn offs(s: Shape) -> Offs {
     }
     if s.pattern {
         let pat_a = y;
-        let pat_b = pat_a + FIELD_H + GAP_V;
+        let pat_b = pat_a + FIELD_H + GAP_V + 8.0;
         return Offs {
             tabs,
             stops: 0.0,
@@ -150,7 +149,7 @@ fn offs(s: Shape) -> Offs {
     let bars = sv + SV_H + GAP_V;
     let fields = bars + BAR_H * 2.0 + BAR_GAP + GAP_V;
     let mut end = fields + FIELD_H;
-    let params = end + GAP_V;
+    let params = end + GAP_V + 8.0;
     if s.grad.is_some() {
         end = params + FIELD_H;
     }
@@ -181,11 +180,9 @@ pub fn height(s: Shape) -> f64 {
 }
 
 /// The popup: left of the right panel, level with the swatch, kept on screen.
-pub fn popup_rect(right: Rect, slot: Slot, win_h: f64, s: Shape) -> Rect {
+pub fn popup_rect(right: Rect, anchor: Point, win_h: f64, s: Shape) -> Rect {
     let h = height(s);
-    let y = (anchor(right, slot).y - 8.0)
-        .min(win_h - h - 8.0)
-        .max(TOPBAR_H + 8.0);
+    let y = (anchor.y - 8.0).min(win_h - h - 8.0).max(TOPBAR_H + 8.0);
     let x1 = right.x0 - 8.0;
     Rect::new(x1 - W, y, x1, y + h)
 }

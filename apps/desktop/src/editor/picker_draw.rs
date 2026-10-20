@@ -9,7 +9,7 @@ use kurbo::Rect;
 use vello::peniko::Color as VColor;
 
 use super::color_fmt::components;
-use super::paint_ui::paint_box;
+use super::paint_ui::{drop_button, paint_box};
 use super::picker::Picker;
 use super::picker_edit::{PickEdit, PickField};
 use super::picker_grad::{field_value, tab_kind, tab_of};
@@ -223,13 +223,12 @@ impl Editor {
             hex(text_primary()),
         );
         let t = pat_tiling_rect(popup, shape);
-        cx.fill(t, R_FIELD, hex(bg_app()));
         let label = match pat.tiling {
             Tiling::Grid => tr(Msg::TilingGrid),
             Tiling::BrickRows => tr(Msg::TilingRows),
             Tiling::BrickColumns => tr(Msg::TilingColumns),
         };
-        cx.text(label, FONT_UI, t.x0 + 8.0, t.y0 + 18.0, hex(text_primary()));
+        drop_button(cx, t, label, t.contains(self.mouse));
         for (i, f) in PAT_FIELDS.iter().enumerate() {
             let fr = pat_field_rect(popup, shape, i);
             let (name, suf) = match f {
@@ -277,21 +276,7 @@ impl Editor {
         );
 
         let m = mode_rect(popup, shape);
-        cx.fill(m, R_FIELD, hex(bg_app()));
-        cx.text(
-            mode.label(),
-            FONT_UI,
-            m.x0 + 8.0,
-            m.y0 + 18.0,
-            hex(text_primary()),
-        );
-        cx.icon(
-            Icon::CaretDown,
-            m.x1 - 18.0,
-            m.y0 + 8.0,
-            12.0,
-            hex(text_secondary()),
-        );
+        drop_button(cx, m, mode.label(), m.contains(self.mouse));
 
         for (i, t) in components(mode, color).iter().enumerate() {
             let r = field_rect(popup, shape, mode, i);

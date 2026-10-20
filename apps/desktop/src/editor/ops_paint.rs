@@ -1,6 +1,6 @@
 //! Fill and stroke edits from the right panel and the color picker.
 
-use dv_core::{Color, Command, Executor, NodeId, Paint, Props, Shadow, Stroke};
+use dv_core::{Color, Command, Effect, Executor, NodeId, Paint, Props, Stroke};
 
 /// Fill given to a shape by the "+" button.
 pub const DEFAULT_FILL: Color = Color::rgb(217, 217, 217);
@@ -69,27 +69,28 @@ pub fn edit_stroke(
     run(ex, "Stroke", key, cmds);
 }
 
-/// Replaces the shadow of every shape of the selection by `f(old)`.
-pub fn edit_shadow(
+/// Lets `f` change the effect list of every shape of the selection.
+pub fn edit_effects(
     ex: &mut Executor,
     ids: &[NodeId],
     key: Option<u64>,
-    f: impl Fn(Option<Shadow>) -> Option<Shadow>,
+    f: impl Fn(&mut Vec<Effect>),
 ) {
     let page = ex.doc().page();
     let cmds = page
         .geo_tops(ids)
         .into_iter()
         .filter_map(|id| {
-            let shadow = f(page.node(id)?.shadow);
+            let mut list = page.node(id)?.effects.clone();
+            f(&mut list);
             let props = Props {
-                shadow: Some(shadow),
+                effects: Some(list),
                 ..Props::default()
             };
             Some(Command::SetProps { id, props })
         })
         .collect();
-    run(ex, "Shadow", key, cmds);
+    run(ex, "Effects", key, cmds);
 }
 
 #[cfg(test)]
@@ -146,18 +147,23 @@ mod tests {
     }
 
     #[test]
-    fn shadow_can_be_added_changed_and_removed() {
+    fn effects_can_be_added_changed_and_removed() {
+        use dv_core::EffectKind;
         let mut ex = Executor::new(Document::default());
         let a = shape(&mut ex);
-        edit_shadow(&mut ex, &[a], None, |_| Some(Shadow::DEFAULT));
-        edit_shadow(&mut ex, &[a], None, |s| {
-            s.map(|s| Shadow { blur: 20.0, ..s })
+        edit_effects(&mut ex, &[a], None, |l| {
+            l.push(Effect::new(EffectKind::DropShadow));
+            l.push(Effect::new(EffectKind::LayerBlur));
         });
-        assert_eq!(ex.doc().page().node(a).unwrap().shadow.unwrap().blur, 20.0);
-        edit_shadow(&mut ex, &[a], None, |_| None);
-        assert!(ex.doc().page().node(a).unwrap().shadow.is_none());
+        edit_effects(&mut ex, &[a], None, |l| l[0].blur = 20.0);
+        let n = ex.doc().page().node(a).unwrap();
+        assert_eq!((n.effects.len(), n.effects[0].blur), (2, 20.0));
+        edit_effects(&mut ex, &[a], None, |l| {
+            l.remove(0);
+        });
+        assert_eq!(ex.doc().page().node(a).unwrap().effects.len(), 1);
         ex.undo();
-        assert!(ex.doc().page().node(a).unwrap().shadow.is_some());
+        assert_eq!(ex.doc().page().node(a).unwrap().effects.len(), 2);
     }
 
     #[test]

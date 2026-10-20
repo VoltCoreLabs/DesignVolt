@@ -70,28 +70,74 @@ pub struct Stroke {
     pub style: StrokeStyle,
 }
 
-/// A soft shadow behind a shape.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum EffectKind {
+    DropShadow,
+    InnerShadow,
+    /// Blurs the whole shape (only its blur radius is used).
+    LayerBlur,
+}
+
+impl EffectKind {
+    pub const ALL: [EffectKind; 3] = [
+        EffectKind::DropShadow,
+        EffectKind::InnerShadow,
+        EffectKind::LayerBlur,
+    ];
+
+    pub fn code(self) -> &'static str {
+        match self {
+            EffectKind::DropShadow => "drop",
+            EffectKind::InnerShadow => "inner",
+            EffectKind::LayerBlur => "blur",
+        }
+    }
+
+    pub fn from_code(s: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|k| k.code() == s)
+    }
+}
+
+/// A visual effect of a shape: a shadow outside or inside, or a blur.
 #[derive(Clone, Copy, PartialEq, Debug)]
-pub struct Shadow {
+pub struct Effect {
+    pub kind: EffectKind,
     pub color: Color,
     pub x: f64,
     pub y: f64,
     pub blur: f64,
 }
 
-impl Shadow {
-    /// The shadow the "+" button adds.
-    pub const DEFAULT: Shadow = Shadow {
-        color: Color {
-            r: 0,
-            g: 0,
-            b: 0,
-            a: 64,
-        },
-        x: 0.0,
-        y: 4.0,
-        blur: 8.0,
-    };
+impl Effect {
+    /// What the "add effect" menu creates.
+    pub fn new(kind: EffectKind) -> Effect {
+        match kind {
+            EffectKind::LayerBlur => Effect {
+                kind,
+                color: Color::rgb(0, 0, 0),
+                x: 0.0,
+                y: 0.0,
+                blur: 6.0,
+            },
+            _ => Effect {
+                kind,
+                color: Color {
+                    r: 0,
+                    g: 0,
+                    b: 0,
+                    a: 64,
+                },
+                x: 0.0,
+                y: 4.0,
+                blur: 8.0,
+            },
+        }
+    }
+
+    /// Shadows have a color and an offset; a blur has neither.
+    pub fn is_shadow(&self) -> bool {
+        self.kind != EffectKind::LayerBlur
+    }
 }
 
 /// Position and size in the parent's coordinate space; rotation (degrees) is around the center.
@@ -114,7 +160,7 @@ pub struct Node {
     pub radius: f64,
     /// Opacity of the whole shape (0..1), together with its children.
     pub opacity: f64,
-    pub shadow: Option<Shadow>,
+    pub effects: Vec<Effect>,
     pub visible: bool,
     pub locked: bool,
     pub parent: Option<NodeId>,
@@ -123,6 +169,21 @@ pub struct Node {
 }
 
 impl Node {
+    /// How far the stroke and effects of the node reach past its box.
+    pub fn effect_reach(&self) -> f64 {
+        let stroke = self.stroke.map_or(0.0, |s| s.width);
+        let fx = self
+            .effects
+            .iter()
+            .map(|e| match e.kind {
+                EffectKind::DropShadow => e.blur * 2.0 + e.x.abs().max(e.y.abs()),
+                EffectKind::InnerShadow => 0.0,
+                EffectKind::LayerBlur => e.blur * 3.0,
+            })
+            .fold(0.0, f64::max);
+        stroke + fx + 2.0
+    }
+
     pub fn new(kind: NodeKind, name: impl Into<String>, geom: Geometry) -> Self {
         Self {
             kind,
@@ -132,7 +193,7 @@ impl Node {
             stroke: None,
             radius: 0.0,
             opacity: 1.0,
-            shadow: None,
+            effects: Vec::new(),
             visible: true,
             locked: false,
             parent: None,

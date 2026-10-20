@@ -1,9 +1,9 @@
 //! Look effects: layer opacity, drop shadow and stroke styles.
 
-use dv_core::{Color, Node, NodeKind, Page, Stroke as DStroke, StrokeStyle};
+use dv_core::{Color, EffectKind, Node, NodeKind, Page, Stroke as DStroke, StrokeStyle};
 use vello::Scene;
-use vello::kurbo::{Affine, Cap, Rect, Stroke};
-use vello::peniko::Color as VColor;
+use vello::kurbo::{Affine, Cap, Rect, Shape, Stroke};
+use vello::peniko::{BlendMode, Color as VColor, Compose, Fill, Mix};
 
 /// The opacity of a node together with all the groups and frames above it.
 pub fn effective_opacity(page: &Page, node: &Node) -> f64 {
@@ -17,38 +17,98 @@ pub fn effective_opacity(page: &Page, node: &Node) -> f64 {
     o.clamp(0.0, 1.0)
 }
 
-/// How far the effects of a node reach past its box (stroke, shadow and its offset).
+/// How far the effects of a node reach past its box (stroke, shadows, blur).
 pub fn reach(node: &Node) -> f64 {
-    let stroke = node.stroke.map_or(0.0, |s| s.width);
-    let shadow = node
-        .shadow
-        .map_or(0.0, |s| s.blur * 2.0 + s.x.abs().max(s.y.abs()));
-    stroke + shadow + 2.0
+    node.effect_reach()
 }
 
 fn color(c: Color) -> VColor {
     VColor::from_rgba8(c.r, c.g, c.b, c.a)
 }
 
-/// Draws the soft shadow of a node under its fill.
-pub fn draw_shadow(scene: &mut Scene, world: Affine, node: &Node) {
-    let Some(sh) = node.shadow else { return };
-    if node.fill.is_none() && node.stroke.is_none() || node.kind == NodeKind::Group {
-        return;
-    }
+fn corner_radius(node: &Node) -> f64 {
     let g = &node.geom;
-    let radius = if node.kind == NodeKind::Ellipse {
+    if node.kind == NodeKind::Ellipse {
         g.w.min(g.h) / 2.0
     } else {
         node.radius
-    };
-    let at = world * Affine::translate((sh.x, sh.y));
+    }
+}
+
+fn has_look(node: &Node) -> bool {
+    node.kind != NodeKind::Group && (node.fill.is_some() || node.stroke.is_some())
+}
+
+/// Draws the drop shadows of a node, under its fill.
+pub fn draw_drop_shadows(scene: &mut Scene, world: Affine, node: &Node) {
+    if !has_look(node) {
+        return;
+    }
+    let g = &node.geom;
+    for e in node
+        .effects
+        .iter()
+        .filter(|e| e.kind == EffectKind::DropShadow)
+    {
+        scene.draw_blurred_rounded_rect(
+            world * Affine::translate((e.x, e.y)),
+            Rect::new(0.0, 0.0, g.w, g.h),
+            color(e.color),
+            corner_radius(node),
+            (e.blur / 2.0).max(0.01),
+        );
+    }
+}
+
+/// Draws the inner shadows of a node over its fill, clipped to its shape: a layer filled with
+/// the shadow color from which the (offset, blurred) shape is cut out.
+pub fn draw_inner_shadows(scene: &mut Scene, world: Affine, shape: &impl Shape, node: &Node) {
+    if !has_look(node) {
+        return;
+    }
+    let g = &node.geom;
+    for e in node
+        .effects
+        .iter()
+        .filter(|e| e.kind == EffectKind::InnerShadow)
+    {
+        let big = Rect::new(0.0, 0.0, g.w, g.h).inflate(e.blur * 4.0 + 100.0, e.blur * 4.0 + 100.0);
+        scene.push_layer(Fill::NonZero, BlendMode::default(), 1.0, world, shape);
+        scene.fill(Fill::NonZero, world, color(e.color), None, &big);
+        let cut = BlendMode::new(Mix::Normal, Compose::DestOut);
+        scene.push_layer(Fill::NonZero, cut, 1.0, world, &big);
+        scene.draw_blurred_rounded_rect(
+            world * Affine::translate((e.x, e.y)),
+            Rect::new(0.0, 0.0, g.w, g.h),
+            VColor::from_rgba8(0, 0, 0, 255),
+            corner_radius(node),
+            (e.blur / 2.0).max(0.01),
+        );
+        scene.pop_layer();
+        scene.pop_layer();
+    }
+}
+
+/// The layer blur of a node, if it has one (the largest radius wins).
+pub fn layer_blur(node: &Node) -> Option<f64> {
+    node.effects
+        .iter()
+        .filter(|e| e.kind == EffectKind::LayerBlur && e.blur > 0.0)
+        .map(|e| e.blur)
+        .reduce(f64::max)
+}
+
+/// Draws a blurred copy of the node's solid look instead of the sharp shape. Only the main
+/// color of the fill is used and the shape is approximated by a rounded box.
+pub fn draw_blurred(scene: &mut Scene, world: Affine, node: &Node, blur: f64) {
+    let Some(fill) = &node.fill else { return };
+    let g = &node.geom;
     scene.draw_blurred_rounded_rect(
-        at,
+        world,
         Rect::new(0.0, 0.0, g.w, g.h),
-        color(sh.color),
-        radius,
-        (sh.blur / 2.0).max(0.01),
+        color(fill.main_color()),
+        corner_radius(node),
+        (blur / 2.0).max(0.01),
     );
 }
 
@@ -67,7 +127,7 @@ pub fn line(s: &DStroke) -> Stroke {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use dv_core::{Command, Document, Geometry, NodeId, Props};
+    use dv_core::{Command, Document, Effect, Geometry, NodeId, Props};
 
     #[test]
     fn opacity_multiplies_up_the_tree() {
@@ -103,11 +163,11 @@ mod tests {
     fn reach_covers_stroke_and_shadow() {
         let mut n = Node::new(NodeKind::Rectangle, "n", Geometry::default());
         let plain = reach(&n);
-        n.shadow = Some(dv_core::Shadow {
+        n.effects.push(Effect {
             x: 10.0,
             y: -20.0,
             blur: 5.0,
-            ..dv_core::Shadow::DEFAULT
+            ..Effect::new(EffectKind::DropShadow)
         });
         assert!(reach(&n) >= plain + 30.0);
     }

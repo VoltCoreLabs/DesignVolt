@@ -30,12 +30,15 @@ impl RTreeObject for Entry {
 pub struct SpatialIndex {
     tree: RTree<Entry>,
     revision: u64,
+    /// The farthest any stroke or effect reaches past a node box (page units).
+    max_reach: f64,
 }
 
 impl SpatialIndex {
     /// Indexes every visible node (a hidden node hides its subtree).
     pub fn build(page: &Page, revision: u64) -> Self {
         let mut entries = Vec::with_capacity(page.len());
+        let mut max_reach: f64 = 0.0;
         let mut stack: Vec<(dv_core::NodeId, Affine)> = page
             .roots()
             .iter()
@@ -54,12 +57,19 @@ impl SpatialIndex {
                 bounds: bounds_of(world, &node.geom),
                 world,
             });
+            max_reach = max_reach.max(node.effect_reach());
             stack.extend(node.children.iter().rev().map(|c| (*c, world)));
         }
         Self {
             tree: RTree::bulk_load(entries),
             revision,
+            max_reach,
         }
+    }
+
+    /// How far strokes and effects reach past node boxes: widen a visibility query by this.
+    pub fn max_reach(&self) -> f64 {
+        self.max_reach
     }
 
     /// The document revision this index was built for.

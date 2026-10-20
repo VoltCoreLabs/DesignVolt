@@ -1,12 +1,13 @@
 //! Typing into the fill and stroke fields (hex, opacity, stroke width) and the add/remove buttons.
 
-use dv_core::{Color, Paint, Shadow, Stroke};
+use dv_core::{Color, Paint, Stroke};
 use dv_ui::input::{Key, Mods};
 use dv_ui::theme::metrics::FONT_UI;
 use dv_ui::widgets::text_input::{PAD_X, TextInput};
 
-use super::ops_paint::{DEFAULT_FILL, DEFAULT_STROKE, edit_fill, edit_shadow, edit_stroke};
-use super::paint_ui::{Hit, Look, PField, Slot, field_rect, looks};
+use super::dropdown::Target;
+use super::ops_paint::{DEFAULT_FILL, DEFAULT_STROKE, edit_fill, edit_stroke};
+use super::paint_ui::{Hit, Look, PField, Slot, looks, panel, text_x};
 use super::props::{filter_number_chars, parse_number};
 use super::state::Editor;
 
@@ -50,7 +51,9 @@ impl Editor {
             Hit::Remove(slot) => self.remove_paint(slot),
             Hit::Swatch(slot) => self.toggle_picker(slot),
             Hit::Field(slot, field) => self.start_paint_edit(slot, field),
-            Hit::Style => self.cycle_stroke_style(),
+            Hit::Style => self.open_dropdown_for(Target::StrokeStyle),
+            Hit::AddEffect => self.open_dropdown_for(Target::AddEffect),
+            Hit::EffectType(i) => self.open_dropdown_for(Target::EffectType(i)),
         }
     }
 
@@ -59,23 +62,27 @@ impl Editor {
         match slot {
             Slot::Fill => edit_fill(ex, &self.selection, None, |_| Some(DEFAULT_FILL.into())),
             Slot::Stroke => edit_stroke(ex, &self.selection, None, |_| Some(DEFAULT_STROKE)),
-            Slot::Shadow => edit_shadow(ex, &self.selection, None, |_| Some(Shadow::DEFAULT)),
+            Slot::Effect(_) => {}
         }
     }
 
     fn remove_paint(&mut self, slot: Slot) {
+        if let Slot::Effect(i) = slot {
+            self.remove_effect(i);
+            return;
+        }
         self.close_picker();
         let ex = &mut self.session.borrow_mut().exec;
         match slot {
             Slot::Fill => edit_fill(ex, &self.selection, None, |_| None),
             Slot::Stroke => edit_stroke(ex, &self.selection, None, |_| None),
-            Slot::Shadow => edit_shadow(ex, &self.selection, None, |_| None),
+            Slot::Effect(_) => {}
         }
     }
 
     fn start_paint_edit(&mut self, slot: Slot, field: PField) {
-        if slot == Slot::Shadow {
-            self.start_shadow_edit(field);
+        if let Slot::Effect(i) = slot {
+            self.start_effect_edit(i, field);
             return;
         }
         let (fill, stroke) = looks(self);
@@ -104,8 +111,8 @@ impl Editor {
             return;
         };
         let text = e.input.text().to_string();
-        if e.slot == Slot::Shadow {
-            self.commit_shadow_edit(e.field, &text);
+        if let Slot::Effect(i) = e.slot {
+            self.commit_effect_edit(i, e.field, &text);
             return;
         }
         let ex = &mut self.session.borrow_mut().exec;
@@ -130,7 +137,7 @@ impl Editor {
                             ..base
                         })
                     }),
-                    Slot::Shadow => {}
+                    Slot::Effect(_) => {}
                 }
             }
             (slot, PField::Alpha) => {
@@ -149,7 +156,7 @@ impl Editor {
                             ..s
                         })
                     }),
-                    Slot::Shadow => {}
+                    Slot::Effect(_) => {}
                 }
             }
             (_, PField::ShX | PField::ShY | PField::ShBlur) => {}
@@ -167,9 +174,9 @@ impl Editor {
         let Some(e) = &self.paint_edit else {
             return false;
         };
-        let rect = field_rect(self.layout().right, e.slot, e.field);
+        let rect = panel(self).field_rect(e.slot, e.field);
         if rect.contains(self.mouse) {
-            let x = self.mouse.x - rect.x0 - 8.0 + PAD_X;
+            let x = self.mouse.x - rect.x0 - text_x(e.field) + PAD_X;
             let (font, shift) = (&self.assets.font, self.mods.shift);
             if let Some(e) = self.paint_edit.as_mut() {
                 e.input.press_at(font, x, shift);

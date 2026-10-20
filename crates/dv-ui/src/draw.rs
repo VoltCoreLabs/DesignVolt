@@ -38,6 +38,19 @@ impl Cx<'_> {
         self.scene.fill(Fill::NonZero, self.xf, c, None, &shape);
     }
 
+    /// Fills `r` with a linear gradient from the left to the right edge (or top to bottom
+    /// when `vertical`) through `stops` (offset 0..1 and color).
+    pub fn gradient(&mut self, r: Rect, radius: f64, vertical: bool, stops: &[(f32, Color)]) {
+        let (a, b) = if vertical {
+            ((r.x0, r.y0), (r.x0, r.y1))
+        } else {
+            ((r.x0, r.y0), (r.x1, r.y0))
+        };
+        let g = vello::peniko::Gradient::new_linear(a, b).with_stops(stops);
+        let shape = RoundedRect::from_rect(r, radius);
+        self.scene.fill(Fill::NonZero, self.xf, &g, None, &shape);
+    }
+
     pub fn stroke(&mut self, r: Rect, radius: f64, width: f64, c: Color) {
         let shape = RoundedRect::from_rect(r, radius);
         self.scene

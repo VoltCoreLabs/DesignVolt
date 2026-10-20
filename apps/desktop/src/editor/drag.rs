@@ -143,6 +143,10 @@ impl Editor {
                     delta,
                 }
             }
+            Interaction::PickColor => {
+                self.drag_picker();
+                Interaction::PickColor
+            }
             Interaction::LayerDrag { start, moved, id } => Interaction::LayerDrag {
                 start,
                 id,

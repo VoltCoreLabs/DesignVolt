@@ -1,13 +1,12 @@
 //! Top bar and side panels of the editor: layers of the document and properties of the
 //! selection (values are shown, editing them comes with the number-field widget).
 
-use dv_core::{Color, NodeKind};
+use dv_core::NodeKind;
 use dv_ui::draw::Cx;
 use dv_ui::icons::Icon;
 use dv_ui::theme::colors::*;
 use dv_ui::theme::metrics::*;
 use kurbo::{Point, Rect};
-use vello::peniko::Color as VColor;
 
 use super::canvas::num;
 use super::flip::Action;
@@ -77,13 +76,13 @@ fn kind_icon(kind: NodeKind) -> Icon {
 }
 
 /// Height of a section header (its divider and title) in the right panel.
-const SEC_HEAD: f64 = 30.0;
-const ROW: f64 = FIELD_H + GAP;
+pub(super) const SEC_HEAD: f64 = 30.0;
+pub(super) const ROW: f64 = FIELD_H + GAP;
 /// Tops of the sections of the right panel, from the top of the panel.
 const POS_TOP: f64 = 78.0;
 const LAYOUT_TOP: f64 = POS_TOP + SEC_HEAD + 2.0 * ROW + 4.0;
 const APPEAR_TOP: f64 = LAYOUT_TOP + SEC_HEAD + ROW + 4.0;
-const FILL_TOP: f64 = APPEAR_TOP + SEC_HEAD + ROW + 4.0;
+pub(super) const FILL_TOP: f64 = APPEAR_TOP + SEC_HEAD + ROW + 4.0;
 
 /// A cell of the two-column grid of a section: column `col`, row `row`.
 fn cell(right: Rect, top: f64, row: usize, col: usize) -> Rect {
@@ -123,7 +122,14 @@ fn action_icon(a: Action) -> Icon {
     }
 }
 
-fn section_title(cx: &mut Cx, x0: f64, x1: f64, y: f64, label: &str, divider_line: bool) {
+pub(super) fn section_title(
+    cx: &mut Cx,
+    x0: f64,
+    x1: f64,
+    y: f64,
+    label: &str,
+    divider_line: bool,
+) {
     if divider_line {
         divider(cx, x0, x1, y);
     }
@@ -422,55 +428,7 @@ pub fn right_panel(cx: &mut Cx, r: Rect, ed: &Editor) {
         }
     }
 
-    let fills_y = y0 + FILL_TOP;
-    divider(cx, x0, x1, fills_y);
-    cx.text(
-        tr(Msg::SectionFill),
-        FONT_SM,
-        x0 + 12.0,
-        fills_y + 24.0,
-        hex(text_secondary()),
-    );
-    match info.fill {
-        Fill::None => {}
-        Fill::Mixed => {
-            cx.text(
-                tr(Msg::Mixed),
-                FONT_UI,
-                x0 + 12.0,
-                fills_y + 52.0,
-                hex(text_secondary()),
-            );
-        }
-        Fill::Solid(c) => {
-            let sw = Rect::new(x0 + 12.0, fills_y + 36.0, x0 + 32.0, fills_y + 56.0);
-            cx.fill(sw, R_FIELD, VColor::from_rgba8(c.r, c.g, c.b, c.a));
-            cx.stroke(sw, R_FIELD, 1.0, alpha(overlay(), 0.2));
-            let hexs = format!("{:02X}{:02X}{:02X}", c.r, c.g, c.b);
-            cx.text(
-                &hexs,
-                FONT_UI,
-                x0 + 42.0,
-                fills_y + 50.0,
-                hex(text_primary()),
-            );
-            let pct = format!("{:.0}%", f64::from(c.a) / 255.0 * 100.0);
-            let w = cx.text_width(&pct, FONT_UI);
-            cx.text(
-                &pct,
-                FONT_UI,
-                x1 - 12.0 - w,
-                fills_y + 50.0,
-                hex(text_secondary()),
-            );
-        }
-    }
-}
-
-enum Fill {
-    None,
-    Mixed,
-    Solid(Color),
+    super::paint_ui::sections(cx, r, ed);
 }
 
 /// What the right panel shows about the current selection.
@@ -479,7 +437,6 @@ struct Info {
     title: String,
     /// Label and value pairs in two columns: X, Y, W, H, rotation, radius.
     fields: Vec<(&'static str, String, Option<f64>)>,
-    fill: Fill,
 }
 
 fn selection_info(ed: &Editor) -> Option<Info> {
@@ -503,18 +460,10 @@ fn selection_info(ed: &Editor) -> Option<Info> {
                 ("H", num(n.geom.h), Some(n.geom.h)),
                 ("R", num(n.radius), Some(n.radius)),
             ],
-            fill: n.fill.map_or(Fill::None, Fill::Solid),
         }),
         many => {
             let b = dv_geom::selection_bounds(page, &ed.selection)?;
             let mixed = tr(Msg::Mixed).to_string();
-            let first = many[0].fill;
-            let same_fill = many.iter().all(|n| n.fill == first);
-            let fill = match (same_fill, first) {
-                (true, Some(c)) => Fill::Solid(c),
-                (true, None) => Fill::None,
-                (false, _) => Fill::Mixed,
-            };
             let _ = Point::ZERO;
             Some(Info {
                 icon: Icon::Square,
@@ -527,7 +476,6 @@ fn selection_info(ed: &Editor) -> Option<Info> {
                     ("H", num(b.height()), Some(b.height())),
                     ("R", mixed, None),
                 ],
-                fill,
             })
         }
     }

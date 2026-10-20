@@ -110,6 +110,9 @@ pub struct Editor {
     pub(super) space: bool,
     pub(super) drag_key: u64,
     pub(super) clip: super::ops_clip::Clip,
+    /// A fill/stroke field being typed into, and the open color picker.
+    pub(super) paint_edit: Option<super::paint_edit::PaintEdit>,
+    pub(super) picker: Option<super::picker::Picker>,
     /// A layer name being typed, and the last row click (for double-click).
     pub(super) rename: Option<super::rename::Rename>,
     pub(super) last_row_click: Option<(NodeId, std::time::Instant)>,
@@ -147,6 +150,8 @@ impl Editor {
             space: false,
             drag_key: 0,
             clip: Default::default(),
+            paint_edit: None,
+            picker: None,
             rename: None,
             last_row_click: None,
             collapsed: Default::default(),
@@ -306,8 +311,18 @@ impl Screen for Editor {
             self.cancel_prop_edit();
         }
         let editing = self.prop_edit.as_mut().is_some_and(|e| e.input.update(dt));
+        if self.selection.is_empty() {
+            self.paint_edit = None;
+            self.picker = None;
+        }
+        let painting = self.paint_edit.as_mut().is_some_and(|e| e.input.update(dt));
         let renaming = self.rename.as_mut().is_some_and(|r| r.input.update(dt));
-        busy || saving || editing || renaming || self.time < INTRO_END || self.interaction.is_some()
+        busy || saving
+            || editing
+            || renaming
+            || painting
+            || self.time < INTRO_END
+            || self.interaction.is_some()
     }
 
     fn mouse_moved(&mut self, x: f64, y: f64) {
@@ -344,6 +359,10 @@ impl Screen for Editor {
     }
 
     fn text(&mut self, s: &str) {
+        if self.paint_edit.is_some() {
+            self.paint_text(s);
+            return;
+        }
         if self.rename.is_some() {
             self.rename_text(s);
             return;
@@ -398,6 +417,7 @@ impl Screen for Editor {
         cx.layer(layout.right, p, (24.0 * (1.0 - p as f64), 0.0), |cx| {
             panels::right_panel(cx, layout.right, self)
         });
+        self.draw_picker(&mut cx);
         let p = self.intro(4.0);
         let clip = layout.toolbar.inflate(40.0, 40.0);
         cx.layer(clip, p, (0.0, 24.0 * (1.0 - p as f64)), |cx| {

@@ -61,7 +61,7 @@ impl Editor {
     }
 
     fn remove_paint(&mut self, slot: Slot) {
-        self.picker = None;
+        self.close_picker();
         let ex = &mut self.session.borrow_mut().exec;
         match slot {
             Slot::Fill => edit_fill(ex, &self.selection, None, |_| None),
@@ -85,7 +85,7 @@ impl Editor {
         input.insert(&text);
         input.select_all();
         input.focused = true;
-        self.picker = None;
+        self.close_picker();
         self.paint_edit = Some(PaintEdit { slot, field, input });
     }
 

@@ -47,6 +47,25 @@ impl Color {
         (h, if max == 0.0 { 0.0 } else { d / max }, max)
     }
 
+    /// Hue in degrees, saturation and lightness (0..1).
+    pub fn to_hsl(self) -> (f64, f64, f64) {
+        let (h, sv, v) = self.to_hsv();
+        let l = v * (1.0 - sv / 2.0);
+        let s = if l == 0.0 || l == 1.0 {
+            0.0
+        } else {
+            (v - l) / l.min(1.0 - l)
+        };
+        (h, s, l)
+    }
+
+    pub fn from_hsl(h: f64, s: f64, l: f64, a: u8) -> Color {
+        let (s, l) = (s.clamp(0.0, 1.0), l.clamp(0.0, 1.0));
+        let v = l + s * l.min(1.0 - l);
+        let sv = if v == 0.0 { 0.0 } else { 2.0 * (1.0 - l / v) };
+        Color::from_hsv(h, sv, v, a)
+    }
+
     pub fn from_hsv(h: f64, s: f64, v: f64, a: u8) -> Color {
         let (s, v) = (s.clamp(0.0, 1.0), v.clamp(0.0, 1.0));
         let h = h.rem_euclid(360.0) / 60.0;
@@ -83,6 +102,22 @@ mod tests {
         assert_eq!(Color::from_hex("gg0000"), None);
         assert_eq!(Color::from_hex("ёёё"), None);
         assert_eq!(Color::rgb(1, 171, 255).to_hex(), "01ABFF");
+    }
+
+    #[test]
+    fn hsl_matches_known_colors_and_roundtrips() {
+        let (h, s, l) = Color::rgb(255, 0, 0).to_hsl();
+        assert_eq!((h, s, l), (0.0, 1.0, 0.5));
+        let (_, s, l) = Color::rgb(255, 255, 255).to_hsl();
+        assert_eq!((s, l), (0.0, 1.0));
+        for c in [
+            Color::rgb(12, 200, 99),
+            Color::rgb(90, 30, 160),
+            Color::rgb(7, 7, 7),
+        ] {
+            let (h, s, l) = c.to_hsl();
+            assert_eq!(Color::from_hsl(h, s, l, 255), c);
+        }
     }
 
     #[test]

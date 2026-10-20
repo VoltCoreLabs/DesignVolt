@@ -16,6 +16,7 @@ pub enum Icon {
     Lock,
     Search,
     Plus,
+    Eyedropper,
     Share,
     Home,
     Minimize,
@@ -85,6 +86,10 @@ const SOURCES: &[(Icon, &str)] = &[
     (
         Icon::Search,
         include_str!("../../../assets/icons/phosphor/magnifying-glass.svg"),
+    ),
+    (
+        Icon::Eyedropper,
+        include_str!("../../../assets/icons/phosphor/eyedropper.svg"),
     ),
     (
         Icon::Plus,

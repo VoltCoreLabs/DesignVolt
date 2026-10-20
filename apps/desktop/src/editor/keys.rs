@@ -20,8 +20,14 @@ impl Editor {
             self.paint_key(key, mods);
             return;
         }
+        if self.pick_edit.is_some() {
+            self.pick_key(key, mods);
+            return;
+        }
         if self.picker.is_some() && key == Key::Escape {
-            self.picker = None;
+            if self.eyedrop.take().is_none() {
+                self.close_picker();
+            }
             return;
         }
         if self.rename.is_some() {

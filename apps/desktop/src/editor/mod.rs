@@ -1,4 +1,5 @@
 mod canvas;
+mod color_fmt;
 mod drag;
 mod flip;
 mod handles;
@@ -16,7 +17,11 @@ mod paint_edit;
 mod paint_ui;
 mod panels;
 mod picker;
+mod picker_draw;
+mod picker_edit;
+mod picker_layout;
 mod props;
+mod recent;
 mod rename;
 mod reparent;
 mod session;

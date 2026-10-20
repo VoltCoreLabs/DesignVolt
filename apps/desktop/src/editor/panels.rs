@@ -449,7 +449,7 @@ fn selection_info(ed: &Editor) -> Option<Info> {
         .collect();
     match nodes.as_slice() {
         [] => None,
-        [n] => Some(Info {
+        [n] if n.kind != NodeKind::Group => Some(Info {
             icon: kind_icon(n.kind),
             title: n.name.clone(),
             fields: vec![
@@ -465,9 +465,14 @@ fn selection_info(ed: &Editor) -> Option<Info> {
             let b = dv_geom::selection_bounds(page, &ed.selection)?;
             let mixed = tr(Msg::Mixed).to_string();
             let _ = Point::ZERO;
+            // A group (alone or among others) is measured by what is inside it.
+            let (icon, title) = match many {
+                [n] => (kind_icon(n.kind), n.name.clone()),
+                _ => (Icon::Square, objects_count(many.len() as u64)),
+            };
             Some(Info {
-                icon: Icon::Square,
-                title: objects_count(many.len() as u64),
+                icon,
+                title,
                 fields: vec![
                     ("X", num(b.x0), Some(b.x0)),
                     ("Y", num(b.y0), Some(b.y0)),

@@ -1040,3 +1040,29 @@ fn the_whole_selection_box_drags_several_shapes() {
     assert_eq!(geom(&ed, b).0, bx + 20.0);
     assert_eq!(ed.selection.len(), 2);
 }
+
+#[test]
+fn a_selected_group_shows_and_edits_its_bounds() {
+    let mut ed = editor();
+    let a = draw_rect(&mut ed, (-250.0, 0.0), (-200.0, 50.0));
+    let b = draw_rect(&mut ed, (-100.0, 20.0), (-50.0, 90.0));
+    press_key(&mut ed, Key::SelectAll, CTRL);
+    press_key(&mut ed, Key::Char('g'), CTRL);
+    assert_eq!(ed.selection.len(), 1);
+    let (x0, y0) = (geom(&ed, a).0, geom(&ed, a).1);
+    let w = geom(&ed, b).0 + geom(&ed, b).2 - x0;
+    assert_eq!(super::panels::field_value(&ed, 0), Some(x0));
+    assert_eq!(super::panels::field_value(&ed, 1), Some(y0));
+    assert_eq!(super::panels::field_value(&ed, 3), Some(w));
+    assert!(super::panels::field_value(&ed, 4).is_some());
+    assert_eq!(super::panels::field_value(&ed, 2), None);
+    let id = ed.selection.clone();
+    super::ops::set_field(
+        &mut ed.session.borrow_mut().exec,
+        &id,
+        super::ops::Field::X,
+        x0 + 40.0,
+    );
+    assert_eq!(geom(&ed, a).0, x0 + 40.0);
+    assert_eq!(geom(&ed, b).0 + geom(&ed, b).2 - geom(&ed, a).0, w);
+}

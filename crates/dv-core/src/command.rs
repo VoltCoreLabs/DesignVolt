@@ -46,6 +46,12 @@ pub enum Command {
         id: NodeId,
         index: usize,
     },
+    /// Moves a node (with its subtree) under another parent, at `index` among its children.
+    Reparent {
+        id: NodeId,
+        parent: Option<NodeId>,
+        index: usize,
+    },
     /// Several commands that undo as one.
     Batch(Vec<Command>),
 }
@@ -85,6 +91,7 @@ impl Document {
             }
             Command::SetProps { id, props } => self.set_props(*id, props),
             Command::Reorder { id, index } => self.reorder(*id, *index),
+            Command::Reparent { id, parent, index } => self.reparent(*id, *parent, *index),
             Command::Batch(cmds) => self.batch(cmds),
         }
     }
@@ -204,6 +211,41 @@ impl Document {
         list.remove(old);
         list.insert(index.min(list.len()), id);
         Ok(Command::Reorder { id, index: old })
+    }
+
+    fn reparent(
+        &mut self,
+        id: NodeId,
+        parent: Option<NodeId>,
+        index: usize,
+    ) -> Result<Command, CommandError> {
+        let old_parent = self
+            .page()
+            .node(id)
+            .ok_or(CommandError::MissingNode(id))?
+            .parent;
+        if let Some(p) = parent {
+            if !self.page().contains(p) {
+                return Err(CommandError::InvalidParent(p));
+            }
+            if self.page().is_inside(p, id) {
+                return Err(CommandError::InvalidParent(p));
+            }
+        }
+        let page = self.page_mut();
+        let old_list = siblings_mut(page, old_parent);
+        let old_index = old_list.iter().position(|x| *x == id).unwrap_or(0);
+        old_list.remove(old_index);
+        let list = siblings_mut(page, parent);
+        list.insert(index.min(list.len()), id);
+        if let Some(n) = page.nodes.get_mut(&id) {
+            n.parent = parent;
+        }
+        Ok(Command::Reparent {
+            id,
+            parent: old_parent,
+            index: old_index,
+        })
     }
 
     fn batch(&mut self, cmds: &[Command]) -> Result<Command, CommandError> {
@@ -339,6 +381,34 @@ mod tests {
         assert_eq!(doc.page().roots(), [b, c, a]);
         doc.apply(&inv).unwrap();
         assert_eq!(doc.page().roots(), [a, b, c]);
+    }
+
+    #[test]
+    fn reparent_moves_between_parents_undoes_and_rejects_cycles() {
+        let mut doc = Document::default();
+        let f = create(&mut doc, "f", None);
+        let g = create(&mut doc, "g", Some(f));
+        let a = create(&mut doc, "a", None);
+        let inv = doc
+            .apply(&Command::Reparent {
+                id: a,
+                parent: Some(f),
+                index: 0,
+            })
+            .unwrap();
+        assert_eq!(doc.page().roots(), [f]);
+        assert_eq!(doc.page().siblings(Some(f)), [a, g]);
+        assert_eq!(doc.page().node(a).unwrap().parent, Some(f));
+        doc.apply(&inv).unwrap();
+        assert_eq!(doc.page().roots(), [f, a]);
+        assert_eq!(doc.page().node(a).unwrap().parent, None);
+        let bad = Command::Reparent {
+            id: f,
+            parent: Some(g),
+            index: 0,
+        };
+        assert_eq!(doc.apply(&bad), Err(CommandError::InvalidParent(g)));
+        assert_eq!(doc.page().roots(), [f, a]);
     }
 
     #[test]

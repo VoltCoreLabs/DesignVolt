@@ -394,6 +394,9 @@ impl Editor {
                     self.toggle_selected(id);
                 }
                 self.session.borrow_mut().exec.break_merge();
+                if moved {
+                    self.drop_selection(self.world_mouse());
+                }
             }
             Interaction::Resize { .. } | Interaction::ResizeOne(_) | Interaction::Rotate { .. } => {
                 self.session.borrow_mut().exec.break_merge();

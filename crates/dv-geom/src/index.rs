@@ -98,10 +98,20 @@ impl SpatialIndex {
         p: Point,
         accept: impl Fn(&dv_core::Node) -> bool,
     ) -> Option<NodeId> {
+        self.pick_where_id(page, p, |_, n| accept(n))
+    }
+
+    /// Like `pick_where`, with the candidate's id available to `accept`.
+    pub fn pick_where_id(
+        &self,
+        page: &Page,
+        p: Point,
+        accept: impl Fn(NodeId, &dv_core::Node) -> bool,
+    ) -> Option<NodeId> {
         let at = AABB::from_point([p.x, p.y]);
         self.tree
             .locate_in_envelope_intersecting(at)
-            .filter(|e| page.node(e.id).is_some_and(&accept) && exact_hit(page, e, p))
+            .filter(|e| page.node(e.id).is_some_and(|n| accept(e.id, n)) && exact_hit(page, e, p))
             .max_by_key(|e| e.order)
             .map(|e| e.id)
     }

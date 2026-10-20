@@ -106,6 +106,7 @@ pub struct Editor {
     pub(super) interaction: Option<Interaction>,
     pub(super) space: bool,
     pub(super) drag_key: u64,
+    pub(super) clip: super::ops_clip::Clip,
     /// How long the last canvas paint took (ms) and what it drew.
     pub(super) paint_ms: Cell<f32>,
     pub(super) paint_stats: Cell<PaintStats>,
@@ -137,6 +138,7 @@ impl Editor {
             interaction: None,
             space: false,
             drag_key: 0,
+            clip: Default::default(),
             paint_ms: Cell::new(0.0),
             paint_stats: Cell::new(PaintStats::default()),
             next: None,

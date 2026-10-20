@@ -579,7 +579,7 @@ impl ApplicationHandler for App {
 
 /// Letter, digit, `=` or `-` of a physical key (independent of the keyboard layout).
 fn physical_char(key: PhysicalKey) -> Option<char> {
-    const KEYS: [(KeyCode, char); 38] = [
+    const KEYS: [(KeyCode, char); 40] = [
         (KeyCode::KeyA, 'a'),
         (KeyCode::KeyB, 'b'),
         (KeyCode::KeyC, 'c'),
@@ -618,6 +618,8 @@ fn physical_char(key: PhysicalKey) -> Option<char> {
         (KeyCode::Digit9, '9'),
         (KeyCode::Equal, '='),
         (KeyCode::Minus, '-'),
+        (KeyCode::BracketLeft, '['),
+        (KeyCode::BracketRight, ']'),
     ];
     let PhysicalKey::Code(code) = key else {
         return None;

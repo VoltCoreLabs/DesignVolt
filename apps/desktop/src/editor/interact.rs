@@ -100,6 +100,9 @@ impl Editor {
         if self.press_picker() {
             return;
         }
+        if self.press_stroke_pop() {
+            return;
+        }
         if self.press_in_paint_edit() {
             return;
         }
@@ -224,6 +227,14 @@ impl Editor {
             .map(|id| page.outer_group(id))
     }
 
+    /// The topmost shape under the point, not widened to its group (Ctrl+click).
+    fn pick_inner(&self, world: Point) -> Option<NodeId> {
+        let s = self.session.borrow();
+        self.index.pick_where(s.exec.doc().page(), world, |n| {
+            !(n.kind == NodeKind::Frame && n.parent.is_none())
+        })
+    }
+
     fn press_select(&mut self, mods: Mods, world: Point, cp: Point) {
         if let Some(f) = self.selection_frame() {
             if let Some(h) = handle_at_quad(&f.quad, cp) {
@@ -240,11 +251,17 @@ impl Editor {
             self.start_move(world, cp, toggle);
             return;
         }
-        if !mods.shift && self.in_selection_box(world) {
+        if !mods.shift && !mods.ctrl && self.in_selection_box(world) {
             self.start_move(world, cp, None);
             return;
         }
-        match self.pick_body(world) {
+        // Ctrl picks the shape itself, even inside a group or a frame.
+        let picked = if mods.ctrl {
+            self.pick_inner(world)
+        } else {
+            self.pick_body(world)
+        };
+        match picked {
             Some(id) => {
                 let toggle = self.apply_pick(id, mods.shift);
                 self.start_move(world, cp, toggle);

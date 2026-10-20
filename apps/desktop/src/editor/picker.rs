@@ -100,6 +100,7 @@ impl Editor {
         };
         let (h, s, v) = color.to_hsv();
         self.commit_paint_edit();
+        self.stroke_pop = false;
         self.picker = Some(Picker {
             slot,
             h,

@@ -18,8 +18,8 @@ use std::fmt;
 use crate::paint::Paint;
 
 use crate::document::{
-    Color, Document, Effect, EffectKind, Geometry, Node, NodeId, NodeKind, Page, Stroke,
-    StrokeStyle,
+    Color, Document, Effect, EffectKind, Geometry, LineCap, LineJoin, Node, NodeId, NodeKind, Page,
+    Stroke, StrokePos, StrokeStyle,
 };
 
 const MAGIC: &str = "designvolt-document";
@@ -110,7 +110,18 @@ pub fn to_text(doc: &Document) -> String {
             let flags = u8::from(n.visible) | (u8::from(n.locked) << 1);
             let fill = n.fill.as_ref().map_or("-".to_string(), Paint::to_code);
             let stroke = n.stroke.map_or("-".to_string(), |s| {
-                format!("{}:{}:{}", color_code(s.color), s.width, s.style.code())
+                format!(
+                    "{}:{}:{}:{}:{}:{}:{}:{}:{}",
+                    color_code(s.color),
+                    s.width,
+                    s.style.code(),
+                    s.dash,
+                    s.gap,
+                    s.join.code(),
+                    s.miter_angle,
+                    s.cap.code(),
+                    s.position.code()
+                )
             });
             let effects = if n.effects.is_empty() {
                 "-".to_string()
@@ -287,14 +298,28 @@ fn parse_node<'a>(
                 p.next().unwrap_or(""),
                 p.next().ok_or_else(|| err(line, "bad stroke"))?,
             );
-            Some(Stroke {
-                color: color_from(c).ok_or_else(|| err(line, "bad stroke color"))?,
-                width: num(w, "stroke width")?,
-                style: p
-                    .next()
-                    .and_then(StrokeStyle::from_code)
-                    .unwrap_or_default(),
-            })
+            let mut st = Stroke::new(
+                color_from(c).ok_or_else(|| err(line, "bad stroke color"))?,
+                num(w, "stroke width")?,
+            );
+            // Later columns are optional: older files stop after the style.
+            let rest: Vec<&str> = p.collect();
+            let at = |i: usize| rest.get(i).copied().unwrap_or("");
+            st.style = StrokeStyle::from_code(at(0)).unwrap_or_default();
+            let n = |i: usize, d: f64| {
+                at(i)
+                    .parse::<f64>()
+                    .ok()
+                    .filter(|v| v.is_finite())
+                    .unwrap_or(d)
+            };
+            st.dash = n(1, st.dash);
+            st.gap = n(2, st.gap);
+            st.join = LineJoin::from_code(at(3)).unwrap_or_default();
+            st.miter_angle = n(4, st.miter_angle);
+            st.cap = LineCap::from_code(at(5)).unwrap_or_default();
+            st.position = StrokePos::from_code(at(6)).unwrap_or_default();
+            Some(st)
         }
     };
     let name = unescape(f.next().unwrap_or(""));
@@ -369,6 +394,12 @@ mod tests {
                 },
                 width: 2.5,
                 style: StrokeStyle::Dashed,
+                dash: 7.5,
+                gap: 3.0,
+                join: LineJoin::Round,
+                miter_angle: 40.0,
+                cap: LineCap::Square,
+                position: StrokePos::Outside,
             })),
             opacity: Some(0.4),
             effects: Some(vec![
@@ -395,7 +426,13 @@ mod tests {
         let n = back.page().node(a).unwrap();
         assert!(n.locked && !n.visible && n.fill.is_none());
         assert_eq!(n.stroke.unwrap().width, 2.5);
-        assert_eq!(n.stroke.unwrap().style, StrokeStyle::Dashed);
+        let st = n.stroke.unwrap();
+        assert_eq!(st.style, StrokeStyle::Dashed);
+        assert_eq!((st.dash, st.gap, st.miter_angle), (7.5, 3.0, 40.0));
+        assert_eq!(
+            (st.join, st.cap, st.position),
+            (LineJoin::Round, LineCap::Square, StrokePos::Outside)
+        );
         assert_eq!(
             (n.opacity, n.effects.len(), n.effects[0].blur),
             (0.4, 2, 12.0)

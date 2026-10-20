@@ -1066,3 +1066,24 @@ fn a_selected_group_shows_and_edits_its_bounds() {
     assert_eq!(geom(&ed, a).0, x0 + 40.0);
     assert_eq!(geom(&ed, b).0 + geom(&ed, b).2 - geom(&ed, a).0, w);
 }
+
+#[test]
+fn ctrl_click_picks_a_shape_inside_a_group_while_a_plain_click_picks_the_group() {
+    let mut ed = editor();
+    let a = draw_rect(&mut ed, (-250.0, 0.0), (-200.0, 50.0));
+    let b = draw_rect(&mut ed, (-100.0, 0.0), (-50.0, 50.0));
+    press_key(&mut ed, Key::SelectAll, CTRL);
+    press_key(&mut ed, Key::Char('g'), CTRL);
+    let group = ed.selection[0];
+    ed.selection.clear();
+    mv(&mut ed, -225.0, 25.0);
+    ed.click(NONE);
+    ed.mouse_up();
+    assert_eq!(ed.selection, [group], "a plain click takes the whole group");
+    ed.selection.clear();
+    mv(&mut ed, -75.0, 25.0);
+    ed.click(CTRL);
+    ed.mouse_up();
+    assert_eq!(ed.selection, [b], "Ctrl+click takes the shape inside");
+    let _ = a;
+}

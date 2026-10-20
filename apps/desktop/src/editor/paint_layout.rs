@@ -25,6 +25,10 @@ pub enum PField {
     ShX,
     ShY,
     ShBlur,
+    /// Fields of the stroke settings window.
+    Dash,
+    Gap,
+    Miter,
 }
 
 /// What a click in the sections hits.
@@ -36,6 +40,8 @@ pub enum Hit {
     Field(Slot, PField),
     /// The drop-down of the stroke style.
     Style,
+    /// The gear that opens the stroke settings window.
+    StrokeSettings,
     /// The drop-down that chooses what kind of effect to add.
     AddEffect,
     /// The drop-down of the kind of the `i`-th effect.
@@ -168,6 +174,12 @@ impl Panel {
     pub fn style_rect(&self) -> Rect {
         let r = self.row(Slot::Stroke);
         Rect::new(r.x0, r.y0 + ROW, r.x0 + STYLE_W, r.y0 + ROW + FIELD_H)
+    }
+
+    /// The gear button next to the style drop-down.
+    pub fn settings_rect(&self) -> Rect {
+        let s = self.style_rect();
+        Rect::new(s.x1 + GAP_X, s.y0, s.x1 + GAP_X + FIELD_H, s.y1)
     }
 
     /// A point of the section's swatch, to keep the picker beside it.

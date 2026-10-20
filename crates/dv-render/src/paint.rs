@@ -1,10 +1,10 @@
 //! Page painting with culling (R-tree query) and level-of-detail skipping.
 
-use dv_core::{Color, NodeKind, Page, Paint};
+use dv_core::{NodeKind, Page, Paint};
 use dv_geom::SpatialIndex;
 use vello::Scene;
 use vello::kurbo::{Affine, Ellipse, Rect, RoundedRect};
-use vello::peniko::{BlendMode, Color as VColor, Fill};
+use vello::peniko::{BlendMode, Fill};
 
 use crate::viewport::Viewport;
 
@@ -20,10 +20,6 @@ pub struct PaintStats {
     pub candidates: usize,
     /// Nodes actually sent to the scene.
     pub drawn: usize,
-}
-
-fn color(c: Color) -> VColor {
-    VColor::from_rgba8(c.r, c.g, c.b, c.a)
 }
 
 /// Paints the visible nodes of `page` into `scene`. `size` is the canvas size in px and `base`
@@ -129,15 +125,10 @@ fn fill_and_stroke(
     }
     crate::effects::draw_inner_shadows(scene, world, shape, node);
     if let Some(stroke) = node.stroke {
-        scene.stroke(
-            &crate::effects::line(&stroke),
-            world,
-            color(stroke.color),
-            None,
-            shape,
-        );
+        crate::effects::draw_stroke(scene, world, shape, &stroke);
     }
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;

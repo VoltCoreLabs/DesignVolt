@@ -92,6 +92,9 @@ pub enum Interaction {
 impl Editor {
     pub(super) fn press(&mut self, mods: Mods) {
         self.refresh_index();
+        if self.press_in_rename() {
+            return;
+        }
         if self.press_in_prop_edit() {
             return;
         }
@@ -141,6 +144,10 @@ impl Editor {
                 self.prune_selection();
             } else if mods.shift {
                 self.toggle_selected(row.id);
+            } else if self.is_row_double_click(row.id) {
+                self.selection = vec![row.id];
+                let text_x = r.x0 + 26.0 + row.depth as f64 * 14.0 + 22.0;
+                self.start_rename(row.id, text_x);
             } else {
                 if !self.selection.contains(&row.id) {
                     self.selection = vec![row.id];

@@ -35,6 +35,8 @@ pub enum Interaction {
         /// Started with the middle button, so only its release ends the pan.
         by_middle: bool,
     },
+    /// Dragging in the color picker.
+    PickColor,
     /// Dragging selected layers by their rows in the layers panel.
     LayerDrag {
         start: Point,
@@ -92,6 +94,16 @@ pub enum Interaction {
 impl Editor {
     pub(super) fn press(&mut self, mods: Mods) {
         self.refresh_index();
+        if self.press_picker() {
+            return;
+        }
+        if self.press_in_paint_edit() {
+            return;
+        }
+        if let Some(hit) = self.paint_hit() {
+            self.paint_click(hit);
+            return;
+        }
         if self.press_in_rename() {
             return;
         }
@@ -425,6 +437,7 @@ impl Editor {
             Interaction::Resize { .. } | Interaction::ResizeOne(_) | Interaction::Rotate { .. } => {
                 self.session.borrow_mut().exec.break_merge();
             }
+            Interaction::PickColor => self.release_picker(),
             Interaction::LayerDrag { moved, id, .. } => {
                 if moved {
                     self.finish_layer_drag();
@@ -515,7 +528,9 @@ impl Editor {
                 }
                 Interaction::Rotate { .. } => Cursor::Rotate,
                 Interaction::Create { .. } => Cursor::Crosshair,
-                Interaction::LayerDrag { .. } | Interaction::Marquee { .. } => Cursor::Default,
+                Interaction::LayerDrag { .. }
+                | Interaction::PickColor
+                | Interaction::Marquee { .. } => Cursor::Default,
             };
         }
         let l = self.layout();

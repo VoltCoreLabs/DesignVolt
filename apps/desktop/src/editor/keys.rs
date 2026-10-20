@@ -16,6 +16,14 @@ pub const STRESS_COUNT: usize = 10_000;
 
 impl Editor {
     pub(super) fn handle_key(&mut self, key: Key, mods: Mods) {
+        if self.paint_edit.is_some() {
+            self.paint_key(key, mods);
+            return;
+        }
+        if self.picker.is_some() && key == Key::Escape {
+            self.picker = None;
+            return;
+        }
         if self.rename.is_some() {
             self.rename_key(key, mods);
             return;

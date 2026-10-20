@@ -3,6 +3,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod color;
 pub mod command;
 pub mod document;
 pub mod history;

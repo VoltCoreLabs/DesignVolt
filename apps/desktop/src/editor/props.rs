@@ -35,7 +35,7 @@ pub fn filter_number_chars(s: &str) -> String {
 }
 
 /// A value as shown while editing: up to three decimals, no trailing zeros.
-fn edit_text(v: f64) -> String {
+pub(super) fn edit_text(v: f64) -> String {
     let s = format!("{v:.3}");
     let s = s.trim_end_matches('0').trim_end_matches('.');
     if s == "-0" || s.is_empty() {

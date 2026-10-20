@@ -253,7 +253,7 @@ impl Editor {
     pub(super) fn selection_frame(&self) -> Option<SelFrame> {
         let s = self.session.borrow();
         let page = s.exec.doc().page();
-        let tops = page.without_descendants(&self.selection);
+        let tops = page.geo_tops(&self.selection);
         if let [id] = tops[..] {
             let corners = dv_geom::world_corners(page, id)?;
             let quad = corners.map(|p| s.vp.to_screen(p));

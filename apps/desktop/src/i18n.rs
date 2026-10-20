@@ -110,6 +110,7 @@ pub enum Msg {
     NameFrame,
     NameRectangle,
     NameEllipse,
+    NameGroup,
     EmptyCanvasHint,
     NothingSelected,
     Mixed,
@@ -204,6 +205,7 @@ pub fn tr(m: Msg) -> &'static str {
         Msg::NameFrame => pick("Фрейм", "Frame"),
         Msg::NameRectangle => pick("Прямоугольник", "Rectangle"),
         Msg::NameEllipse => pick("Эллипс", "Ellipse"),
+        Msg::NameGroup => pick("Группа", "Group"),
         Msg::EmptyCanvasHint => pick(
             "Нажмите R или O и потяните по холсту, чтобы нарисовать фигуру",
             "Press R or O and drag on the canvas to draw a shape",

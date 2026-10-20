@@ -54,6 +54,7 @@ pub(crate) fn bounds_of(world: Affine, g: &Geometry) -> Rect {
 pub fn hit_local(node: &Node, p: Point) -> bool {
     let g = &node.geom;
     match node.kind {
+        NodeKind::Group => false,
         NodeKind::Frame | NodeKind::Rectangle => {
             p.x >= 0.0 && p.y >= 0.0 && p.x <= g.w && p.y <= g.h
         }
@@ -83,7 +84,8 @@ pub fn world_corners(page: &Page, id: NodeId) -> Option<[Point; 4]> {
 
 /// Union of the bounds of `ids` (unknown ids are skipped).
 pub fn selection_bounds(page: &Page, ids: &[NodeId]) -> Option<Rect> {
-    ids.iter()
+    page.geo_tops(ids)
+        .iter()
         .filter_map(|id| world_bounds(page, *id))
         .reduce(|a, b| a.union(b))
 }

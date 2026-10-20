@@ -53,6 +53,7 @@ pub fn paint_page(
         let world = view * e.world;
         let rect = Rect::new(0.0, 0.0, g.w, g.h);
         match node.kind {
+            NodeKind::Group => {}
             NodeKind::Ellipse => {
                 let shape = Ellipse::new((g.w / 2.0, g.h / 2.0), (g.w / 2.0, g.h / 2.0), 0.0);
                 fill_and_stroke(scene, world, &shape, node);

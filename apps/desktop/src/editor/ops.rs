@@ -15,10 +15,11 @@ const DUPLICATE_OFFSET: f64 = 20.0;
 /// A node with the default look of its kind.
 pub fn new_node(kind: NodeKind, name: String, geom: Geometry) -> Node {
     let mut node = Node::new(kind, name, geom);
-    node.fill = Some(match kind {
-        NodeKind::Frame => Color::rgb(255, 255, 255),
-        NodeKind::Rectangle | NodeKind::Ellipse => Color::rgb(217, 217, 217),
-    });
+    node.fill = match kind {
+        NodeKind::Frame => Some(Color::rgb(255, 255, 255)),
+        NodeKind::Rectangle | NodeKind::Ellipse => Some(Color::rgb(217, 217, 217)),
+        NodeKind::Group => None,
+    };
     node
 }
 
@@ -90,7 +91,7 @@ pub fn set_geometry(ex: &mut Executor, key: u64, label: &'static str, list: &[(N
 pub fn nudge(ex: &mut Executor, ids: &[NodeId], dx: f64, dy: f64) {
     let page = ex.doc().page();
     let list: Vec<(NodeId, Geometry)> = page
-        .without_descendants(ids)
+        .geo_tops(ids)
         .into_iter()
         .filter_map(|id| {
             let g = page.node(id)?.geom;
@@ -291,7 +292,7 @@ pub fn set_field(ex: &mut Executor, ids: &[NodeId], field: Field, value: f64) ->
     }
     let page = ex.doc().page();
     let tops: Vec<NodeId> = page
-        .without_descendants(ids)
+        .geo_tops(ids)
         .into_iter()
         .filter(|id| page.contains(*id))
         .collect();

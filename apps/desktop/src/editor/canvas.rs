@@ -107,6 +107,21 @@ fn status_line(ed: &Editor, cx: &mut Cx, vp: &Viewport, count: usize, size: (f64
 /// Outline of a node (follows its rotation) in canvas screen space.
 fn outline(cx: &mut Cx, page: &Page, vp: &Viewport, id: NodeId, width: f64, color: u32, a: f32) {
     let Some(n) = page.node(id) else { return };
+    if n.kind == NodeKind::Group {
+        if let Some(b) = dv_geom::selection_bounds(page, &[id]) {
+            let (p0, p1) = (
+                vp.to_screen(Point::new(b.x0, b.y0)),
+                vp.to_screen(Point::new(b.x1, b.y1)),
+            );
+            cx.stroke(
+                Rect::new(p0.x, p0.y, p1.x, p1.y),
+                0.0,
+                width,
+                alpha(color, a),
+            );
+        }
+        return;
+    }
     let m = vp.transform() * world_affine(page, id);
     let g = &n.geom;
     let [a0, a1, a2, a3] =

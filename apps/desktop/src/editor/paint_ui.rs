@@ -118,6 +118,9 @@ impl Editor {
         if stroke != Look::None && at(p.style_rect()) {
             return Some(Hit::Style);
         }
+        if stroke != Look::None && at(p.settings_rect()) {
+            return Some(Hit::StrokeSettings);
+        }
         for (slot, has) in [
             (Slot::Fill, fill != Look::None),
             (Slot::Stroke, stroke != Look::None),
@@ -273,7 +276,14 @@ fn swatch(cx: &mut Cx, r: Rect, p: &Paint) {
     cx.stroke(r, R_FIELD, 1.0, alpha(overlay(), 0.2));
 }
 
-fn editable(cx: &mut Cx, ed: &Editor, key: (Slot, PField), r: Rect, value: &str, suffix: &str) {
+pub(super) fn editable(
+    cx: &mut Cx,
+    ed: &Editor,
+    key: (Slot, PField),
+    r: Rect,
+    value: &str,
+    suffix: &str,
+) {
     match &ed.paint_edit {
         Some(e) if (e.slot, e.field) == key => {
             cx.fill(r, R_FIELD, hex(bg_raised()));
@@ -437,6 +447,21 @@ pub fn sections(cx: &mut Cx, _right: Rect, ed: &Editor) {
     if let Some(s) = stroke_style_look(ed) {
         let r = p.style_rect();
         drop_button(cx, r, style_name(s), r.contains(ed.mouse));
+        let g = p.settings_rect();
+        let bg = if ed.stroke_pop || g.contains(ed.mouse) {
+            hex(bg_hover())
+        } else {
+            hex(bg_raised())
+        };
+        cx.fill(g, R_FIELD, bg);
+        let c = g.center();
+        cx.icon(
+            Icon::Gear,
+            c.x - 8.0,
+            c.y - 8.0,
+            16.0,
+            hex(text_secondary()),
+        );
     }
     effects(cx, ed, &p);
 }

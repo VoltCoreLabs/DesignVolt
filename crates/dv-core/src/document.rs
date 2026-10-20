@@ -63,11 +63,120 @@ impl StrokeStyle {
     }
 }
 
+/// How two segments of a stroke meet at a corner.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum LineJoin {
+    #[default]
+    Miter,
+    Round,
+    Bevel,
+}
+
+impl LineJoin {
+    pub const ALL: [LineJoin; 3] = [LineJoin::Miter, LineJoin::Round, LineJoin::Bevel];
+
+    pub fn code(self) -> &'static str {
+        match self {
+            LineJoin::Miter => "miter",
+            LineJoin::Round => "round",
+            LineJoin::Bevel => "bevel",
+        }
+    }
+
+    pub fn from_code(s: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|k| k.code() == s)
+    }
+}
+
+/// The ends of dashes and of open lines.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum LineCap {
+    #[default]
+    Butt,
+    Round,
+    Square,
+}
+
+impl LineCap {
+    pub const ALL: [LineCap; 3] = [LineCap::Butt, LineCap::Round, LineCap::Square];
+
+    pub fn code(self) -> &'static str {
+        match self {
+            LineCap::Butt => "butt",
+            LineCap::Round => "round",
+            LineCap::Square => "square",
+        }
+    }
+
+    pub fn from_code(s: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|k| k.code() == s)
+    }
+}
+
+/// Where the line of a stroke lies relative to the edge of the shape.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum StrokePos {
+    #[default]
+    Center,
+    Inside,
+    Outside,
+}
+
+impl StrokePos {
+    pub const ALL: [StrokePos; 3] = [StrokePos::Inside, StrokePos::Center, StrokePos::Outside];
+
+    pub fn code(self) -> &'static str {
+        match self {
+            StrokePos::Center => "center",
+            StrokePos::Inside => "inside",
+            StrokePos::Outside => "outside",
+        }
+    }
+
+    pub fn from_code(s: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|k| k.code() == s)
+    }
+}
+
+/// Miter angle that Figma starts with (a miter limit of 4).
+pub const DEFAULT_MITER_ANGLE: f64 = 28.96;
+
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub struct Stroke {
     pub color: Color,
     pub width: f64,
     pub style: StrokeStyle,
+    /// Length of a dash and of the gap after it (dashed style).
+    pub dash: f64,
+    pub gap: f64,
+    pub join: LineJoin,
+    /// Corners sharper than this angle (degrees) are cut off instead of pointed.
+    pub miter_angle: f64,
+    pub cap: LineCap,
+    pub position: StrokePos,
+}
+
+impl Stroke {
+    /// A solid, centered stroke with the default dash, join and cap.
+    pub const fn new(color: Color, width: f64) -> Self {
+        Self {
+            color,
+            width,
+            style: StrokeStyle::Solid,
+            dash: 10.0,
+            gap: 10.0,
+            join: LineJoin::Miter,
+            miter_angle: DEFAULT_MITER_ANGLE,
+            cap: LineCap::Butt,
+            position: StrokePos::Center,
+        }
+    }
+
+    /// The miter limit that matches the miter angle (the ratio of miter length to width).
+    pub fn miter_limit(&self) -> f64 {
+        let a = self.miter_angle.clamp(1.0, 180.0).to_radians();
+        1.0 / (a / 2.0).sin()
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]

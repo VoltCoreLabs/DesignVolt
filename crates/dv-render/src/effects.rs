@@ -1,8 +1,11 @@
 //! Look effects: layer opacity, drop shadow and stroke styles.
 
-use dv_core::{Color, EffectKind, Node, NodeKind, Page, Stroke as DStroke, StrokeStyle};
+use dv_core::{
+    Color, EffectKind, LineCap, LineJoin, Node, NodeKind, Page, Stroke as DStroke, StrokePos,
+    StrokeStyle,
+};
 use vello::Scene;
-use vello::kurbo::{Affine, Cap, Rect, Shape, Stroke};
+use vello::kurbo::{Affine, Cap, Join, Rect, Shape, Stroke};
 use vello::peniko::{BlendMode, Color as VColor, Compose, Fill, Mix};
 
 /// The opacity of a node together with all the groups and frames above it.
@@ -112,15 +115,66 @@ pub fn draw_blurred(scene: &mut Scene, world: Affine, node: &Node, blur: f64) {
     );
 }
 
-/// The Vello stroke for the document stroke: width, dashes and caps.
+/// The Vello stroke for the document stroke: width, dashes, joins and caps. Inside and
+/// outside strokes are drawn twice as wide and cut to the right side by `draw_stroke`.
 pub fn line(s: &DStroke) -> Stroke {
-    let w = s.width;
+    let w = if s.position == StrokePos::Center {
+        s.width
+    } else {
+        s.width * 2.0
+    };
+    let join = match s.join {
+        LineJoin::Miter => Join::Miter,
+        LineJoin::Round => Join::Round,
+        LineJoin::Bevel => Join::Bevel,
+    };
+    let cap = match s.cap {
+        LineCap::Butt => Cap::Butt,
+        LineCap::Round => Cap::Round,
+        LineCap::Square => Cap::Square,
+    };
+    let base = Stroke::new(w)
+        .with_join(join)
+        .with_miter_limit(s.miter_limit())
+        .with_caps(cap);
     match s.style {
-        StrokeStyle::Solid => Stroke::new(w),
-        StrokeStyle::Dashed => Stroke::new(w).with_dashes(0.0, [w * 3.0, w * 2.0]),
-        StrokeStyle::Dotted => Stroke::new(w)
+        StrokeStyle::Solid => base,
+        StrokeStyle::Dashed => base.with_dashes(0.0, [s.dash.max(0.01), s.gap.max(0.0)]),
+        StrokeStyle::Dotted => base
             .with_caps(Cap::Round)
-            .with_dashes(0.0, [0.001, w * 2.0]),
+            .with_dashes(0.0, [0.001, s.width.max(0.5) * 2.0]),
+    }
+}
+
+/// Draws the stroke of a node on the line, inside or outside of the shape.
+pub fn draw_stroke(scene: &mut Scene, world: Affine, shape: &impl Shape, st: &DStroke) {
+    let brush = color(st.color);
+    let style = line(st);
+    match st.position {
+        StrokePos::Center => scene.stroke(&style, world, brush, None, shape),
+        StrokePos::Inside => {
+            scene.push_layer(Fill::NonZero, BlendMode::default(), 1.0, world, shape);
+            scene.stroke(&style, world, brush, None, shape);
+            scene.pop_layer();
+        }
+        StrokePos::Outside => {
+            let area = shape
+                .bounding_box()
+                .inflate(st.width * 2.0 + 2.0, st.width * 2.0 + 2.0);
+            scene.push_layer(Fill::NonZero, BlendMode::default(), 1.0, world, &area);
+            scene.stroke(&style, world, brush, None, shape);
+            let cut = BlendMode::new(Mix::Normal, Compose::DestOut);
+            scene.push_layer(Fill::NonZero, cut, 1.0, world, &area);
+            scene.fill(
+                Fill::NonZero,
+                world,
+                VColor::from_rgba8(0, 0, 0, 255),
+                None,
+                shape,
+            );
+            scene.pop_layer();
+            scene.pop_layer();
+        }
     }
 }
 
@@ -157,6 +211,17 @@ mod tests {
         let page = doc.page();
         assert_eq!(effective_opacity(page, page.node(b).unwrap()), 0.25);
         assert_eq!(effective_opacity(page, page.node(a).unwrap()), 0.5);
+    }
+
+    #[test]
+    fn miter_limit_follows_the_angle_and_inside_strokes_are_doubled() {
+        let mut st = DStroke::new(Color::rgb(0, 0, 0), 3.0);
+        assert!((st.miter_limit() - 4.0).abs() < 0.01);
+        st.miter_angle = 90.0;
+        assert!((st.miter_limit() - 1.414).abs() < 0.01);
+        assert_eq!(line(&st).width, 3.0);
+        st.position = StrokePos::Inside;
+        assert_eq!(line(&st).width, 6.0);
     }
 
     #[test]

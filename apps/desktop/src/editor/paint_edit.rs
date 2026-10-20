@@ -27,7 +27,9 @@ pub fn filter(field: PField, s: &str) -> String {
         PField::Hex => s.chars().filter(char::is_ascii_hexdigit).collect(),
         PField::ShX | PField::ShY => filter_number_chars(s),
         PField::Alpha => s.chars().filter(char::is_ascii_digit).collect(),
-        PField::Width | PField::ShBlur => filter_number_chars(s).replace('-', ""),
+        PField::Width | PField::ShBlur | PField::Dash | PField::Gap | PField::Miter => {
+            filter_number_chars(s).replace('-', "")
+        }
     }
 }
 
@@ -35,7 +37,7 @@ fn max_chars(field: PField) -> usize {
     match field {
         PField::Hex => 6,
         PField::Alpha => 3,
-        PField::Width | PField::ShX | PField::ShY | PField::ShBlur => 7,
+        _ => 7,
     }
 }
 
@@ -52,6 +54,7 @@ impl Editor {
             Hit::Swatch(slot) => self.toggle_picker(slot),
             Hit::Field(slot, field) => self.start_paint_edit(slot, field),
             Hit::Style => self.open_dropdown_for(Target::StrokeStyle),
+            Hit::StrokeSettings => self.toggle_stroke_pop(),
             Hit::AddEffect => self.open_dropdown_for(Target::AddEffect),
             Hit::EffectType(i) => self.open_dropdown_for(Target::EffectType(i)),
         }
@@ -80,12 +83,18 @@ impl Editor {
         }
     }
 
-    fn start_paint_edit(&mut self, slot: Slot, field: PField) {
+    pub(super) fn start_paint_edit(&mut self, slot: Slot, field: PField) {
         if let Slot::Effect(i) = slot {
             self.start_effect_edit(i, field);
             return;
         }
         let (fill, stroke) = looks(self);
+        if let (Slot::Stroke, Look::One(s)) = (slot, &stroke)
+            && let Some(v) = super::stroke_pop::field_value(s, field)
+        {
+            self.begin_paint_edit(slot, field, &super::props::edit_text(v));
+            return;
+        }
         let (color, width) = match (slot, fill, stroke) {
             (Slot::Fill, Look::One(Paint::Solid(c)), _) => (c, 0.0),
             (Slot::Stroke, _, Look::One(s)) => (s.color, s.width),
@@ -97,11 +106,17 @@ impl Editor {
             PField::Width => super::props::edit_text(width),
             _ => return,
         };
+        self.begin_paint_edit(slot, field, &text);
+    }
+
+    fn begin_paint_edit(&mut self, slot: Slot, field: PField, text: &str) {
         let mut input = TextInput::new(max_chars(field), false).with_font_size(FONT_UI);
-        input.insert(&text);
+        input.insert(text);
         input.select_all();
         input.focused = true;
-        self.close_picker();
+        if !matches!(field, PField::Dash | PField::Gap | PField::Miter) {
+            self.close_picker();
+        }
         self.paint_edit = Some(PaintEdit { slot, field, input });
     }
 
@@ -113,6 +128,15 @@ impl Editor {
         let text = e.input.text().to_string();
         if let Slot::Effect(i) = e.slot {
             self.commit_effect_edit(i, e.field, &text);
+            return;
+        }
+        if matches!(e.field, PField::Dash | PField::Gap | PField::Miter) {
+            if let Some(v) = parse_number(&text) {
+                let ex = &mut self.session.borrow_mut().exec;
+                edit_stroke(ex, &self.selection, None, |s| {
+                    s.map(|s| super::stroke_pop::with_field(s, e.field, v))
+                });
+            }
             return;
         }
         let ex = &mut self.session.borrow_mut().exec;
@@ -160,6 +184,7 @@ impl Editor {
                 }
             }
             (_, PField::ShX | PField::ShY | PField::ShBlur) => {}
+            (_, PField::Dash | PField::Gap | PField::Miter) => {}
             (_, PField::Width) => {
                 let Some(w) = parse_number(&text) else { return };
                 let width = w.clamp(0.0, MAX_WIDTH);
@@ -174,7 +199,10 @@ impl Editor {
         let Some(e) = &self.paint_edit else {
             return false;
         };
-        let rect = panel(self).field_rect(e.slot, e.field);
+        let rect = match e.field {
+            PField::Dash | PField::Gap | PField::Miter => self.pop_field_rect(e.field),
+            f => panel(self).field_rect(e.slot, f),
+        };
         if rect.contains(self.mouse) {
             let x = self.mouse.x - rect.x0 - text_x(e.field) + PAD_X;
             let (font, shift) = (&self.assets.font, self.mods.shift);

@@ -30,6 +30,10 @@ impl Editor {
             self.pick_key(key, mods);
             return;
         }
+        if self.stroke_pop && key == Key::Escape {
+            self.stroke_pop = false;
+            return;
+        }
         if self.picker.is_some() && key == Key::Escape {
             if self.eyedrop.take().is_none() && !std::mem::take(&mut self.pick_source) {
                 self.close_picker();

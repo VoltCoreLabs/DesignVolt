@@ -31,6 +31,8 @@ mod rename;
 mod reparent;
 mod session;
 mod state;
+mod stroke_pop;
+mod stroke_pop_layout;
 mod toolbar;
 
 pub use session::Session;

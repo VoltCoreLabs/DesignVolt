@@ -128,7 +128,10 @@ impl Editor {
     pub(super) fn open_dropdown_for(&mut self, target: Target) {
         let p = panel(self);
         let anchor = match target {
-            Target::StrokeStyle => p.style_rect(),
+            Target::StrokeStyle => match self.stroke_pop_style_rect() {
+                Some(r) => r,
+                None => p.style_rect(),
+            },
             Target::AddEffect => p.add_rect(Slot::Effect(0)),
             Target::EffectType(i) => p.type_rect(i),
             Target::ColorMode | Target::Tiling => {

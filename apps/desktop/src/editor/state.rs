@@ -121,6 +121,8 @@ pub struct Editor {
     pub(super) pick_source: bool,
     /// The open drop-down list, if any.
     pub(super) dropdown: Option<super::dropdown::Dropdown>,
+    /// The stroke settings window is open.
+    pub(super) stroke_pop: bool,
     /// A layer name being typed, and the last row click (for double-click).
     pub(super) rename: Option<super::rename::Rename>,
     pub(super) last_row_click: Option<(NodeId, std::time::Instant)>,
@@ -165,6 +167,7 @@ impl Editor {
             eyedrop: None,
             pick_source: false,
             dropdown: None,
+            stroke_pop: false,
             rename: None,
             last_row_click: None,
             collapsed: Default::default(),
@@ -327,6 +330,7 @@ impl Screen for Editor {
         if self.selection.is_empty() {
             self.paint_edit = None;
             self.dropdown = None;
+            self.stroke_pop = false;
             self.close_picker();
         }
         let painting = self.paint_edit.as_mut().is_some_and(|e| e.input.update(dt))
@@ -437,6 +441,7 @@ impl Screen for Editor {
             panels::right_panel(cx, layout.right, self)
         });
         self.draw_picker(&mut cx);
+        self.draw_stroke_pop(&mut cx);
         self.draw_dropdown(&mut cx);
         let p = self.intro(4.0);
         let clip = layout.toolbar.inflate(40.0, 40.0);

@@ -5,11 +5,7 @@ use dv_core::{Color, Command, Effect, Executor, NodeId, Paint, Props, Stroke};
 /// Fill given to a shape by the "+" button.
 pub const DEFAULT_FILL: Color = Color::rgb(217, 217, 217);
 /// Stroke given to a shape by the "+" button.
-pub const DEFAULT_STROKE: Stroke = Stroke {
-    color: Color::rgb(0, 0, 0),
-    width: 1.0,
-    style: dv_core::StrokeStyle::Solid,
-};
+pub const DEFAULT_STROKE: Stroke = Stroke::new(Color::rgb(0, 0, 0), 1.0);
 
 fn run(ex: &mut Executor, label: &'static str, key: Option<u64>, cmds: Vec<Command>) {
     if cmds.is_empty() {

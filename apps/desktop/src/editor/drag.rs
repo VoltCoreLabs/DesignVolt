@@ -143,6 +143,11 @@ impl Editor {
                     delta,
                 }
             }
+            Interaction::LayerDrag { start, moved, id } => Interaction::LayerDrag {
+                start,
+                id,
+                moved: moved || (self.mouse - start).hypot() >= super::layer_drag::DRAG_START_PX,
+            },
             Interaction::Create {
                 kind,
                 start,

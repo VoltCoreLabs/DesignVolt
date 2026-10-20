@@ -35,6 +35,13 @@ pub enum Interaction {
         /// Started with the middle button, so only its release ends the pan.
         by_middle: bool,
     },
+    /// Dragging selected layers by their rows in the layers panel.
+    LayerDrag {
+        start: Point,
+        moved: bool,
+        /// The row that was pressed: a plain click on it selects only it.
+        id: NodeId,
+    },
     Marquee {
         start: Point,
         base: Vec<NodeId>,
@@ -135,7 +142,14 @@ impl Editor {
             } else if mods.shift {
                 self.toggle_selected(row.id);
             } else {
-                self.selection = vec![row.id];
+                if !self.selection.contains(&row.id) {
+                    self.selection = vec![row.id];
+                }
+                self.interaction = Some(Interaction::LayerDrag {
+                    start: self.mouse,
+                    moved: false,
+                    id: row.id,
+                });
             }
             return;
         }
@@ -401,6 +415,13 @@ impl Editor {
             Interaction::Resize { .. } | Interaction::ResizeOne(_) | Interaction::Rotate { .. } => {
                 self.session.borrow_mut().exec.break_merge();
             }
+            Interaction::LayerDrag { moved, id, .. } => {
+                if moved {
+                    self.finish_layer_drag();
+                } else {
+                    self.selection = vec![id];
+                }
+            }
             Interaction::Pan { .. } | Interaction::Marquee { .. } => {}
         }
     }
@@ -483,7 +504,7 @@ impl Editor {
                 }
                 Interaction::Rotate { .. } => Cursor::Rotate,
                 Interaction::Create { .. } => Cursor::Crosshair,
-                Interaction::Marquee { .. } => Cursor::Default,
+                Interaction::LayerDrag { .. } | Interaction::Marquee { .. } => Cursor::Default,
             };
         }
         let l = self.layout();

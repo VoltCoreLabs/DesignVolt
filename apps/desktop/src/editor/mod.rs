@@ -4,6 +4,7 @@ mod flip;
 mod handles;
 mod interact;
 mod keys;
+mod layer_drag;
 mod layout;
 mod ops;
 mod ops_clip;

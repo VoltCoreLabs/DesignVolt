@@ -54,8 +54,8 @@ pub fn lock_rect(row: Rect) -> Rect {
 
 /// The expand/collapse caret of a row with children.
 pub fn caret_rect(row: Rect, depth: usize) -> Rect {
-    let x = row.x0 + 2.0 + depth as f64 * 14.0;
-    Rect::new(x, row.y0, x + 14.0, row.y1)
+    let x = row.x0 + 6.0 + depth as f64 * 14.0;
+    Rect::new(x, row.y0, x + 18.0, row.y1)
 }
 
 /// How many layer rows fit into the left panel.
@@ -270,7 +270,7 @@ fn layer_row(cx: &mut Cx, ed: &Editor, rect: Rect, row: &super::state::LayerRow)
     } else {
         hex(text_disabled())
     };
-    let x = rect.x0 + 12.0 + row.depth as f64 * 14.0;
+    let x = rect.x0 + 26.0 + row.depth as f64 * 14.0;
     if row.has_children {
         let caret = if row.collapsed {
             Icon::CaretRight

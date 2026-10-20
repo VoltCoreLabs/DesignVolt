@@ -110,6 +110,26 @@ pub fn to_parent_space(page: &Page, parent: Option<NodeId>, p: Point) -> Point {
     }
 }
 
+/// Geometry that keeps node `id` exactly where it is on the page after it moves under
+/// `new_parent` (`None` = the page): same position, same visual rotation.
+pub fn geometry_under(page: &Page, id: NodeId, new_parent: Option<NodeId>) -> Option<Geometry> {
+    let g = page.node(id)?.geom;
+    let world = world_affine(page, id);
+    let inv_parent = match new_parent {
+        Some(p) => world_affine(page, p).inverse(),
+        None => Affine::IDENTITY,
+    };
+    let m = inv_parent * world;
+    let center = m * Point::new(g.w / 2.0, g.h / 2.0);
+    let c = m.as_coeffs();
+    Some(Geometry {
+        x: center.x - g.w / 2.0,
+        y: center.y - g.h / 2.0,
+        rotation: c[1].atan2(c[0]).to_degrees(),
+        ..g
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -161,6 +181,30 @@ mod tests {
         }
         assert!(world_corners(doc.page(), NodeId(99)).is_none());
     }
+    #[test]
+    fn geometry_under_keeps_the_world_position_and_rotation() {
+        let mut doc = Document::default();
+        let f = add(&mut doc, None, g(100.0, 50.0, 400.0, 400.0, 30.0));
+        let a = add(&mut doc, None, g(200.0, 200.0, 40.0, 20.0, 10.0));
+        let before = world_corners(doc.page(), a).unwrap();
+        let ng = geometry_under(doc.page(), a, Some(f)).unwrap();
+        assert!(near(ng.rotation, -20.0) && near(ng.w, 40.0));
+        doc.apply(&dv_core::Command::Reparent {
+            id: a,
+            parent: Some(f),
+            index: 0,
+        })
+        .unwrap();
+        doc.apply(&dv_core::Command::SetGeometry { id: a, geom: ng })
+            .unwrap();
+        let after = world_corners(doc.page(), a).unwrap();
+        for (p, q) in before.iter().zip(after) {
+            assert!(near(p.x, q.x) && near(p.y, q.y), "{p:?} vs {q:?}");
+        }
+        let back = geometry_under(doc.page(), a, None).unwrap();
+        assert!(near(back.x, 200.0) && near(back.y, 200.0) && near(back.rotation, 10.0));
+    }
+
     #[test]
     fn page_level_delta_is_unchanged() {
         let mut doc = Document::default();

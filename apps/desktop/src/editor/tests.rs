@@ -871,7 +871,9 @@ fn drag_b_towards(ed: &mut Editor, edge_x: f64) -> f64 {
         (150.0 + (target_left - 100.0), 30.0),
         NONE,
     );
-    geom(ed, b).0
+    // World position: the shape may have been dropped into a frame by the drag.
+    let s = ed.session.borrow();
+    dv_geom::world_bounds(s.exec.doc().page(), b).map_or(f64::NAN, |r| r.x0)
 }
 
 #[test]

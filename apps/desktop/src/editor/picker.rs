@@ -1,6 +1,6 @@
 //! The color picker popup: state and interaction (drawing is in `picker_draw`).
 
-use dv_core::{Color, Stroke};
+use dv_core::{Color, Paint, Stroke};
 use kurbo::{Point, Rect};
 
 use super::ops_paint::{DEFAULT_STROKE, edit_fill, edit_stroke};
@@ -16,6 +16,8 @@ pub struct Picker {
     pub v: f64,
     pub a: u8,
     pub part: Option<Part>,
+    /// The gradient stop whose color is edited.
+    pub stop: usize,
     /// Merge key of the edits of the running drag.
     pub key: u64,
 }
@@ -48,9 +50,26 @@ fn frac(r: Rect, p: Point, vertical: bool) -> f64 {
 }
 
 impl Editor {
+    /// What the popup shows for its slot right now.
+    pub(super) fn picker_shape(&self, slot: Slot) -> Shape {
+        let grad = match (slot, looks(self).0) {
+            (Slot::Fill, Look::One(Paint::Gradient(g))) => Some(g.kind),
+            _ => None,
+        };
+        Shape {
+            tabs: slot == Slot::Fill,
+            grad,
+            rows: recent_rows(super::recent::get().len()),
+        }
+    }
+
     pub(super) fn popup(&self, slot: Slot) -> Rect {
-        let rows = recent_rows(super::recent::get().len());
-        popup_rect(self.layout().right, slot, self.win.h, rows)
+        popup_rect(
+            self.layout().right,
+            slot,
+            self.win.h,
+            self.picker_shape(slot),
+        )
     }
 
     /// Opens the picker for the slot (or closes it when it is already open for it).
@@ -61,7 +80,7 @@ impl Editor {
         }
         let (fill, stroke) = looks(self);
         let color = match (slot, fill, stroke) {
-            (Slot::Fill, Look::One(c), _) => c,
+            (Slot::Fill, Look::One(p), _) => p.main_color(),
             (Slot::Stroke, _, Look::One(s)) => s.color,
             _ => return,
         };
@@ -74,6 +93,7 @@ impl Editor {
             v,
             a: color.a,
             part: None,
+            stop: 0,
             key: 0,
         });
     }
@@ -89,9 +109,19 @@ impl Editor {
         let Some(slot) = self.picker.as_ref().map(|p| p.slot) else {
             return;
         };
+        let stop = self.picker.as_ref().map_or(0, |p| p.stop);
         let ex = &mut self.session.borrow_mut().exec;
         match slot {
-            Slot::Fill => edit_fill(ex, &self.selection, key, |_| Some(color)),
+            Slot::Fill => edit_fill(ex, &self.selection, key, |old| {
+                Some(match old {
+                    Some(Paint::Gradient(mut g)) => {
+                        let i = stop.min(g.stops.len() - 1);
+                        g.stops[i].color = color;
+                        Paint::Gradient(g)
+                    }
+                    _ => Paint::Solid(color),
+                })
+            }),
             Slot::Stroke => edit_stroke(ex, &self.selection, key, |s| {
                 Some(Stroke {
                     color,
@@ -115,14 +145,28 @@ impl Editor {
         let Some(slot) = self.picker.as_ref().map(|p| p.slot) else {
             return false;
         };
+        let shape = self.picker_shape(slot);
         let popup = self.popup(slot);
-        if self.press_in_pick_edit(popup) {
+        if self.press_in_pick_edit(popup, shape) {
             return true;
         }
         if popup.contains(self.mouse) {
             let recent = super::recent::get();
-            match hit(popup, self.mouse, self.picker_mode, recent.len()) {
+            let stops = self.grad_positions();
+            match hit(
+                popup,
+                shape,
+                self.mouse,
+                self.picker_mode,
+                recent.len(),
+                &stops,
+            ) {
+                Some(PHit::Part(Part::Stop(i))) => self.start_stop_drag(i),
                 Some(PHit::Part(part)) => self.start_pick_drag(part),
+                Some(PHit::Tab(i)) => self.pick_tab(i),
+                Some(PHit::StopsBar(t)) => self.add_stop_at(t),
+                Some(PHit::RemoveStop) => self.remove_selected_stop(),
+                Some(PHit::GField(f)) => self.start_pick_edit(PickField::Grad(f)),
                 Some(PHit::Eyedrop) => {
                     self.eyedrop = if self.eyedrop.is_some() {
                         None
@@ -149,7 +193,7 @@ impl Editor {
         matches!(self.paint_hit(), Some(Hit::Swatch(s)) if s == slot)
     }
 
-    fn start_pick_drag(&mut self, part: Part) {
+    pub(super) fn start_pick_drag(&mut self, part: Part) {
         let key = self.next_drag_key();
         if let Some(p) = self.picker.as_mut() {
             p.part = Some(part);
@@ -168,7 +212,12 @@ impl Editor {
             self.index
                 .pick(page, world)
                 .and_then(|id| page.node(id))
-                .and_then(|n| n.fill.or(n.stroke.map(|s| s.color)))
+                .and_then(|n| {
+                    n.fill
+                        .as_ref()
+                        .map(Paint::main_color)
+                        .or(n.stroke.map(|s| s.color))
+                })
         };
         if let Some(c) = color {
             self.set_picker_color(c);
@@ -181,22 +230,30 @@ impl Editor {
         let Some(slot) = self.picker.as_ref().map(|p| p.slot) else {
             return;
         };
+        let shape = self.picker_shape(slot);
         let popup = self.popup(slot);
         let mouse = self.mouse;
+        if let Some(Part::Stop(i)) = self.picker.as_ref().and_then(|p| p.part) {
+            self.drag_stop(i, frac(stops_bar(popup, shape), mouse, false));
+            return;
+        }
         let Some(p) = self.picker.as_mut() else {
             return;
         };
         match p.part {
             Some(Part::Sv) => {
-                let r = part_rect(popup, Part::Sv);
+                let r = part_rect(popup, shape, Part::Sv);
                 p.s = frac(r, mouse, false);
                 p.v = 1.0 - frac(r, mouse, true);
             }
-            Some(Part::Hue) => p.h = frac(part_rect(popup, Part::Hue), mouse, false) * 359.99,
-            Some(Part::Alpha) => {
-                p.a = (frac(part_rect(popup, Part::Alpha), mouse, false) * 255.0).round() as u8;
+            Some(Part::Hue) => {
+                p.h = frac(part_rect(popup, shape, Part::Hue), mouse, false) * 359.99;
             }
-            None => return,
+            Some(Part::Alpha) => {
+                p.a = (frac(part_rect(popup, shape, Part::Alpha), mouse, false) * 255.0).round()
+                    as u8;
+            }
+            _ => return,
         }
         let (color, key) = (p.color(), p.key);
         self.apply_slot_color(color, Some(key));

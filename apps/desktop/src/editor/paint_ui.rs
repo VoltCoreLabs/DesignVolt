@@ -1,12 +1,12 @@
 //! Fill and stroke sections of the right panel: layout, what they show, drawing, hit-testing.
 
-use dv_core::{Color, Stroke};
+use dv_core::{GradientKind, Paint, Stroke};
 use dv_ui::draw::Cx;
 use dv_ui::icons::Icon;
 use dv_ui::theme::colors::*;
 use dv_ui::theme::metrics::*;
 use kurbo::{Point, Rect};
-use vello::peniko::Color as VColor;
+use vello::kurbo::{Affine, RoundedRect};
 
 use super::panels::{FILL_TOP, ROW, SEC_HEAD};
 use super::state::Editor;
@@ -35,7 +35,7 @@ pub enum Hit {
 }
 
 /// What the selection has in one slot.
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug)]
 pub enum Look<T> {
     None,
     Mixed,
@@ -92,7 +92,7 @@ pub fn field_rect(right: Rect, slot: Slot, f: PField) -> Rect {
 }
 
 /// What the selected shapes have as fill and stroke.
-pub fn looks(ed: &Editor) -> (Look<Color>, Look<Stroke>) {
+pub fn looks(ed: &Editor) -> (Look<Paint>, Look<Stroke>) {
     let s = ed.session.borrow();
     let page = s.exec.doc().page();
     let nodes: Vec<_> = page
@@ -100,12 +100,12 @@ pub fn looks(ed: &Editor) -> (Look<Color>, Look<Stroke>) {
         .into_iter()
         .filter_map(|id| page.node(id))
         .collect();
-    let fill = fold(nodes.iter().map(|n| n.fill));
+    let fill = fold(nodes.iter().map(|n| n.fill.clone()));
     let stroke = fold(nodes.iter().map(|n| n.stroke));
     (fill, stroke)
 }
 
-fn fold<T: PartialEq + Copy>(mut it: impl Iterator<Item = Option<T>>) -> Look<T> {
+fn fold<T: PartialEq + Clone>(mut it: impl Iterator<Item = Option<T>>) -> Look<T> {
     let Some(first) = it.next() else {
         return Look::None;
     };
@@ -181,13 +181,37 @@ fn value_box(cx: &mut Cx, r: Rect, text: &str, suffix: &str) {
     }
 }
 
-fn swatch(cx: &mut Cx, r: Rect, c: Color) {
-    cx.fill(r, R_FIELD, VColor::from_rgba8(c.r, c.g, c.b, c.a));
+/// A rounded box filled with the paint (a color or a gradient fitted to the box).
+pub fn paint_box(cx: &mut Cx, r: Rect, radius: f64, paint: &Paint) {
+    let shape = RoundedRect::new(0.0, 0.0, r.width(), r.height(), radius);
+    let world = cx.xf * Affine::translate((r.x0, r.y0));
+    dv_render::fill_paint(cx.scene, world, &shape, r.width(), r.height(), paint);
+}
+
+fn swatch(cx: &mut Cx, r: Rect, p: &Paint) {
+    paint_box(cx, r, R_FIELD, p);
     cx.stroke(r, R_FIELD, 1.0, alpha(overlay(), 0.2));
 }
 
+/// Name of a gradient type for the panel.
+pub fn kind_name(k: GradientKind) -> &'static str {
+    tr(match k {
+        GradientKind::Linear => Msg::GradLinear,
+        GradientKind::Radial => Msg::GradRadial,
+        GradientKind::Angular => Msg::GradAngular,
+        GradientKind::Diamond => Msg::GradDiamond,
+    })
+}
+
 /// One slot: its title with the "+" button, and the row with swatch, values and "-".
-fn slot(cx: &mut Cx, ed: &Editor, right: Rect, which: Slot, color: Look<(Color, Option<f64>)>) {
+fn slot(
+    cx: &mut Cx,
+    ed: &Editor,
+    right: Rect,
+    which: Slot,
+    color: Look<Paint>,
+    width: Option<f64>,
+) {
     let (title, y) = match which {
         Slot::Fill => (tr(Msg::SectionFill), right.y0 + FILL_TOP),
         Slot::Stroke => (tr(Msg::SectionStroke), right.y0 + STROKE_TOP),
@@ -203,13 +227,13 @@ fn slot(cx: &mut Cx, ed: &Editor, right: Rect, which: Slot, color: Look<(Color, 
     icon_button(cx, remove, Icon::Minimize, hot(remove));
     let hexr = field_rect(right, which, PField::Hex);
     match color {
-        Look::One((c, w)) => {
-            swatch(cx, swatch_rect(right, which), c);
+        Look::One(Paint::Solid(c)) => {
+            swatch(cx, swatch_rect(right, which), &Paint::Solid(c));
             let pct = format!("{:.0}", f64::from(c.a) / 255.0 * 100.0);
             editable(cx, ed, (which, PField::Hex), hexr, &c.to_hex(), "");
             let a = field_rect(right, which, PField::Alpha);
             editable(cx, ed, (which, PField::Alpha), a, &pct, "%");
-            if let Some(w) = w {
+            if let Some(w) = width {
                 let r = field_rect(right, which, PField::Width);
                 editable(
                     cx,
@@ -220,6 +244,11 @@ fn slot(cx: &mut Cx, ed: &Editor, right: Rect, which: Slot, color: Look<(Color, 
                     "px",
                 );
             }
+        }
+        Look::One(Paint::Gradient(g)) => {
+            swatch(cx, swatch_rect(right, which), &Paint::Gradient(g.clone()));
+            let r = Rect::new(hexr.x0, hexr.y0, remove.x0 - GAP_X, hexr.y1);
+            value_box(cx, r, kind_name(g.kind), "");
         }
         _ => {
             let r = Rect::new(hexr.x0, hexr.y0, remove.x0 - GAP_X, hexr.y1);
@@ -250,18 +279,13 @@ fn editable(cx: &mut Cx, ed: &Editor, key: (Slot, PField), r: Rect, value: &str,
 /// Draws the Fill and Stroke sections of the right panel.
 pub fn sections(cx: &mut Cx, right: Rect, ed: &Editor) {
     let (fill, stroke) = looks(ed);
-    let fill = match fill {
-        Look::One(c) => Look::One((c, None)),
-        Look::Mixed => Look::Mixed,
-        Look::None => Look::None,
+    slot(cx, ed, right, Slot::Fill, fill, None);
+    let (look, width) = match stroke {
+        Look::One(s) => (Look::One(Paint::Solid(s.color)), Some(s.width)),
+        Look::Mixed => (Look::Mixed, None),
+        Look::None => (Look::None, None),
     };
-    let stroke = match stroke {
-        Look::One(s) => Look::One((s.color, Some(s.width))),
-        Look::Mixed => Look::Mixed,
-        Look::None => Look::None,
-    };
-    slot(cx, ed, right, Slot::Fill, fill);
-    slot(cx, ed, right, Slot::Stroke, stroke);
+    slot(cx, ed, right, Slot::Stroke, look, width);
 }
 
 /// A point inside the right panel's sections (used to keep the picker clear of them).

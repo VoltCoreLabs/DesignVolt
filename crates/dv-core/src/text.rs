@@ -15,6 +15,8 @@
 
 use std::fmt;
 
+use crate::paint::Paint;
+
 use crate::document::{Color, Document, Geometry, Node, NodeId, NodeKind, Page, Stroke};
 
 const MAGIC: &str = "designvolt-document";
@@ -103,7 +105,7 @@ pub fn to_text(doc: &Document) -> String {
             let Some(n) = page.node(id) else { continue };
             let g = n.geom;
             let flags = u8::from(n.visible) | (u8::from(n.locked) << 1);
-            let fill = n.fill.map_or("-".to_string(), color_code);
+            let fill = n.fill.as_ref().map_or("-".to_string(), Paint::to_code);
             let stroke = n.stroke.map_or("-".to_string(), |s| {
                 format!("{}:{}", color_code(s.color), s.width)
             });
@@ -223,7 +225,7 @@ fn parse_node<'a>(
         .map_err(|_| err(line, "bad flags"))?;
     let fill = match next("fill")? {
         "-" => None,
-        s => Some(color_from(s).ok_or_else(|| err(line, "bad fill"))?),
+        s => Some(Paint::from_code(s).ok_or_else(|| err(line, "bad fill"))?),
     };
     let stroke = match next("stroke")? {
         "-" => None,

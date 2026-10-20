@@ -1,6 +1,6 @@
 //! Fill and stroke edits from the right panel and the color picker.
 
-use dv_core::{Color, Command, Executor, NodeId, Props, Stroke};
+use dv_core::{Color, Command, Executor, NodeId, Paint, Props, Stroke};
 
 /// Fill given to a shape by the "+" button.
 pub const DEFAULT_FILL: Color = Color::rgb(217, 217, 217);
@@ -27,14 +27,14 @@ pub fn edit_fill(
     ex: &mut Executor,
     ids: &[NodeId],
     key: Option<u64>,
-    f: impl Fn(Option<Color>) -> Option<Color>,
+    f: impl Fn(Option<Paint>) -> Option<Paint>,
 ) {
     let page = ex.doc().page();
     let cmds = page
         .geo_tops(ids)
         .into_iter()
         .filter_map(|id| {
-            let fill = f(page.node(id)?.fill);
+            let fill = f(page.node(id)?.fill.clone());
             let props = Props {
                 fill: Some(fill),
                 ..Props::default()
@@ -89,15 +89,18 @@ mod tests {
         let mut ex = Executor::new(Document::default());
         let (a, b) = (shape(&mut ex), shape(&mut ex));
         let red = Color::rgb(255, 0, 0);
-        edit_fill(&mut ex, &[a, b], None, |_| Some(red));
+        edit_fill(&mut ex, &[a, b], None, |_| Some(red.into()));
         let page = ex.doc().page();
-        assert_eq!(page.node(a).unwrap().fill, Some(red));
-        assert_eq!(page.node(b).unwrap().fill, Some(red));
+        assert_eq!(page.node(a).unwrap().fill, Some(red.into()));
+        assert_eq!(page.node(b).unwrap().fill, Some(red.into()));
         edit_fill(&mut ex, &[a], None, |_| None);
         assert_eq!(ex.doc().page().node(a).unwrap().fill, None);
         ex.undo();
         ex.undo();
-        assert_eq!(ex.doc().page().node(a).unwrap().fill, Some(DEFAULT_FILL));
+        assert_eq!(
+            ex.doc().page().node(a).unwrap().fill,
+            Some(DEFAULT_FILL.into())
+        );
     }
 
     #[test]
@@ -105,14 +108,17 @@ mod tests {
         let mut ex = Executor::new(Document::default());
         let a = shape(&mut ex);
         for v in [10, 20, 30] {
-            edit_fill(&mut ex, &[a], Some(7), |_| Some(Color::rgb(v, 0, 0)));
+            edit_fill(&mut ex, &[a], Some(7), |_| Some(Color::rgb(v, 0, 0).into()));
         }
         assert_eq!(
             ex.doc().page().node(a).unwrap().fill,
-            Some(Color::rgb(30, 0, 0))
+            Some(Color::rgb(30, 0, 0).into())
         );
         ex.undo();
-        assert_eq!(ex.doc().page().node(a).unwrap().fill, Some(DEFAULT_FILL));
+        assert_eq!(
+            ex.doc().page().node(a).unwrap().fill,
+            Some(DEFAULT_FILL.into())
+        );
     }
 
     #[test]

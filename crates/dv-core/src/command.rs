@@ -1,13 +1,14 @@
 //! Reversible commands. `Document::apply` performs a command and returns its inverse, which is
 //! all that undo/redo needs. Every change of a document goes through a command.
 
-use crate::document::{Color, Document, Geometry, Node, NodeId, Stroke};
+use crate::document::{Document, Geometry, Node, NodeId, Stroke};
+use crate::paint::Paint;
 
 /// Property changes; `None` leaves the property as it is.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Props {
     pub name: Option<String>,
-    pub fill: Option<Option<Color>>,
+    pub fill: Option<Option<Paint>>,
     pub stroke: Option<Option<Stroke>>,
     pub radius: Option<f64>,
     pub visible: Option<bool>,
@@ -182,8 +183,8 @@ impl Document {
         if let Some(v) = &props.name {
             old.name = Some(std::mem::replace(&mut n.name, v.clone()));
         }
-        if let Some(v) = props.fill {
-            old.fill = Some(std::mem::replace(&mut n.fill, v));
+        if let Some(v) = &props.fill {
+            old.fill = Some(std::mem::replace(&mut n.fill, v.clone()));
         }
         if let Some(v) = props.stroke {
             old.stroke = Some(std::mem::replace(&mut n.stroke, v));
@@ -362,7 +363,7 @@ mod tests {
         let inv = doc.apply(&Command::SetProps { id: a, props }).unwrap();
         let n = doc.page().node(a).unwrap();
         assert_eq!(
-            (n.name.as_str(), n.fill, n.radius, n.locked),
+            (n.name.as_str(), n.fill.clone(), n.radius, n.locked),
             ("renamed", None, 4.0, true)
         );
         doc.apply(&inv).unwrap();

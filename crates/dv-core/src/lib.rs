@@ -7,9 +7,11 @@ pub mod color;
 pub mod command;
 pub mod document;
 pub mod history;
+pub mod paint;
 pub mod text;
 
 pub use command::{Command, CommandError, Props};
 pub use document::{Color, Document, Geometry, Node, NodeId, NodeKind, Page, Stroke};
 pub use history::Executor;
+pub use paint::{Gradient, GradientKind, Paint, Stop};
 pub use text::{ParseError, from_text, to_text};

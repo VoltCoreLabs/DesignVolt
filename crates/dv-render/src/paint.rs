@@ -4,7 +4,7 @@ use dv_core::{Color, NodeKind, Page};
 use dv_geom::SpatialIndex;
 use vello::Scene;
 use vello::kurbo::{Affine, Ellipse, Rect, RoundedRect, Stroke};
-use vello::peniko::{Color as VColor, Fill};
+use vello::peniko::Color as VColor;
 
 use crate::viewport::Viewport;
 
@@ -74,8 +74,8 @@ fn fill_and_stroke(
     shape: &impl vello::kurbo::Shape,
     node: &dv_core::Node,
 ) {
-    if let Some(fill) = node.fill {
-        scene.fill(Fill::NonZero, world, color(fill), None, shape);
+    if let Some(fill) = &node.fill {
+        crate::gradient::fill_paint(scene, world, shape, node.geom.w, node.geom.h, fill);
     }
     if let Some(stroke) = node.stroke {
         scene.stroke(

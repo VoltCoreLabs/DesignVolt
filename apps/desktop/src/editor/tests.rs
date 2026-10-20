@@ -1026,3 +1026,17 @@ fn geom_rotation(ed: &Editor, id: NodeId) -> f64 {
         .geom
         .rotation
 }
+
+#[test]
+fn the_whole_selection_box_drags_several_shapes() {
+    let mut ed = editor();
+    let a = draw_rect(&mut ed, (-250.0, 0.0), (-200.0, 50.0));
+    let b = draw_rect(&mut ed, (-100.0, 0.0), (-50.0, 50.0));
+    press_key(&mut ed, Key::SelectAll, CTRL);
+    let (ax, bx) = (geom(&ed, a).0, geom(&ed, b).0);
+    // The gap between the shapes belongs to the selection box.
+    drag(&mut ed, (-150.0, 25.0), (-130.0, 25.0), NONE);
+    assert_eq!(geom(&ed, a).0, ax + 20.0);
+    assert_eq!(geom(&ed, b).0, bx + 20.0);
+    assert_eq!(ed.selection.len(), 2);
+}

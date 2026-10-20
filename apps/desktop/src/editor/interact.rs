@@ -237,6 +237,10 @@ impl Editor {
             self.start_move(world, cp, toggle);
             return;
         }
+        if !mods.shift && self.in_selection_box(world) {
+            self.start_move(world, cp, None);
+            return;
+        }
         match self.pick_body(world) {
             Some(id) => {
                 let toggle = self.apply_pick(id, mods.shift);
@@ -280,6 +284,15 @@ impl Editor {
     }
 
     /// A single selected frame whose area contains `world` (so empty frame space drags it).
+    /// With several shapes selected (or a group), the whole area of the selection box drags
+    /// them, not only the shapes themselves.
+    fn in_selection_box(&self, world: Point) -> bool {
+        let s = self.session.borrow();
+        let page = s.exec.doc().page();
+        page.geo_tops(&self.selection).len() > 1
+            && selection_bounds(page, &self.selection).is_some_and(|b| b.contains(world))
+    }
+
     fn selected_frame_contains(&self, world: Point) -> bool {
         let [id] = self.selection[..] else {
             return false;

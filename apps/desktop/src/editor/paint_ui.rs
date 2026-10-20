@@ -44,9 +44,9 @@ pub enum Look<T> {
 
 pub const STROKE_TOP: f64 = FILL_TOP + SEC_HEAD + ROW + 4.0;
 const SWATCH: f64 = 24.0;
-const HEX_W: f64 = 76.0;
-const ALPHA_W: f64 = 52.0;
-const WIDTH_W: f64 = 44.0;
+const HEX_W: f64 = 70.0;
+const ALPHA_W: f64 = 48.0;
+const WIDTH_W: f64 = 62.0;
 const BTN: f64 = 22.0;
 const GAP_X: f64 = 6.0;
 const TEXT_X: f64 = 8.0;

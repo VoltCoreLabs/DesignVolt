@@ -11,6 +11,8 @@ use vello::peniko::Color as VColor;
 
 use super::canvas::num;
 use super::flip::Action;
+use super::interact::Interaction;
+use super::layer_drag::Zone;
 use super::session::SaveState;
 use super::state::Editor;
 use crate::i18n::{Msg, objects_count, tr};
@@ -255,7 +257,35 @@ pub fn left_panel(cx: &mut Cx, r: Rect, ed: &Editor) {
         for (i, row) in ed.layer_rows(max_layer_rows(r)).iter().enumerate() {
             layer_row(cx, ed, layer_row_rect(r, i), row);
         }
+        drop_indicator(cx, r, ed);
     });
+}
+
+/// Line or outline showing where dragged layers would land.
+fn drop_indicator(cx: &mut Cx, left: Rect, ed: &Editor) {
+    if !matches!(
+        ed.interaction,
+        Some(Interaction::LayerDrag { moved: true, .. })
+    ) {
+        return;
+    }
+    let Some((i, zone)) = ed.layer_drop() else {
+        return;
+    };
+    let row = layer_row_rect(left, i);
+    match zone {
+        Zone::Into => cx.fill(row, R_BUTTON, alpha(accent(), 0.3)),
+        Zone::Above => cx.fill(
+            Rect::new(row.x0, row.y0 - 1.0, row.x1, row.y0 + 1.0),
+            0.0,
+            hex(accent()),
+        ),
+        Zone::Below => cx.fill(
+            Rect::new(row.x0, row.y1 - 1.0, row.x1, row.y1 + 1.0),
+            0.0,
+            hex(accent()),
+        ),
+    }
 }
 
 fn layer_row(cx: &mut Cx, ed: &Editor, rect: Rect, row: &super::state::LayerRow) {

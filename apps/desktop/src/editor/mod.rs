@@ -7,6 +7,7 @@ mod keys;
 mod layout;
 mod ops;
 mod ops_clip;
+mod ops_layer;
 mod ops_order;
 mod panels;
 mod props;

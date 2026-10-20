@@ -56,9 +56,14 @@ impl Editor {
             (Slot::Fill, Look::One(Paint::Gradient(g))) => Some(g.kind),
             _ => None,
         };
+        let pattern = matches!(
+            (slot, looks(self).0),
+            (Slot::Fill, Look::One(Paint::Pattern(_)))
+        );
         Shape {
             tabs: slot == Slot::Fill,
             grad,
+            pattern,
             rows: recent_rows(super::recent::get().len()),
         }
     }
@@ -102,6 +107,7 @@ impl Editor {
         self.picker = None;
         self.pick_edit = None;
         self.eyedrop = None;
+        self.pick_source = false;
     }
 
     /// Writes `color` into the slot the picker edits (one undo step per `key`).
@@ -167,6 +173,9 @@ impl Editor {
                 Some(PHit::StopsBar(t)) => self.add_stop_at(t),
                 Some(PHit::RemoveStop) => self.remove_selected_stop(),
                 Some(PHit::GField(f)) => self.start_pick_edit(PickField::Grad(f)),
+                Some(PHit::PickSource) => self.pick_source = true,
+                Some(PHit::Tiling) => self.cycle_tiling(),
+                Some(PHit::PatField(f)) => self.start_pick_edit(PickField::Pat(f)),
                 Some(PHit::Eyedrop) => {
                     self.eyedrop = if self.eyedrop.is_some() {
                         None
@@ -182,9 +191,13 @@ impl Editor {
             }
             return true;
         }
-        if self.eyedrop.is_some() {
+        if self.eyedrop.is_some() || self.pick_source {
             if self.over_canvas() {
-                self.sample_color();
+                if self.pick_source {
+                    self.sample_source();
+                } else {
+                    self.sample_color();
+                }
             }
             return true;
         }

@@ -21,12 +21,13 @@ pub const SW: f64 = 20.0;
 const SW_GAP: f64 = 6.0;
 pub const PER_ROW: usize = 10;
 const TAB_H: f64 = 26.0;
+const TILING_W: f64 = 92.0;
 /// Height of the gradient line of the stops bar; the handles sit under it.
 pub const STOPS_BAR_H: f64 = 16.0;
 const STOPS_H: f64 = STOPS_BAR_H + 16.0;
 pub const HANDLE_R: f64 = 7.0;
-/// Number of tabs: solid color and the gradient types.
-pub const TABS: usize = 5;
+/// Number of tabs: solid color, the gradient types and the pattern.
+pub const TABS: usize = 6;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Part {
@@ -46,6 +47,22 @@ pub enum GField {
     Y,
     Scale,
 }
+
+/// A numeric parameter of a pattern.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum PatField {
+    Scale,
+    GapX,
+    GapY,
+    Angle,
+}
+
+pub const PAT_FIELDS: [PatField; 4] = [
+    PatField::Scale,
+    PatField::GapX,
+    PatField::GapY,
+    PatField::Angle,
+];
 
 /// The parameter fields shown for a gradient type.
 pub fn grad_fields(kind: GradientKind) -> &'static [GField] {
@@ -71,6 +88,10 @@ pub enum PHit {
     StopsBar(f64),
     GField(GField),
     RemoveStop,
+    /// The box that shows the pattern source: click to choose another one.
+    PickSource,
+    Tiling,
+    PatField(PatField),
 }
 
 /// What the popup contains: decides its height and where things are.
@@ -80,6 +101,8 @@ pub struct Shape {
     pub tabs: bool,
     /// A gradient is being edited: stops bar and parameter row.
     pub grad: Option<GradientKind>,
+    /// A pattern is being edited: its controls replace the color editor.
+    pub pattern: bool,
     /// Rows of recent colors.
     pub rows: usize,
 }
@@ -92,6 +115,8 @@ struct Offs {
     fields: f64,
     params: f64,
     recents: f64,
+    pat_a: f64,
+    pat_b: f64,
     end: f64,
 }
 
@@ -100,6 +125,22 @@ fn offs(s: Shape) -> Offs {
     let tabs = y;
     if s.tabs {
         y += TAB_H + GAP_V;
+    }
+    if s.pattern {
+        let pat_a = y;
+        let pat_b = pat_a + FIELD_H + GAP_V;
+        return Offs {
+            tabs,
+            stops: 0.0,
+            sv: 0.0,
+            bars: 0.0,
+            fields: 0.0,
+            params: 0.0,
+            recents: 0.0,
+            pat_a,
+            pat_b,
+            end: pat_b + FIELD_H + PAD,
+        };
     }
     let stops = y;
     if s.grad.is_some() {
@@ -125,6 +166,8 @@ fn offs(s: Shape) -> Offs {
         fields,
         params,
         recents,
+        pat_a: 0.0,
+        pat_b: 0.0,
         end: end + PAD,
     }
 }
@@ -237,6 +280,30 @@ pub fn remove_stop_rect(p: Rect, s: Shape) -> Rect {
     Rect::new(p.x1 - PAD - BTN, y, p.x1 - PAD, y + FIELD_H)
 }
 
+/// The source box and the tiling button of the pattern editor.
+pub fn pat_source_rect(p: Rect, s: Shape) -> Rect {
+    let y = p.y0 + offs(s).pat_a;
+    Rect::new(
+        p.x0 + PAD,
+        y,
+        p.x1 - PAD - TILING_W - FIELD_GAP,
+        y + FIELD_H,
+    )
+}
+
+pub fn pat_tiling_rect(p: Rect, s: Shape) -> Rect {
+    let y = p.y0 + offs(s).pat_a;
+    Rect::new(p.x1 - PAD - TILING_W, y, p.x1 - PAD, y + FIELD_H)
+}
+
+pub fn pat_field_rect(p: Rect, s: Shape, i: usize) -> Rect {
+    let n = PAT_FIELDS.len() as f64;
+    let y = p.y0 + offs(s).pat_b;
+    let w = (W - 2.0 * PAD - FIELD_GAP * (n - 1.0)) / n;
+    let x = p.x0 + PAD + i as f64 * (w + FIELD_GAP);
+    Rect::new(x, y, x + w, y + FIELD_H)
+}
+
 pub fn recent_rect(p: Rect, s: Shape, i: usize) -> Rect {
     let (row, col) = (i / PER_ROW, i % PER_ROW);
     let x = p.x0 + PAD + col as f64 * (SW + SW_GAP);
@@ -247,6 +314,22 @@ pub fn recent_rect(p: Rect, s: Shape, i: usize) -> Rect {
 /// What the point hits inside the popup, if anything. `stops` are the positions of the
 /// gradient stops (empty when no gradient is edited).
 pub fn hit(p: Rect, s: Shape, at: Point, mode: Mode, recent: usize, stops: &[f64]) -> Option<PHit> {
+    if s.pattern {
+        if s.tabs
+            && let Some(i) = (0..TABS).find(|i| tab_rect(p, s, *i).contains(at))
+        {
+            return Some(PHit::Tab(i));
+        }
+        if pat_source_rect(p, s).contains(at) {
+            return Some(PHit::PickSource);
+        }
+        if pat_tiling_rect(p, s).contains(at) {
+            return Some(PHit::Tiling);
+        }
+        return (0..PAT_FIELDS.len())
+            .find(|i| pat_field_rect(p, s, *i).contains(at))
+            .map(|i| PHit::PatField(PAT_FIELDS[i]));
+    }
     if s.grad.is_some() {
         for (i, pos) in stops.iter().enumerate() {
             let c = handle_center(p, s, *pos);
@@ -309,11 +392,13 @@ mod tests {
     const SOLID: Shape = Shape {
         tabs: true,
         grad: None,
+        pattern: false,
         rows: 2,
     };
     const GRAD: Shape = Shape {
         tabs: true,
         grad: Some(GradientKind::Radial),
+        pattern: false,
         rows: 2,
     };
 
@@ -339,6 +424,33 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn pattern_editor_is_short_and_its_rows_fit() {
+        let s = Shape {
+            tabs: true,
+            grad: None,
+            pattern: true,
+            rows: 3,
+        };
+        let p = popup(s);
+        assert!(height(s) < height(SOLID));
+        let mut last = p.x0;
+        for i in 0..PAT_FIELDS.len() {
+            let r = pat_field_rect(p, s, i);
+            assert!(r.x0 >= last && r.width() > 40.0 && r.x1 <= p.x1);
+            last = r.x1;
+        }
+        assert!(pat_tiling_rect(p, s).x0 > pat_source_rect(p, s).x1);
+        assert_eq!(
+            hit(p, s, pat_tiling_rect(p, s).center(), Mode::Hex, 0, &[]),
+            Some(PHit::Tiling)
+        );
+        assert_eq!(
+            hit(p, s, pat_field_rect(p, s, 2).center(), Mode::Hex, 0, &[]),
+            Some(PHit::PatField(PatField::GapY))
+        );
     }
 
     #[test]

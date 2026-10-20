@@ -250,6 +250,15 @@ fn slot(
             let r = Rect::new(hexr.x0, hexr.y0, remove.x0 - GAP_X, hexr.y1);
             value_box(cx, r, kind_name(g.kind), "");
         }
+        Look::One(Paint::Pattern(_)) => {
+            swatch(
+                cx,
+                swatch_rect(right, which),
+                &Paint::Pattern(dv_core::Pattern::new(dv_core::NodeId(0))),
+            );
+            let r = Rect::new(hexr.x0, hexr.y0, remove.x0 - GAP_X, hexr.y1);
+            value_box(cx, r, tr(Msg::PaintPattern), "");
+        }
         _ => {
             let r = Rect::new(hexr.x0, hexr.y0, remove.x0 - GAP_X, hexr.y1);
             cx.fill(r, R_FIELD, hex(bg_raised()));

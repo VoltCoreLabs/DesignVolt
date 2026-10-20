@@ -11,7 +11,9 @@ pub mod paint;
 pub mod text;
 
 pub use command::{Command, CommandError, Props};
-pub use document::{Color, Document, Geometry, Node, NodeId, NodeKind, Page, Stroke};
+pub use document::{
+    Color, Document, Geometry, Node, NodeId, NodeKind, Page, Shadow, Stroke, StrokeStyle,
+};
 pub use history::Executor;
 pub use paint::{Gradient, GradientKind, Paint, Pattern, Stop, Tiling};
 pub use text::{ParseError, from_text, to_text};

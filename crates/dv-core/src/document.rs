@@ -32,10 +32,66 @@ impl Color {
     }
 }
 
+/// How the line of a stroke is drawn.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum StrokeStyle {
+    #[default]
+    Solid,
+    Dashed,
+    Dotted,
+}
+
+impl StrokeStyle {
+    pub const ALL: [StrokeStyle; 3] =
+        [StrokeStyle::Solid, StrokeStyle::Dashed, StrokeStyle::Dotted];
+
+    pub fn code(self) -> &'static str {
+        match self {
+            StrokeStyle::Solid => "solid",
+            StrokeStyle::Dashed => "dashed",
+            StrokeStyle::Dotted => "dotted",
+        }
+    }
+
+    pub fn from_code(s: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|k| k.code() == s)
+    }
+
+    pub fn next(self) -> Self {
+        let i = Self::ALL.iter().position(|k| *k == self).unwrap_or(0);
+        Self::ALL[(i + 1) % Self::ALL.len()]
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub struct Stroke {
     pub color: Color,
     pub width: f64,
+    pub style: StrokeStyle,
+}
+
+/// A soft shadow behind a shape.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub struct Shadow {
+    pub color: Color,
+    pub x: f64,
+    pub y: f64,
+    pub blur: f64,
+}
+
+impl Shadow {
+    /// The shadow the "+" button adds.
+    pub const DEFAULT: Shadow = Shadow {
+        color: Color {
+            r: 0,
+            g: 0,
+            b: 0,
+            a: 64,
+        },
+        x: 0.0,
+        y: 4.0,
+        blur: 8.0,
+    };
 }
 
 /// Position and size in the parent's coordinate space; rotation (degrees) is around the center.
@@ -56,6 +112,9 @@ pub struct Node {
     pub fill: Option<Paint>,
     pub stroke: Option<Stroke>,
     pub radius: f64,
+    /// Opacity of the whole shape (0..1), together with its children.
+    pub opacity: f64,
+    pub shadow: Option<Shadow>,
     pub visible: bool,
     pub locked: bool,
     pub parent: Option<NodeId>,
@@ -72,6 +131,8 @@ impl Node {
             fill: Some(Paint::Solid(Color::rgb(200, 205, 220))),
             stroke: None,
             radius: 0.0,
+            opacity: 1.0,
+            shadow: None,
             visible: true,
             locked: false,
             parent: None,

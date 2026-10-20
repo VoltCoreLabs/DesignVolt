@@ -1,7 +1,7 @@
 //! Reversible commands. `Document::apply` performs a command and returns its inverse, which is
 //! all that undo/redo needs. Every change of a document goes through a command.
 
-use crate::document::{Document, Geometry, Node, NodeId, Stroke};
+use crate::document::{Document, Geometry, Node, NodeId, Shadow, Stroke};
 use crate::paint::Paint;
 
 /// Property changes; `None` leaves the property as it is.
@@ -11,6 +11,8 @@ pub struct Props {
     pub fill: Option<Option<Paint>>,
     pub stroke: Option<Option<Stroke>>,
     pub radius: Option<f64>,
+    pub opacity: Option<f64>,
+    pub shadow: Option<Option<Shadow>>,
     pub visible: Option<bool>,
     pub locked: Option<bool>,
 }
@@ -188,6 +190,12 @@ impl Document {
         }
         if let Some(v) = props.stroke {
             old.stroke = Some(std::mem::replace(&mut n.stroke, v));
+        }
+        if let Some(v) = props.opacity {
+            old.opacity = Some(std::mem::replace(&mut n.opacity, v));
+        }
+        if let Some(v) = props.shadow {
+            old.shadow = Some(std::mem::replace(&mut n.shadow, v));
         }
         if let Some(v) = props.radius {
             old.radius = Some(std::mem::replace(&mut n.radius, v));

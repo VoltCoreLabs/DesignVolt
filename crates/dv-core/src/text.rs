@@ -17,7 +17,9 @@ use std::fmt;
 
 use crate::paint::Paint;
 
-use crate::document::{Color, Document, Geometry, Node, NodeId, NodeKind, Page, Stroke};
+use crate::document::{
+    Color, Document, Geometry, Node, NodeId, NodeKind, Page, Shadow, Stroke, StrokeStyle,
+};
 
 const MAGIC: &str = "designvolt-document";
 const VERSION: u32 = 1;
@@ -107,10 +109,13 @@ pub fn to_text(doc: &Document) -> String {
             let flags = u8::from(n.visible) | (u8::from(n.locked) << 1);
             let fill = n.fill.as_ref().map_or("-".to_string(), Paint::to_code);
             let stroke = n.stroke.map_or("-".to_string(), |s| {
-                format!("{}:{}", color_code(s.color), s.width)
+                format!("{}:{}:{}", color_code(s.color), s.width, s.style.code())
+            });
+            let shadow = n.shadow.map_or("-".to_string(), |s| {
+                format!("{}:{}:{}:{}", color_code(s.color), s.x, s.y, s.blur)
             });
             out.push_str(&format!(
-                "node\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
+                "node\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
                 id.0,
                 n.parent.map_or(0, |p| p.0),
                 kind_code(n.kind),
@@ -123,7 +128,9 @@ pub fn to_text(doc: &Document) -> String {
                 flags,
                 fill,
                 stroke,
-                escape(&n.name)
+                escape(&n.name),
+                n.opacity,
+                shadow
             ));
         }
     }
@@ -193,6 +200,18 @@ fn attach(page: &mut Page, id: NodeId, node: Node, line: usize) -> Result<(), Pa
     Ok(())
 }
 
+fn parse_shadow(s: &str) -> Option<Shadow> {
+    let mut p = s.split(':');
+    let color = color_from(p.next()?)?;
+    let mut num = || p.next()?.parse::<f64>().ok().filter(|v| v.is_finite());
+    Some(Shadow {
+        color,
+        x: num()?,
+        y: num()?,
+        blur: num()?.max(0.0),
+    })
+}
+
 fn parse_node<'a>(
     f: &mut impl Iterator<Item = &'a str>,
     page: &Page,
@@ -230,16 +249,33 @@ fn parse_node<'a>(
     let stroke = match next("stroke")? {
         "-" => None,
         s => {
-            let (c, w) = s.split_once(':').ok_or_else(|| err(line, "bad stroke"))?;
+            let mut p = s.split(':');
+            let (c, w) = (
+                p.next().unwrap_or(""),
+                p.next().ok_or_else(|| err(line, "bad stroke"))?,
+            );
             Some(Stroke {
                 color: color_from(c).ok_or_else(|| err(line, "bad stroke color"))?,
                 width: num(w, "stroke width")?,
+                style: p
+                    .next()
+                    .and_then(StrokeStyle::from_code)
+                    .unwrap_or_default(),
             })
         }
     };
     let name = unescape(f.next().unwrap_or(""));
     let _ = page;
+    // Columns added later come after the name; older files simply end there.
+    let opacity = f
+        .next()
+        .and_then(|s| s.parse::<f64>().ok())
+        .filter(|v| v.is_finite())
+        .map_or(1.0, |v| v.clamp(0.0, 1.0));
+    let shadow = f.next().and_then(parse_shadow);
     let mut node = Node::new(kind, name, geom);
+    node.opacity = opacity;
+    node.shadow = shadow;
     node.fill = fill;
     node.stroke = stroke;
     node.radius = radius;
@@ -299,6 +335,14 @@ mod tests {
                     a: 4,
                 },
                 width: 2.5,
+                style: StrokeStyle::Dashed,
+            })),
+            opacity: Some(0.4),
+            shadow: Some(Some(Shadow {
+                color: Color::rgb(9, 8, 7),
+                x: -2.5,
+                y: 6.0,
+                blur: 12.0,
             })),
             radius: Some(8.25),
             locked: Some(true),
@@ -314,6 +358,24 @@ mod tests {
         let n = back.page().node(a).unwrap();
         assert!(n.locked && !n.visible && n.fill.is_none());
         assert_eq!(n.stroke.unwrap().width, 2.5);
+        assert_eq!(n.stroke.unwrap().style, StrokeStyle::Dashed);
+        assert_eq!((n.opacity, n.shadow.unwrap().blur), (0.4, 12.0));
+    }
+
+    #[test]
+    fn old_files_without_effects_still_load() {
+        let text = format!(
+            "{MAGIC}	{VERSION}
+name	x
+page	p
+node	1	0	rect	0	0	10	10	0	0	3	ff0000ff	00ff00ff:2	old
+"
+        );
+        let doc = from_text(&text).unwrap();
+        let n = doc.page().node(NodeId(1)).unwrap();
+        assert_eq!((n.opacity, n.shadow), (1.0, None));
+        assert_eq!(n.stroke.unwrap().style, StrokeStyle::Solid);
+        assert_eq!(n.name, "old");
     }
 
     #[test]

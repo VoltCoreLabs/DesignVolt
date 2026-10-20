@@ -1,11 +1,11 @@
 //! Typing into the fill and stroke fields (hex, opacity, stroke width) and the add/remove buttons.
 
-use dv_core::{Color, Paint, Stroke};
+use dv_core::{Color, Paint, Shadow, Stroke};
 use dv_ui::input::{Key, Mods};
 use dv_ui::theme::metrics::FONT_UI;
 use dv_ui::widgets::text_input::{PAD_X, TextInput};
 
-use super::ops_paint::{DEFAULT_FILL, DEFAULT_STROKE, edit_fill, edit_stroke};
+use super::ops_paint::{DEFAULT_FILL, DEFAULT_STROKE, edit_fill, edit_shadow, edit_stroke};
 use super::paint_ui::{Hit, Look, PField, Slot, field_rect, looks};
 use super::props::{filter_number_chars, parse_number};
 use super::state::Editor;
@@ -24,8 +24,9 @@ pub struct PaintEdit {
 pub fn filter(field: PField, s: &str) -> String {
     match field {
         PField::Hex => s.chars().filter(char::is_ascii_hexdigit).collect(),
+        PField::ShX | PField::ShY => filter_number_chars(s),
         PField::Alpha => s.chars().filter(char::is_ascii_digit).collect(),
-        PField::Width => filter_number_chars(s).replace('-', ""),
+        PField::Width | PField::ShBlur => filter_number_chars(s).replace('-', ""),
     }
 }
 
@@ -33,7 +34,7 @@ fn max_chars(field: PField) -> usize {
     match field {
         PField::Hex => 6,
         PField::Alpha => 3,
-        PField::Width => 7,
+        PField::Width | PField::ShX | PField::ShY | PField::ShBlur => 7,
     }
 }
 
@@ -49,6 +50,7 @@ impl Editor {
             Hit::Remove(slot) => self.remove_paint(slot),
             Hit::Swatch(slot) => self.toggle_picker(slot),
             Hit::Field(slot, field) => self.start_paint_edit(slot, field),
+            Hit::Style => self.cycle_stroke_style(),
         }
     }
 
@@ -57,6 +59,7 @@ impl Editor {
         match slot {
             Slot::Fill => edit_fill(ex, &self.selection, None, |_| Some(DEFAULT_FILL.into())),
             Slot::Stroke => edit_stroke(ex, &self.selection, None, |_| Some(DEFAULT_STROKE)),
+            Slot::Shadow => edit_shadow(ex, &self.selection, None, |_| Some(Shadow::DEFAULT)),
         }
     }
 
@@ -66,10 +69,15 @@ impl Editor {
         match slot {
             Slot::Fill => edit_fill(ex, &self.selection, None, |_| None),
             Slot::Stroke => edit_stroke(ex, &self.selection, None, |_| None),
+            Slot::Shadow => edit_shadow(ex, &self.selection, None, |_| None),
         }
     }
 
     fn start_paint_edit(&mut self, slot: Slot, field: PField) {
+        if slot == Slot::Shadow {
+            self.start_shadow_edit(field);
+            return;
+        }
         let (fill, stroke) = looks(self);
         let (color, width) = match (slot, fill, stroke) {
             (Slot::Fill, Look::One(Paint::Solid(c)), _) => (c, 0.0),
@@ -80,6 +88,7 @@ impl Editor {
             PField::Hex => color.to_hex(),
             PField::Alpha => format!("{:.0}", f64::from(color.a) / 255.0 * 100.0),
             PField::Width => super::props::edit_text(width),
+            _ => return,
         };
         let mut input = TextInput::new(max_chars(field), false).with_font_size(FONT_UI);
         input.insert(&text);
@@ -95,6 +104,10 @@ impl Editor {
             return;
         };
         let text = e.input.text().to_string();
+        if e.slot == Slot::Shadow {
+            self.commit_shadow_edit(e.field, &text);
+            return;
+        }
         let ex = &mut self.session.borrow_mut().exec;
         let sel = &self.selection;
         match (e.slot, e.field) {
@@ -117,6 +130,7 @@ impl Editor {
                             ..base
                         })
                     }),
+                    Slot::Shadow => {}
                 }
             }
             (slot, PField::Alpha) => {
@@ -135,8 +149,10 @@ impl Editor {
                             ..s
                         })
                     }),
+                    Slot::Shadow => {}
                 }
             }
+            (_, PField::ShX | PField::ShY | PField::ShBlur) => {}
             (_, PField::Width) => {
                 let Some(w) = parse_number(&text) else { return };
                 let width = w.clamp(0.0, MAX_WIDTH);

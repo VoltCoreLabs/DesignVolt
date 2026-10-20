@@ -1,6 +1,6 @@
 //! Fill and stroke edits from the right panel and the color picker.
 
-use dv_core::{Color, Command, Executor, NodeId, Paint, Props, Stroke};
+use dv_core::{Color, Command, Executor, NodeId, Paint, Props, Shadow, Stroke};
 
 /// Fill given to a shape by the "+" button.
 pub const DEFAULT_FILL: Color = Color::rgb(217, 217, 217);
@@ -8,6 +8,7 @@ pub const DEFAULT_FILL: Color = Color::rgb(217, 217, 217);
 pub const DEFAULT_STROKE: Stroke = Stroke {
     color: Color::rgb(0, 0, 0),
     width: 1.0,
+    style: dv_core::StrokeStyle::Solid,
 };
 
 fn run(ex: &mut Executor, label: &'static str, key: Option<u64>, cmds: Vec<Command>) {
@@ -68,6 +69,29 @@ pub fn edit_stroke(
     run(ex, "Stroke", key, cmds);
 }
 
+/// Replaces the shadow of every shape of the selection by `f(old)`.
+pub fn edit_shadow(
+    ex: &mut Executor,
+    ids: &[NodeId],
+    key: Option<u64>,
+    f: impl Fn(Option<Shadow>) -> Option<Shadow>,
+) {
+    let page = ex.doc().page();
+    let cmds = page
+        .geo_tops(ids)
+        .into_iter()
+        .filter_map(|id| {
+            let shadow = f(page.node(id)?.shadow);
+            let props = Props {
+                shadow: Some(shadow),
+                ..Props::default()
+            };
+            Some(Command::SetProps { id, props })
+        })
+        .collect();
+    run(ex, "Shadow", key, cmds);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -119,6 +143,21 @@ mod tests {
             ex.doc().page().node(a).unwrap().fill,
             Some(DEFAULT_FILL.into())
         );
+    }
+
+    #[test]
+    fn shadow_can_be_added_changed_and_removed() {
+        let mut ex = Executor::new(Document::default());
+        let a = shape(&mut ex);
+        edit_shadow(&mut ex, &[a], None, |_| Some(Shadow::DEFAULT));
+        edit_shadow(&mut ex, &[a], None, |s| {
+            s.map(|s| Shadow { blur: 20.0, ..s })
+        });
+        assert_eq!(ex.doc().page().node(a).unwrap().shadow.unwrap().blur, 20.0);
+        edit_shadow(&mut ex, &[a], None, |_| None);
+        assert!(ex.doc().page().node(a).unwrap().shadow.is_none());
+        ex.undo();
+        assert!(ex.doc().page().node(a).unwrap().shadow.is_some());
     }
 
     #[test]

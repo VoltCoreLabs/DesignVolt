@@ -110,6 +110,9 @@ pub struct Editor {
     pub(super) space: bool,
     pub(super) drag_key: u64,
     pub(super) clip: super::ops_clip::Clip,
+    /// A layer name being typed, and the last row click (for double-click).
+    pub(super) rename: Option<super::rename::Rename>,
+    pub(super) last_row_click: Option<(NodeId, std::time::Instant)>,
     /// Layers whose children are hidden in the layers panel.
     pub(super) collapsed: std::collections::HashSet<NodeId>,
     /// How long the last canvas paint took (ms) and what it drew.
@@ -144,6 +147,8 @@ impl Editor {
             space: false,
             drag_key: 0,
             clip: Default::default(),
+            rename: None,
+            last_row_click: None,
             collapsed: Default::default(),
             paint_ms: Cell::new(0.0),
             paint_stats: Cell::new(PaintStats::default()),
@@ -301,7 +306,8 @@ impl Screen for Editor {
             self.cancel_prop_edit();
         }
         let editing = self.prop_edit.as_mut().is_some_and(|e| e.input.update(dt));
-        busy || saving || editing || self.time < INTRO_END || self.interaction.is_some()
+        let renaming = self.rename.as_mut().is_some_and(|r| r.input.update(dt));
+        busy || saving || editing || renaming || self.time < INTRO_END || self.interaction.is_some()
     }
 
     fn mouse_moved(&mut self, x: f64, y: f64) {
@@ -338,6 +344,10 @@ impl Screen for Editor {
     }
 
     fn text(&mut self, s: &str) {
+        if self.rename.is_some() {
+            self.rename_text(s);
+            return;
+        }
         self.prop_text(s);
     }
 

@@ -16,6 +16,10 @@ pub const STRESS_COUNT: usize = 10_000;
 
 impl Editor {
     pub(super) fn handle_key(&mut self, key: Key, mods: Mods) {
+        if self.rename.is_some() {
+            self.rename_key(key, mods);
+            return;
+        }
         if self.prop_edit.is_some() {
             self.prop_key(key, mods);
             return;

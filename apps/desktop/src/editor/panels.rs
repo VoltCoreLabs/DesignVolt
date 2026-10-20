@@ -317,6 +317,13 @@ fn layer_row(cx: &mut Cx, ed: &Editor, rect: Rect, row: &super::state::LayerRow)
         );
     }
     cx.icon(kind_icon(row.kind), x, rect.y0 + 7.0, 14.0, strong);
+    if let Some(r) = ed.rename.as_ref().filter(|r| r.id == row.id) {
+        let boxr = Rect::new(x + 18.0, rect.y0 + 3.0, rect.x1 - 6.0, rect.y1 - 3.0);
+        cx.fill(boxr, R_BUTTON, hex(bg_raised()));
+        cx.stroke(boxr, R_BUTTON, 1.5, hex(accent()));
+        r.input.draw_inline(cx, boxr, x + 22.0, rect.y0 + 18.0);
+        return;
+    }
     let name = cx.fit(&row.name, FONT_UI, (rect.x1 - 70.0 - (x + 22.0)).max(20.0));
     cx.text(&name, FONT_UI, x + 22.0, rect.y0 + 18.0, strong);
     if row.locked || rect.contains(ed.mouse) {

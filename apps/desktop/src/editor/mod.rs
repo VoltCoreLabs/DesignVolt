@@ -12,6 +12,7 @@ mod ops_layer;
 mod ops_order;
 mod panels;
 mod props;
+mod rename;
 mod reparent;
 mod session;
 mod state;

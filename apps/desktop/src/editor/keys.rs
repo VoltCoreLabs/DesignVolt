@@ -25,7 +25,7 @@ impl Editor {
             return;
         }
         if self.picker.is_some() && key == Key::Escape {
-            if self.eyedrop.take().is_none() {
+            if self.eyedrop.take().is_none() && !std::mem::take(&mut self.pick_source) {
                 self.close_picker();
             }
             return;

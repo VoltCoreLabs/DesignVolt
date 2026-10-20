@@ -117,6 +117,8 @@ pub struct Editor {
     pub(super) pick_edit: Option<super::picker_edit::PickEdit>,
     /// The eyedropper is waiting for a click on the canvas (for this slot).
     pub(super) eyedrop: Option<super::paint_ui::Slot>,
+    /// Waiting for a click on the object that becomes the pattern tile.
+    pub(super) pick_source: bool,
     /// A layer name being typed, and the last row click (for double-click).
     pub(super) rename: Option<super::rename::Rename>,
     pub(super) last_row_click: Option<(NodeId, std::time::Instant)>,
@@ -159,6 +161,7 @@ impl Editor {
             picker_mode: super::color_fmt::Mode::Hex,
             pick_edit: None,
             eyedrop: None,
+            pick_source: false,
             rename: None,
             last_row_click: None,
             collapsed: Default::default(),

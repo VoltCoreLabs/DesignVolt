@@ -27,7 +27,7 @@ DesignVolt/
    ├─ library.rs, library_io.rs, store.rs         проекты и папки (модель), файлы данных, профиль и настройки
    ├─ screens/                                    welcome, settings, projects (+ _actions, _bar, _cards, _input, _menu, _modal, _paint)
    └─ editor/                                     state, interact (мышь), keys (клавиши), canvas, panels, toolbar,
-                                                  layout, handles (маркеры), ops (операции над документом), ops_clip (буфер), ops_order (порядок слоёв), ops_layer (замок), reparent (перенос в фрейм), ops_group (группы), ops_paint + paint_ui + paint_edit + picker, picker_layout, picker_draw, picker_edit, color_fmt, recent, picker_grad (градиенты) (заливка и обводка, пикер), rename (имя слоя), layer_drag (перетаскивание строк слоёв), session (файл и автосохранение), tests
+                                                  layout, handles (маркеры), ops (операции над документом), ops_clip (буфер), ops_order (порядок слоёв), ops_layer (замок), reparent (перенос в фрейм), ops_group (группы), ops_paint + paint_ui + paint_edit + picker, picker_layout, picker_draw, picker_edit, color_fmt, recent, picker_grad (градиенты), picker_pattern (узор) (заливка и обводка, пикер), rename (имя слоя), layer_drag (перетаскивание строк слоёв), session (файл и автосохранение), tests
 ```
 
 ## Правила масштабирования

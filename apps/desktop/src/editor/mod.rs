@@ -21,6 +21,7 @@ mod picker_draw;
 mod picker_edit;
 mod picker_grad;
 mod picker_layout;
+mod picker_pattern;
 mod props;
 mod recent;
 mod rename;

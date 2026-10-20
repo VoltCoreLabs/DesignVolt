@@ -1,6 +1,6 @@
 //! What a shape is filled with: a color or a gradient.
 
-use crate::document::Color;
+use crate::document::{Color, NodeId};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum GradientKind {
@@ -133,10 +133,69 @@ fn mix(a: Color, b: Color, t: f64) -> Color {
     }
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Tiling {
+    Grid,
+    /// Every other row is shifted by half a tile.
+    BrickRows,
+    /// Every other column is shifted by half a tile.
+    BrickColumns,
+}
+
+impl Tiling {
+    pub const ALL: [Tiling; 3] = [Tiling::Grid, Tiling::BrickRows, Tiling::BrickColumns];
+
+    pub fn code(self) -> &'static str {
+        match self {
+            Tiling::Grid => "grid",
+            Tiling::BrickRows => "rows",
+            Tiling::BrickColumns => "cols",
+        }
+    }
+
+    pub fn from_code(s: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|t| t.code() == s)
+    }
+
+    pub fn next(self) -> Self {
+        let i = Self::ALL.iter().position(|t| *t == self).unwrap_or(0);
+        Self::ALL[(i + 1) % Self::ALL.len()]
+    }
+}
+
+/// A shape of the document repeated over the fill area, like a pattern fill in Figma.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub struct Pattern {
+    /// The node (with everything inside it) that is the tile.
+    pub source: NodeId,
+    pub tiling: Tiling,
+    /// Tile size relative to the source (1 = as it is).
+    pub scale: f64,
+    /// Space between tiles.
+    pub gap_x: f64,
+    pub gap_y: f64,
+    /// Turns the whole grid, in degrees.
+    pub angle: f64,
+}
+
+impl Pattern {
+    pub fn new(source: NodeId) -> Self {
+        Self {
+            source,
+            tiling: Tiling::Grid,
+            scale: 1.0,
+            gap_x: 0.0,
+            gap_y: 0.0,
+            angle: 0.0,
+        }
+    }
+}
+
 #[derive(Clone, PartialEq, Debug)]
 pub enum Paint {
     Solid(Color),
     Gradient(Gradient),
+    Pattern(Pattern),
 }
 
 impl From<Color> for Paint {
@@ -151,13 +210,14 @@ impl Paint {
         match self {
             Paint::Solid(c) => *c,
             Paint::Gradient(g) => g.stops[0].color,
+            Paint::Pattern(_) => Color::rgb(160, 160, 168),
         }
     }
 
     pub fn solid(&self) -> Option<Color> {
         match self {
             Paint::Solid(c) => Some(*c),
-            Paint::Gradient(_) => None,
+            Paint::Gradient(_) | Paint::Pattern(_) => None,
         }
     }
 
@@ -165,6 +225,15 @@ impl Paint {
     pub fn to_code(&self) -> String {
         match self {
             Paint::Solid(c) => color_code(*c),
+            Paint::Pattern(p) => format!(
+                "p;{};{};{};{};{};{}",
+                p.source.0,
+                p.tiling.code(),
+                p.scale,
+                p.gap_x,
+                p.gap_y,
+                p.angle
+            ),
             Paint::Gradient(g) => {
                 let stops: Vec<String> = g
                     .stops
@@ -185,6 +254,9 @@ impl Paint {
     }
 
     pub fn from_code(s: &str) -> Option<Paint> {
+        if let Some(rest) = s.strip_prefix("p;") {
+            return parse_pattern(rest).map(Paint::Pattern);
+        }
         let Some(rest) = s.strip_prefix("g;") else {
             return color_from(s).map(Paint::Solid);
         };
@@ -217,6 +289,22 @@ impl Paint {
         g.normalize();
         Some(Paint::Gradient(g))
     }
+}
+
+fn parse_pattern(s: &str) -> Option<Pattern> {
+    let mut f = s.split(';');
+    let source = NodeId(f.next()?.parse().ok()?);
+    let tiling = Tiling::from_code(f.next()?)?;
+    let mut num = || f.next()?.parse::<f64>().ok().filter(|v| v.is_finite());
+    let (scale, gap_x, gap_y, angle) = (num()?, num()?, num()?, num()?);
+    Some(Pattern {
+        source,
+        tiling,
+        scale: scale.max(0.01),
+        gap_x,
+        gap_y,
+        angle,
+    })
 }
 
 pub fn color_code(c: Color) -> String {
@@ -283,5 +371,16 @@ mod tests {
         assert!(Paint::from_code("g;linear;0;0.5;0.5;1;0=ff0000ff").is_none());
         assert!(Paint::from_code("g;nope;0;0.5;0.5;1;0=ff0000ff|1=00000000").is_none());
         assert!(Paint::from_code("zzzz").is_none());
+        let pat = Paint::Pattern(Pattern {
+            tiling: Tiling::BrickRows,
+            scale: 0.5,
+            gap_x: 4.0,
+            gap_y: -2.0,
+            angle: 30.0,
+            ..Pattern::new(NodeId(12))
+        });
+        assert_eq!(Paint::from_code(&pat.to_code()), Some(pat));
+        assert!(Paint::from_code("p;x;grid;1;0;0;0").is_none());
+        assert!(Paint::from_code("p;3;weird;1;0;0;0").is_none());
     }
 }

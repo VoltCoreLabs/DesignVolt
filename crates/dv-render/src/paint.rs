@@ -1,6 +1,6 @@
 //! Page painting with culling (R-tree query) and level-of-detail skipping.
 
-use dv_core::{Color, NodeKind, Page};
+use dv_core::{Color, NodeKind, Page, Paint};
 use dv_geom::SpatialIndex;
 use vello::Scene;
 use vello::kurbo::{Affine, Ellipse, Rect, RoundedRect, Stroke};
@@ -49,33 +49,54 @@ pub fn paint_page(
         let Some(node) = page.node(e.id) else {
             continue;
         };
-        let g = &node.geom;
-        let world = view * e.world;
-        let rect = Rect::new(0.0, 0.0, g.w, g.h);
-        match node.kind {
-            NodeKind::Group => {}
-            NodeKind::Ellipse => {
-                let shape = Ellipse::new((g.w / 2.0, g.h / 2.0), (g.w / 2.0, g.h / 2.0), 0.0);
-                fill_and_stroke(scene, world, &shape, node);
-            }
-            NodeKind::Rectangle | NodeKind::Frame => {
-                let shape = RoundedRect::from_rect(rect, node.radius);
-                fill_and_stroke(scene, world, &shape, node);
-            }
-        }
+        draw_node(scene, page, node, view * e.world, true);
         stats.drawn += 1;
     }
     stats
 }
 
+/// Draws one node (not its children) with its fill and stroke. `patterns` is off while a
+/// pattern tile is drawn, so a tile never contains patterns itself.
+pub(crate) fn draw_node(
+    scene: &mut Scene,
+    page: &Page,
+    node: &dv_core::Node,
+    world: Affine,
+    patterns: bool,
+) {
+    let g = &node.geom;
+    match node.kind {
+        NodeKind::Group => {}
+        NodeKind::Ellipse => {
+            let shape = Ellipse::new((g.w / 2.0, g.h / 2.0), (g.w / 2.0, g.h / 2.0), 0.0);
+            fill_and_stroke(scene, page, world, &shape, node, patterns);
+        }
+        NodeKind::Rectangle | NodeKind::Frame => {
+            let rect = Rect::new(0.0, 0.0, g.w, g.h);
+            let shape = RoundedRect::from_rect(rect, node.radius);
+            fill_and_stroke(scene, page, world, &shape, node, patterns);
+        }
+    }
+}
+
 fn fill_and_stroke(
     scene: &mut Scene,
+    page: &Page,
     world: Affine,
     shape: &impl vello::kurbo::Shape,
     node: &dv_core::Node,
+    patterns: bool,
 ) {
-    if let Some(fill) = &node.fill {
-        crate::gradient::fill_paint(scene, world, shape, node.geom.w, node.geom.h, fill);
+    match &node.fill {
+        Some(Paint::Pattern(p)) => {
+            if patterns {
+                crate::pattern::draw(scene, page, world, shape, node, p);
+            }
+        }
+        Some(fill) => {
+            crate::gradient::fill_paint(scene, world, shape, node.geom.w, node.geom.h, fill);
+        }
+        None => {}
     }
     if let Some(stroke) = node.stroke {
         scene.stroke(
@@ -87,7 +108,6 @@ fn fill_and_stroke(
         );
     }
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;

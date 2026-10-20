@@ -6,6 +6,7 @@
 mod gradient;
 mod grid;
 mod paint;
+mod pattern;
 mod viewport;
 
 pub use gradient::{fill_paint, linear_line};

@@ -22,6 +22,7 @@ pub fn tab_of(paint: Option<&Paint>) -> usize {
                 .position(|k| *k == g.kind)
                 .unwrap_or(0)
         }
+        Some(Paint::Pattern(_)) => 5,
         _ => 0,
     }
 }
@@ -53,7 +54,7 @@ pub fn set_field(g: &mut Gradient, stop: usize, f: GField, v: f64) {
     }
 }
 
-const _: () = assert!(TABS == 5);
+const _: () = assert!(TABS == 6);
 
 impl Editor {
     /// The gradient of the selection when all selected shapes share it.
@@ -165,6 +166,10 @@ impl Editor {
 
     /// Switches the fill between a solid color and the gradient types.
     pub(super) fn pick_tab(&mut self, i: usize) {
+        if i == 5 {
+            self.begin_pattern();
+            return;
+        }
         let kind = tab_kind(i);
         let color = self.picker.as_ref().map(|p| p.color());
         {

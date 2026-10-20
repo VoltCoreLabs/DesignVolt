@@ -1,6 +1,6 @@
 //! Drawing the color picker popup.
 
-use dv_core::{Color, Gradient, GradientKind, Paint};
+use dv_core::{Color, Gradient, GradientKind, Paint, Tiling};
 use dv_ui::draw::Cx;
 use dv_ui::icons::Icon;
 use dv_ui::theme::colors::*;
@@ -14,8 +14,9 @@ use super::picker::Picker;
 use super::picker_edit::{PickEdit, PickField};
 use super::picker_grad::{field_value, tab_kind, tab_of};
 use super::picker_layout::*;
+use super::picker_pattern::field_value as pat_value;
 use super::state::Editor;
-use crate::i18n::{Lang, lang};
+use crate::i18n::{Lang, Msg, lang, tr};
 
 const KNOB: f64 = 6.0;
 
@@ -86,6 +87,40 @@ fn label(f: GField) -> &'static str {
     }
 }
 
+fn pat_label(i: usize) -> &'static str {
+    let ru = lang() == Lang::Ru;
+    match i {
+        0 => {
+            if ru {
+                "Масштаб"
+            } else {
+                "Scale"
+            }
+        }
+        1 => {
+            if ru {
+                "Отступ X"
+            } else {
+                "Gap X"
+            }
+        }
+        2 => {
+            if ru {
+                "Отступ Y"
+            } else {
+                "Gap Y"
+            }
+        }
+        _ => {
+            if ru {
+                "Угол"
+            } else {
+                "Angle"
+            }
+        }
+    }
+}
+
 fn suffix(f: GField) -> &'static str {
     if f == GField::Angle { "°" } else { "%" }
 }
@@ -98,9 +133,22 @@ impl Editor {
         cx.shadow(popup, R_CARD, alpha(0x000000, 0.25), 16.0, 8.0);
         cx.fill(popup, R_CARD, hex(bg_raised()));
         cx.stroke(popup, R_CARD, 1.0, alpha(overlay(), 0.12));
+        if self.pick_source && !shape.pattern {
+            cx.text(
+                tr(Msg::PickObject),
+                FONT_UI,
+                popup.x0 + 4.0,
+                popup.y0 - 8.0,
+                hex(accent()),
+            );
+        }
         let gradient = self.current_gradient();
         if shape.tabs {
             self.draw_tabs(cx, popup, shape, p);
+        }
+        if shape.pattern {
+            self.draw_pattern(cx, popup, shape);
+            return;
         }
         if let Some(g) = &gradient {
             draw_stops(cx, popup, shape, g, p.stop);
@@ -118,6 +166,10 @@ impl Editor {
         let active = tab_of(fill.as_ref());
         for i in 0..TABS {
             let r = tab_rect(popup, shape, i);
+            if i == 5 {
+                draw_pattern_tab(cx, r, i == active);
+                continue;
+            }
             let sample = match tab_kind(i) {
                 None => Paint::Solid(p.color()),
                 Some(k) => {
@@ -134,6 +186,75 @@ impl Editor {
                 alpha(overlay(), 0.2)
             };
             cx.stroke(r, R_FIELD, if on { 2.0 } else { 1.0 }, ring);
+        }
+    }
+
+    fn draw_pattern(&self, cx: &mut Cx, popup: Rect, shape: Shape) {
+        let Some(pat) = self.current_pattern() else {
+            return;
+        };
+        let r = pat_source_rect(popup, shape);
+        let active = self.pick_source;
+        cx.fill(
+            r,
+            R_FIELD,
+            if active {
+                alpha(accent(), 0.3)
+            } else {
+                hex(bg_app())
+            },
+        );
+        let name = if active {
+            tr(Msg::PickObject).to_string()
+        } else {
+            let s = self.session.borrow();
+            s.exec
+                .doc()
+                .page()
+                .node(pat.source)
+                .map_or(String::new(), |n| n.name.clone())
+        };
+        let shown = cx.fit(&name, FONT_UI, r.width() - 16.0);
+        cx.text(
+            &shown,
+            FONT_UI,
+            r.x0 + 8.0,
+            r.y0 + 18.0,
+            hex(text_primary()),
+        );
+        let t = pat_tiling_rect(popup, shape);
+        cx.fill(t, R_FIELD, hex(bg_app()));
+        let label = match pat.tiling {
+            Tiling::Grid => tr(Msg::TilingGrid),
+            Tiling::BrickRows => tr(Msg::TilingRows),
+            Tiling::BrickColumns => tr(Msg::TilingColumns),
+        };
+        cx.text(label, FONT_UI, t.x0 + 8.0, t.y0 + 18.0, hex(text_primary()));
+        for (i, f) in PAT_FIELDS.iter().enumerate() {
+            let fr = pat_field_rect(popup, shape, i);
+            let (name, suf) = match f {
+                PatField::Scale => (pat_label(0), "%"),
+                PatField::GapX => (pat_label(1), "px"),
+                PatField::GapY => (pat_label(2), "px"),
+                PatField::Angle => (pat_label(3), "°"),
+            };
+            match self
+                .pick_edit
+                .as_ref()
+                .filter(|e| e.field == PickField::Pat(*f))
+            {
+                Some(e) => edit_box(cx, fr, e),
+                None => {
+                    value_box(cx, fr, &super::canvas::num(pat_value(&pat, *f)), suf);
+                    cx.text(
+                        name,
+                        FONT_SM,
+                        fr.x0 + 6.0,
+                        fr.y0 - 3.0,
+                        hex(text_disabled()),
+                    );
+                }
+            }
         }
     }
 
@@ -248,6 +369,24 @@ impl Editor {
             cx.stroke(r, R_FIELD, if on { 2.0 } else { 1.0 }, ring);
         }
     }
+}
+
+/// The pattern tab: a small grid of dots.
+fn draw_pattern_tab(cx: &mut Cx, r: Rect, on: bool) {
+    cx.fill(r, R_FIELD, hex(bg_app()));
+    for row in 0..2 {
+        for col in 0..4 {
+            let x = r.x0 + r.width() * (col as f64 + 0.5) / 4.0;
+            let y = r.y0 + r.height() * (row as f64 + 0.5) / 2.0;
+            cx.circle(x, y, 2.0, hex(text_secondary()));
+        }
+    }
+    let ring = if on {
+        hex(accent())
+    } else {
+        alpha(overlay(), 0.2)
+    };
+    cx.stroke(r, R_FIELD, if on { 2.0 } else { 1.0 }, ring);
 }
 
 /// The gradient line with a handle for each stop.

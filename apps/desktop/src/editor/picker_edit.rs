@@ -7,7 +7,11 @@ use dv_ui::widgets::text_input::{PAD_X, TextInput};
 use super::color_fmt::{Mode, components, with_component};
 use super::paint_edit::percent_to_alpha;
 use super::picker_grad::{field_value, set_field};
-use super::picker_layout::{GField, Shape, alpha_field_rect, field_rect, gfield_rect, grad_fields};
+use super::picker_layout::{
+    GField, PAT_FIELDS, PatField, Shape, alpha_field_rect, field_rect, gfield_rect, grad_fields,
+    pat_field_rect,
+};
+use super::picker_pattern::{field_value as field_value_pat, set_field as set_field_pat};
 use super::props::parse_number;
 use super::state::Editor;
 
@@ -16,6 +20,7 @@ pub enum PickField {
     Comp(usize),
     Alpha,
     Grad(GField),
+    Pat(PatField),
 }
 
 pub struct PickEdit {
@@ -26,7 +31,7 @@ pub struct PickEdit {
 /// Keeps what a picker field can hold in `mode`.
 pub fn filter(mode: Mode, field: PickField, s: &str) -> String {
     match (field, mode) {
-        (PickField::Grad(_), _) => s
+        (PickField::Grad(_) | PickField::Pat(_), _) => s
             .chars()
             .filter(|c| c.is_ascii_digit() || *c == '.' || *c == '-')
             .collect(),
@@ -42,7 +47,7 @@ pub fn filter(mode: Mode, field: PickField, s: &str) -> String {
 
 fn max_chars(mode: Mode, field: PickField) -> usize {
     match (field, mode) {
-        (PickField::Grad(_), _) => 7,
+        (PickField::Grad(_) | PickField::Pat(_), _) => 7,
         (PickField::Alpha, _) => 3,
         (_, Mode::Hex) => 6,
         (_, Mode::Css) => 32,
@@ -59,6 +64,12 @@ impl Editor {
         let text = match field {
             PickField::Comp(i) => components(mode, color).get(i).cloned().unwrap_or_default(),
             PickField::Alpha => format!("{:.0}", f64::from(color.a) / 255.0 * 100.0),
+            PickField::Pat(f) => {
+                let v = self
+                    .current_pattern()
+                    .map_or(0.0, |p| field_value_pat(&p, f));
+                super::props::edit_text(v)
+            }
             PickField::Grad(f) => {
                 let stop = self.picker.as_ref().map_or(0, |p| p.stop);
                 let v = self
@@ -90,8 +101,14 @@ impl Editor {
             }
             return;
         }
+        if let PickField::Pat(f) = e.field {
+            if let Some(v) = parse_number(&text) {
+                self.edit_pattern(|p| set_field_pat(p, f, v));
+            }
+            return;
+        }
         let new = match e.field {
-            PickField::Grad(_) => None,
+            PickField::Grad(_) | PickField::Pat(_) => None,
             PickField::Alpha => parse_number(&text).map(|v| dv_core::Color {
                 a: percent_to_alpha(v),
                 ..old
@@ -113,6 +130,10 @@ impl Editor {
         let rect = match e.field {
             PickField::Comp(i) => field_rect(popup, shape, mode, i),
             PickField::Alpha => alpha_field_rect(popup, shape, mode),
+            PickField::Pat(f) => {
+                let i = PAT_FIELDS.iter().position(|x| *x == f).unwrap_or(0);
+                pat_field_rect(popup, shape, i)
+            }
             PickField::Grad(f) => {
                 let k = shape.grad.map(grad_fields).unwrap_or(&[]);
                 let i = k.iter().position(|x| *x == f).unwrap_or(0);

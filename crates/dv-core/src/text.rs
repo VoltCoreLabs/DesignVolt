@@ -63,6 +63,7 @@ fn kind_code(k: NodeKind) -> &'static str {
         NodeKind::Frame => "frame",
         NodeKind::Rectangle => "rect",
         NodeKind::Ellipse => "ellipse",
+        NodeKind::Group => "group",
     }
 }
 
@@ -71,6 +72,7 @@ fn kind_from(s: &str) -> Option<NodeKind> {
         "frame" => Some(NodeKind::Frame),
         "rect" => Some(NodeKind::Rectangle),
         "ellipse" => Some(NodeKind::Ellipse),
+        "group" => Some(NodeKind::Group),
         _ => None,
     }
 }

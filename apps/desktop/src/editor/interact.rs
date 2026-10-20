@@ -201,9 +201,12 @@ impl Editor {
     /// title label, in the layers panel or by a marquee.
     fn pick_body(&self, world: Point) -> Option<NodeId> {
         let s = self.session.borrow();
-        self.index.pick_where(s.exec.doc().page(), world, |n| {
-            !(n.kind == NodeKind::Frame && n.parent.is_none())
-        })
+        let page = s.exec.doc().page();
+        self.index
+            .pick_where(page, world, |n| {
+                !(n.kind == NodeKind::Frame && n.parent.is_none())
+            })
+            .map(|id| page.outer_group(id))
     }
 
     fn press_select(&mut self, mods: Mods, world: Point, cp: Point) {
@@ -279,7 +282,7 @@ impl Editor {
         let originals = {
             let s = self.session.borrow();
             let page = s.exec.doc().page();
-            page.without_descendants(&self.selection)
+            page.geo_tops(&self.selection)
                 .into_iter()
                 .filter_map(|id| Some((id, page.node(id)?.geom)))
                 .collect()
@@ -308,7 +311,7 @@ impl Editor {
         let (orig, originals) = {
             let s = self.session.borrow();
             let page = s.exec.doc().page();
-            let top = page.without_descendants(&self.selection);
+            let top = page.geo_tops(&self.selection);
             let Some(orig) = selection_bounds(page, &top) else {
                 return;
             };
@@ -351,7 +354,7 @@ impl Editor {
         let (center, originals) = {
             let s = self.session.borrow();
             let page = s.exec.doc().page();
-            let top = page.without_descendants(&self.selection);
+            let top = page.geo_tops(&self.selection);
             let Some(bounds) = selection_bounds(page, &top) else {
                 return;
             };
@@ -456,6 +459,7 @@ impl Editor {
                 NodeKind::Frame => tr(Msg::NameFrame),
                 NodeKind::Rectangle => tr(Msg::NameRectangle),
                 NodeKind::Ellipse => tr(Msg::NameEllipse),
+                NodeKind::Group => tr(Msg::NameGroup),
             };
             let name = ops::next_name(page, base);
             let geom = Geometry {

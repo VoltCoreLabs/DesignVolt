@@ -8,6 +8,7 @@ mod layer_drag;
 mod layout;
 mod ops;
 mod ops_clip;
+mod ops_group;
 mod ops_layer;
 mod ops_order;
 mod panels;

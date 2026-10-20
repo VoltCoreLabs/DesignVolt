@@ -12,6 +12,8 @@ pub enum NodeKind {
     Frame,
     Rectangle,
     Ellipse,
+    /// A container without a look of its own: it only holds shapes together.
+    Group,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -169,6 +171,39 @@ impl Page {
                     .any(|other| other != id && parent.is_some_and(|p| self.is_inside(p, *other)))
             })
             .collect()
+    }
+
+    /// The shapes that geometry edits (move, resize, flip) act on for a selection: `ids`
+    /// without nested duplicates, with every group replaced by the shapes inside it.
+    pub fn geo_tops(&self, ids: &[NodeId]) -> Vec<NodeId> {
+        let mut out = Vec::new();
+        let mut stack: Vec<NodeId> = self.without_descendants(ids).into_iter().rev().collect();
+        while let Some(id) = stack.pop() {
+            let Some(n) = self.nodes.get(&id) else {
+                continue;
+            };
+            if n.kind == NodeKind::Group {
+                stack.extend(n.children.iter().rev());
+            } else {
+                out.push(id);
+            }
+        }
+        out
+    }
+
+    /// The outermost group that contains `id` (or `id` itself when it is in no group): what a
+    /// click on the shape selects.
+    pub fn outer_group(&self, id: NodeId) -> NodeId {
+        let mut best = id;
+        let mut cur = self.nodes.get(&id).and_then(|n| n.parent);
+        while let Some(c) = cur {
+            let Some(n) = self.nodes.get(&c) else { break };
+            if n.kind == NodeKind::Group {
+                best = c;
+            }
+            cur = n.parent;
+        }
+        best
     }
 }
 

@@ -61,7 +61,7 @@ impl super::state::Editor {
 /// Turns the selection by `deg` (clockwise on screen) around the middle of its bounds.
 pub fn rotate_by(ex: &mut Executor, ids: &[NodeId], deg: f64) {
     let page = ex.doc().page();
-    let tops = page.without_descendants(ids);
+    let tops = page.geo_tops(ids);
     let Some(bounds) = dv_geom::selection_bounds(page, &tops) else {
         return;
     };
@@ -91,7 +91,7 @@ pub fn rotate_by(ex: &mut Executor, ids: &[NodeId], deg: f64) {
 /// angle is negated and what is inside it is mirrored with it.
 pub fn flip(ex: &mut Executor, ids: &[NodeId], dir: Flip) {
     let page = ex.doc().page();
-    let tops = page.without_descendants(ids);
+    let tops = page.geo_tops(ids);
     let Some(bounds) = dv_geom::selection_bounds(page, &tops) else {
         return;
     };

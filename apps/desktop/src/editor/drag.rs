@@ -181,6 +181,13 @@ impl Editor {
                 .in_rect(page, rect)
                 .into_iter()
                 .filter(|id| page.node(*id).is_some_and(|n| n.parent.is_none()))
+                .chain(page.roots().iter().copied().filter(|id| {
+                    page.node(*id).is_some_and(|n| {
+                        n.kind == dv_core::NodeKind::Group && n.visible && !n.locked
+                    }) && dv_geom::selection_bounds(page, &[*id]).is_some_and(|b| {
+                        b.x0 <= rect.x1 && b.x1 >= rect.x0 && b.y0 <= rect.y1 && b.y1 >= rect.y0
+                    })
+                }))
                 .collect()
         };
         let mut sel: Vec<NodeId> = if additive { base.to_vec() } else { Vec::new() };

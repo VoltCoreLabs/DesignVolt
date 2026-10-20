@@ -50,6 +50,8 @@ impl Editor {
         if mods.ctrl {
             match c {
                 'd' => self.duplicate_selection(),
+                'g' if mods.shift => self.ungroup_selection(),
+                'g' => self.group_selection(),
                 ']' => self.reorder_selection(if mods.shift {
                     Order::Front
                 } else {
@@ -155,6 +157,25 @@ impl Editor {
         let copies = ops::duplicate(&mut self.session.borrow_mut().exec, &self.selection);
         if !copies.is_empty() {
             self.selection = copies;
+        }
+    }
+
+    fn group_selection(&mut self) {
+        if self.selection.is_empty() {
+            return;
+        }
+        let name = crate::i18n::tr(crate::i18n::Msg::NameGroup);
+        let made =
+            super::ops_group::group(&mut self.session.borrow_mut().exec, &self.selection, name);
+        if let Some(g) = made {
+            self.selection = vec![g];
+        }
+    }
+
+    fn ungroup_selection(&mut self) {
+        let freed = super::ops_group::ungroup(&mut self.session.borrow_mut().exec, &self.selection);
+        if !freed.is_empty() {
+            self.selection = freed;
         }
     }
 

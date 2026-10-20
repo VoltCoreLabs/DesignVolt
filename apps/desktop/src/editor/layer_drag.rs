@@ -91,7 +91,7 @@ impl Editor {
         let rect = panels::layer_row_rect(left, i);
         let s = self.session.borrow();
         let page = s.exec.doc().page();
-        let nest = rows[i].kind == NodeKind::Frame
+        let nest = matches!(rows[i].kind, NodeKind::Frame | NodeKind::Group)
             && !self
                 .selection
                 .iter()

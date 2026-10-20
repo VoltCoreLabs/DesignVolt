@@ -485,6 +485,34 @@ mod tests {
     }
 
     #[test]
+    fn geo_tops_expand_groups_and_outer_group_finds_the_root_one() {
+        let mut doc = Document::default();
+        let mk = |doc: &mut Document, kind, parent| {
+            let id = doc.alloc_id();
+            let index = doc.page().siblings(parent).len();
+            let node = Node::new(kind, "n", Geometry::default());
+            doc.apply(&Command::Create {
+                id,
+                parent,
+                index,
+                node,
+            })
+            .unwrap();
+            id
+        };
+        let g = mk(&mut doc, NodeKind::Group, None);
+        let inner = mk(&mut doc, NodeKind::Group, Some(g));
+        let a = mk(&mut doc, NodeKind::Rectangle, Some(inner));
+        let b = mk(&mut doc, NodeKind::Rectangle, Some(g));
+        let c = mk(&mut doc, NodeKind::Rectangle, None);
+        let page = doc.page();
+        assert_eq!(page.geo_tops(&[g, c]), vec![a, b, c]);
+        assert_eq!(page.geo_tops(&[a]), vec![a]);
+        assert_eq!(page.outer_group(a), g);
+        assert_eq!(page.outer_group(c), c);
+    }
+
+    #[test]
     fn without_descendants_drops_nodes_inside_listed_nodes() {
         let mut doc = Document::default();
         let f = create(&mut doc, "f", None);

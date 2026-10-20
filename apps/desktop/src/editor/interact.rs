@@ -530,6 +530,9 @@ impl Editor {
     }
 
     pub(super) fn editor_cursor(&self) -> Cursor {
+        if self.eyedrop.is_some() && self.over_canvas() {
+            return Cursor::Crosshair;
+        }
         if let Some(i) = &self.interaction {
             return match i {
                 Interaction::Pan { .. } => Cursor::Grabbing,

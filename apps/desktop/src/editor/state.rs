@@ -113,6 +113,10 @@ pub struct Editor {
     /// A fill/stroke field being typed into, and the open color picker.
     pub(super) paint_edit: Option<super::paint_edit::PaintEdit>,
     pub(super) picker: Option<super::picker::Picker>,
+    pub(super) picker_mode: super::color_fmt::Mode,
+    pub(super) pick_edit: Option<super::picker_edit::PickEdit>,
+    /// The eyedropper is waiting for a click on the canvas (for this slot).
+    pub(super) eyedrop: Option<super::paint_ui::Slot>,
     /// A layer name being typed, and the last row click (for double-click).
     pub(super) rename: Option<super::rename::Rename>,
     pub(super) last_row_click: Option<(NodeId, std::time::Instant)>,
@@ -152,6 +156,9 @@ impl Editor {
             clip: Default::default(),
             paint_edit: None,
             picker: None,
+            picker_mode: super::color_fmt::Mode::Hex,
+            pick_edit: None,
+            eyedrop: None,
             rename: None,
             last_row_click: None,
             collapsed: Default::default(),
@@ -313,9 +320,10 @@ impl Screen for Editor {
         let editing = self.prop_edit.as_mut().is_some_and(|e| e.input.update(dt));
         if self.selection.is_empty() {
             self.paint_edit = None;
-            self.picker = None;
+            self.close_picker();
         }
-        let painting = self.paint_edit.as_mut().is_some_and(|e| e.input.update(dt));
+        let painting = self.paint_edit.as_mut().is_some_and(|e| e.input.update(dt))
+            | self.pick_edit.as_mut().is_some_and(|e| e.input.update(dt));
         let renaming = self.rename.as_mut().is_some_and(|r| r.input.update(dt));
         busy || saving
             || editing
@@ -361,6 +369,10 @@ impl Screen for Editor {
     fn text(&mut self, s: &str) {
         if self.paint_edit.is_some() {
             self.paint_text(s);
+            return;
+        }
+        if self.pick_edit.is_some() {
+            self.pick_text(s);
             return;
         }
         if self.rename.is_some() {

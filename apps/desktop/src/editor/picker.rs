@@ -1,10 +1,10 @@
 //! The color picker popup: state and interaction (drawing is in `picker_draw`).
 
-use dv_core::{Color, Paint, Stroke};
+use dv_core::{Color, Paint, Shadow, Stroke};
 use kurbo::{Point, Rect};
 
-use super::ops_paint::{DEFAULT_STROKE, edit_fill, edit_stroke};
-use super::paint_ui::{Hit, Look, Slot, looks};
+use super::ops_paint::{DEFAULT_STROKE, edit_fill, edit_shadow, edit_stroke};
+use super::paint_ui::{Hit, Look, Slot, looks, shadow_look};
 use super::picker_edit::PickField;
 use super::picker_layout::*;
 use super::state::Editor;
@@ -87,6 +87,10 @@ impl Editor {
         let color = match (slot, fill, stroke) {
             (Slot::Fill, Look::One(p), _) => p.main_color(),
             (Slot::Stroke, _, Look::One(s)) => s.color,
+            (Slot::Shadow, _, _) => match shadow_look(self) {
+                Look::One(s) => s.color,
+                _ => return,
+            },
             _ => return,
         };
         let (h, s, v) = color.to_hsv();
@@ -126,6 +130,12 @@ impl Editor {
                         Paint::Gradient(g)
                     }
                     _ => Paint::Solid(color),
+                })
+            }),
+            Slot::Shadow => edit_shadow(ex, &self.selection, key, |s| {
+                Some(Shadow {
+                    color,
+                    ..s.unwrap_or(Shadow::DEFAULT)
                 })
             }),
             Slot::Stroke => edit_stroke(ex, &self.selection, key, |s| {

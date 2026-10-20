@@ -3,8 +3,8 @@
 use dv_core::{Color, NodeKind, Page, Paint};
 use dv_geom::SpatialIndex;
 use vello::Scene;
-use vello::kurbo::{Affine, Ellipse, Rect, RoundedRect, Stroke};
-use vello::peniko::Color as VColor;
+use vello::kurbo::{Affine, Ellipse, Rect, RoundedRect};
+use vello::peniko::{BlendMode, Color as VColor, Fill};
 
 use crate::viewport::Viewport;
 
@@ -49,7 +49,24 @@ pub fn paint_page(
         let Some(node) = page.node(e.id) else {
             continue;
         };
-        draw_node(scene, page, node, view * e.world, true);
+        let r = crate::effects::reach(node);
+        let world = view * e.world;
+        let opacity = crate::effects::effective_opacity(page, node);
+        if opacity < 1.0 {
+            let g = &node.geom;
+            let clip = Rect::new(0.0, 0.0, g.w, g.h).inflate(r, r);
+            scene.push_layer(
+                Fill::NonZero,
+                BlendMode::default(),
+                opacity as f32,
+                world,
+                &clip,
+            );
+            draw_node(scene, page, node, world, true);
+            scene.pop_layer();
+        } else {
+            draw_node(scene, page, node, world, true);
+        }
         stats.drawn += 1;
     }
     stats
@@ -65,6 +82,7 @@ pub(crate) fn draw_node(
     patterns: bool,
 ) {
     let g = &node.geom;
+    crate::effects::draw_shadow(scene, world, node);
     match node.kind {
         NodeKind::Group => {}
         NodeKind::Ellipse => {
@@ -100,7 +118,7 @@ fn fill_and_stroke(
     }
     if let Some(stroke) = node.stroke {
         scene.stroke(
-            &Stroke::new(stroke.width),
+            &crate::effects::line(&stroke),
             world,
             color(stroke.color),
             None,

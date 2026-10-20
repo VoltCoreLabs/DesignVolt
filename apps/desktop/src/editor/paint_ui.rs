@@ -1,6 +1,6 @@
 //! Fill and stroke sections of the right panel: layout, what they show, drawing, hit-testing.
 
-use dv_core::{GradientKind, Paint, Stroke};
+use dv_core::{GradientKind, Paint, Shadow, Stroke, StrokeStyle};
 use dv_ui::draw::Cx;
 use dv_ui::icons::Icon;
 use dv_ui::theme::colors::*;
@@ -16,6 +16,7 @@ use crate::i18n::{Msg, tr};
 pub enum Slot {
     Fill,
     Stroke,
+    Shadow,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -23,6 +24,9 @@ pub enum PField {
     Hex,
     Alpha,
     Width,
+    ShX,
+    ShY,
+    ShBlur,
 }
 
 /// What a click in the sections hits.
@@ -32,6 +36,8 @@ pub enum Hit {
     Remove(Slot),
     Swatch(Slot),
     Field(Slot, PField),
+    /// The button that cycles the stroke style.
+    Style,
 }
 
 /// What the selection has in one slot.
@@ -43,6 +49,7 @@ pub enum Look<T> {
 }
 
 pub const STROKE_TOP: f64 = FILL_TOP + SEC_HEAD + ROW + 4.0;
+pub const EFFECTS_TOP: f64 = STROKE_TOP + SEC_HEAD + 2.0 * ROW + 4.0;
 const SWATCH: f64 = 24.0;
 const HEX_W: f64 = 70.0;
 const ALPHA_W: f64 = 48.0;
@@ -55,6 +62,7 @@ fn top_of(slot: Slot) -> f64 {
     match slot {
         Slot::Fill => FILL_TOP,
         Slot::Stroke => STROKE_TOP,
+        Slot::Shadow => EFFECTS_TOP,
     }
 }
 
@@ -83,12 +91,44 @@ pub fn swatch_rect(right: Rect, slot: Slot) -> Rect {
 pub fn field_rect(right: Rect, slot: Slot, f: PField) -> Rect {
     let r = row_rect(right, slot);
     let hex_x = r.x0 + SWATCH + 8.0;
+    let sh = [PField::ShX, PField::ShY, PField::ShBlur];
+    if let Some(i) = sh.iter().position(|x| *x == f) {
+        let w = (remove_rect(right, slot).x0 - GAP_X - hex_x - 2.0 * GAP_X) / 3.0;
+        let x = hex_x + i as f64 * (w + GAP_X);
+        return Rect::new(x, r.y0, x + w, r.y1);
+    }
     let (x, w) = match f {
         PField::Hex => (hex_x, HEX_W),
         PField::Alpha => (hex_x + HEX_W + GAP_X, ALPHA_W),
-        PField::Width => (hex_x + HEX_W + GAP_X + ALPHA_W + GAP_X, WIDTH_W),
+        _ => (hex_x + HEX_W + GAP_X + ALPHA_W + GAP_X, WIDTH_W),
     };
     Rect::new(x, r.y0, x + w, r.y1)
+}
+
+/// The shadow of the selected shapes, when they all share it.
+pub fn shadow_look(ed: &Editor) -> Look<Shadow> {
+    let s = ed.session.borrow();
+    let page = s.exec.doc().page();
+    fold(
+        page.geo_tops(&ed.selection)
+            .into_iter()
+            .filter_map(|id| page.node(id))
+            .map(|n| n.shadow),
+    )
+}
+
+/// The button under the stroke row that cycles solid, dashed and dotted lines.
+pub fn style_rect(right: Rect) -> Rect {
+    let r = row_rect(right, Slot::Stroke);
+    Rect::new(r.x0, r.y0 + ROW, r.x0 + 140.0, r.y0 + ROW + FIELD_H)
+}
+
+fn style_name(s: StrokeStyle) -> &'static str {
+    tr(match s {
+        StrokeStyle::Solid => Msg::StyleSolid,
+        StrokeStyle::Dashed => Msg::StyleDashed,
+        StrokeStyle::Dotted => Msg::StyleDotted,
+    })
 }
 
 /// What the selected shapes have as fill and stroke.
@@ -123,9 +163,13 @@ impl Editor {
             return None;
         }
         let (fill, stroke) = looks(self);
+        if stroke != Look::None && style_rect(right).contains(self.mouse) {
+            return Some(Hit::Style);
+        }
         for (slot, has) in [
             (Slot::Fill, fill != Look::None),
             (Slot::Stroke, stroke != Look::None),
+            (Slot::Shadow, shadow_look(self) != Look::None),
         ] {
             let at = |r: Rect| r.contains(self.mouse);
             if !has {
@@ -140,9 +184,12 @@ impl Editor {
             if at(swatch_rect(right, slot)) {
                 return Some(Hit::Swatch(slot));
             }
-            let fields = [PField::Hex, PField::Alpha, PField::Width];
-            let n = if slot == Slot::Stroke { 3 } else { 2 };
-            for f in &fields[..n] {
+            let fields: &[PField] = match slot {
+                Slot::Fill => &[PField::Hex, PField::Alpha],
+                Slot::Stroke => &[PField::Hex, PField::Alpha, PField::Width],
+                Slot::Shadow => &[PField::ShX, PField::ShY, PField::ShBlur],
+            };
+            for f in fields {
                 if at(field_rect(right, slot, *f)) {
                     return Some(Hit::Field(slot, *f));
                 }
@@ -215,6 +262,7 @@ fn slot(
     let (title, y) = match which {
         Slot::Fill => (tr(Msg::SectionFill), right.y0 + FILL_TOP),
         Slot::Stroke => (tr(Msg::SectionStroke), right.y0 + STROKE_TOP),
+        Slot::Shadow => (tr(Msg::SectionEffects), right.y0 + EFFECTS_TOP),
     };
     super::panels::section_title(cx, right.x0 + 1.0, right.x1, y, title, true);
     let hot = |r: Rect| r.contains(ed.mouse);
@@ -285,6 +333,83 @@ fn editable(cx: &mut Cx, ed: &Editor, key: (Slot, PField), r: Rect, value: &str,
     }
 }
 
+fn stroke_style_look(ed: &Editor) -> Look<StrokeStyle> {
+    match looks(ed).1 {
+        Look::One(s) => Look::One(s.style),
+        Look::Mixed => Look::Mixed,
+        Look::None => Look::None,
+    }
+}
+
+/// The effects section: its title with the plus button, and the shadow row.
+fn shadow_slot(cx: &mut Cx, ed: &Editor, right: Rect) {
+    let y = right.y0 + EFFECTS_TOP;
+    super::panels::section_title(
+        cx,
+        right.x0 + 1.0,
+        right.x1,
+        y,
+        tr(Msg::SectionEffects),
+        true,
+    );
+    let hot = |r: Rect| r.contains(ed.mouse);
+    match shadow_look(ed) {
+        Look::None => {
+            let add = add_rect(right, Slot::Shadow);
+            icon_button(cx, add, Icon::Plus, hot(add));
+        }
+        Look::Mixed => {
+            let r = field_rect(right, Slot::Shadow, PField::ShX);
+            cx.fill(r, R_FIELD, hex(bg_raised()));
+            cx.text(
+                tr(Msg::Mixed),
+                FONT_UI,
+                r.x0 + TEXT_X,
+                r.y0 + 18.0,
+                hex(text_secondary()),
+            );
+            let rm = remove_rect(right, Slot::Shadow);
+            icon_button(cx, rm, Icon::Minimize, hot(rm));
+        }
+        Look::One(s) => {
+            let name = tr(Msg::DropShadow);
+            cx.text(
+                name,
+                FONT_SM,
+                right.x0 + 92.0,
+                y + 22.0,
+                hex(text_disabled()),
+            );
+            swatch(cx, swatch_rect(right, Slot::Shadow), &Paint::Solid(s.color));
+            let rm = remove_rect(right, Slot::Shadow);
+            icon_button(cx, rm, Icon::Minimize, hot(rm));
+            let vals = [
+                (PField::ShX, "X", s.x),
+                (PField::ShY, "Y", s.y),
+                (PField::ShBlur, "B", s.blur),
+            ];
+            for (f, label, v) in vals {
+                let r = field_rect(right, Slot::Shadow, f);
+                match &ed.paint_edit {
+                    Some(e) if (e.slot, e.field) == (Slot::Shadow, f) => {
+                        editable(cx, ed, (Slot::Shadow, f), r, "", "");
+                    }
+                    _ => {
+                        value_box(cx, r, &super::canvas::num(v), "");
+                        cx.text(
+                            label,
+                            FONT_SM,
+                            r.x0 + 6.0,
+                            r.y0 + 18.0,
+                            hex(text_disabled()),
+                        );
+                    }
+                }
+            }
+        }
+    }
+}
+
 /// Draws the Fill and Stroke sections of the right panel.
 pub fn sections(cx: &mut Cx, right: Rect, ed: &Editor) {
     let (fill, stroke) = looks(ed);
@@ -295,6 +420,30 @@ pub fn sections(cx: &mut Cx, right: Rect, ed: &Editor) {
         Look::None => (Look::None, None),
     };
     slot(cx, ed, right, Slot::Stroke, look, width);
+    if let Look::One(s) = stroke_style_look(ed) {
+        let r = style_rect(right);
+        let bg = if r.contains(ed.mouse) {
+            hex(bg_hover())
+        } else {
+            hex(bg_raised())
+        };
+        cx.fill(r, R_FIELD, bg);
+        cx.text(
+            style_name(s),
+            FONT_UI,
+            r.x0 + TEXT_X,
+            r.y0 + 18.0,
+            hex(text_primary()),
+        );
+        cx.icon(
+            Icon::CaretDown,
+            r.x1 - 20.0,
+            r.y0 + 8.0,
+            12.0,
+            hex(text_secondary()),
+        );
+    }
+    shadow_slot(cx, ed, right);
 }
 
 /// A point inside the right panel's sections (used to keep the picker clear of them).

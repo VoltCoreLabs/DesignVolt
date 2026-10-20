@@ -100,7 +100,8 @@ pub fn field_rect(right: Rect, i: usize) -> Rect {
         0 | 1 => cell(right, POS_TOP, 0, i),
         2 => cell(right, POS_TOP, 1, 0),
         3 | 4 => cell(right, LAYOUT_TOP, 0, i - 3),
-        _ => cell(right, APPEAR_TOP, 0, 0),
+        5 => cell(right, APPEAR_TOP, 0, 0),
+        _ => cell(right, APPEAR_TOP, 0, 1),
     }
 }
 
@@ -439,6 +440,16 @@ struct Info {
     fields: Vec<(&'static str, String, Option<f64>)>,
 }
 
+/// The opacity entry for several nodes: a number when they all share it.
+fn opacity_field(nodes: &[&dv_core::Node], mixed: &str) -> (&'static str, String, Option<f64>) {
+    let first = nodes[0].opacity;
+    if nodes.iter().all(|n| n.opacity == first) {
+        ("%", num(first * 100.0), Some(first * 100.0))
+    } else {
+        ("%", mixed.to_string(), None)
+    }
+}
+
 fn selection_info(ed: &Editor) -> Option<Info> {
     let s = ed.session.borrow();
     let page = s.exec.doc().page();
@@ -459,6 +470,7 @@ fn selection_info(ed: &Editor) -> Option<Info> {
                 ("W", num(n.geom.w), Some(n.geom.w)),
                 ("H", num(n.geom.h), Some(n.geom.h)),
                 ("R", num(n.radius), Some(n.radius)),
+                ("%", num(n.opacity * 100.0), Some(n.opacity * 100.0)),
             ],
         }),
         many => {
@@ -479,7 +491,8 @@ fn selection_info(ed: &Editor) -> Option<Info> {
                     ("°", mixed.clone(), None),
                     ("W", num(b.width()), Some(b.width())),
                     ("H", num(b.height()), Some(b.height())),
-                    ("R", mixed, None),
+                    ("R", mixed.clone(), None),
+                    opacity_field(many, &mixed),
                 ],
             })
         }

@@ -3,6 +3,7 @@
 
 #![forbid(unsafe_code)]
 
+mod effects;
 mod gradient;
 mod grid;
 mod paint;

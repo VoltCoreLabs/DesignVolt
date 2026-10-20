@@ -265,17 +265,20 @@ pub enum Field {
     H,
     Rotation,
     Radius,
+    /// Opacity of the shape in percent.
+    Opacity,
 }
 
 impl Field {
     /// In the order of the panel: Position (X, Y, angle), Layout (W, H), Appearance (radius).
-    pub const ALL: [Field; 6] = [
+    pub const ALL: [Field; 7] = [
         Field::X,
         Field::Y,
         Field::Rotation,
         Field::W,
         Field::H,
         Field::Radius,
+        Field::Opacity,
     ];
 
     pub fn from_index(i: usize) -> Option<Field> {
@@ -371,6 +374,15 @@ pub fn set_field(ex: &mut Executor, ids: &[NodeId], field: Field, value: f64) ->
                         ..g
                     },
                 });
+            }
+        }
+        Field::Opacity => {
+            for id in ids.iter().filter(|id| page.contains(**id)) {
+                let props = Props {
+                    opacity: Some((value / 100.0).clamp(0.0, 1.0)),
+                    ..Props::default()
+                };
+                cmds.push(Command::SetProps { id: *id, props });
             }
         }
         Field::Radius => {
@@ -696,11 +708,22 @@ mod tests {
     }
 
     #[test]
+    fn typed_opacity_is_clamped_and_undoable() {
+        let (mut ex, a, _) = sample();
+        assert!(set_field(&mut ex, &[a], Field::Opacity, 40.0));
+        assert_eq!(ex.doc().page().node(a).unwrap().opacity, 0.4);
+        assert!(set_field(&mut ex, &[a], Field::Opacity, 400.0));
+        assert_eq!(ex.doc().page().node(a).unwrap().opacity, 1.0);
+        ex.undo();
+        assert_eq!(ex.doc().page().node(a).unwrap().opacity, 0.4);
+    }
+
+    #[test]
     fn fields_map_to_panel_slots() {
         for (i, f) in Field::ALL.iter().enumerate() {
             assert_eq!(f.index(), i);
             assert_eq!(Field::from_index(i), Some(*f));
         }
-        assert_eq!(Field::from_index(6), None);
+        assert_eq!(Field::from_index(7), None);
     }
 }

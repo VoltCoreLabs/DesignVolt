@@ -14,6 +14,7 @@ mod ops_layer;
 mod ops_order;
 mod ops_paint;
 mod paint_edit;
+mod paint_fx;
 mod paint_ui;
 mod panels;
 mod picker;

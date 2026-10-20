@@ -47,6 +47,17 @@ pub fn eye_rect(row: Rect) -> Rect {
     Rect::new(row.x1 - 32.0, row.y0, row.x1, row.y1)
 }
 
+/// The lock button left of the eye.
+pub fn lock_rect(row: Rect) -> Rect {
+    Rect::new(row.x1 - 62.0, row.y0, row.x1 - 32.0, row.y1)
+}
+
+/// The expand/collapse caret of a row with children.
+pub fn caret_rect(row: Rect, depth: usize) -> Rect {
+    let x = row.x0 + 2.0 + depth as f64 * 14.0;
+    Rect::new(x, row.y0, x + 14.0, row.y1)
+}
+
 /// How many layer rows fit into the left panel.
 pub fn max_layer_rows(left: Rect) -> usize {
     (((left.height() - LAYERS_TOP - 8.0) / ROW_H)
@@ -260,9 +271,35 @@ fn layer_row(cx: &mut Cx, ed: &Editor, rect: Rect, row: &super::state::LayerRow)
         hex(text_disabled())
     };
     let x = rect.x0 + 12.0 + row.depth as f64 * 14.0;
+    if row.has_children {
+        let caret = if row.collapsed {
+            Icon::CaretRight
+        } else {
+            Icon::CaretDown
+        };
+        let c = caret_rect(rect, row.depth);
+        cx.icon(
+            caret,
+            c.x0 + 1.0,
+            rect.y0 + 8.0,
+            12.0,
+            alpha(text_secondary(), 0.7),
+        );
+    }
     cx.icon(kind_icon(row.kind), x, rect.y0 + 7.0, 14.0, strong);
-    let name = cx.fit(&row.name, FONT_UI, (rect.x1 - 40.0 - (x + 22.0)).max(20.0));
+    let name = cx.fit(&row.name, FONT_UI, (rect.x1 - 70.0 - (x + 22.0)).max(20.0));
     cx.text(&name, FONT_UI, x + 22.0, rect.y0 + 18.0, strong);
+    if row.locked || rect.contains(ed.mouse) {
+        let a = if row.locked { 0.85 } else { 0.25 };
+        let lock = lock_rect(rect);
+        cx.icon(
+            Icon::Lock,
+            lock.x0 + 8.0,
+            rect.y0 + 7.0,
+            14.0,
+            alpha(text_secondary(), a),
+        );
+    }
     let eye = eye_rect(rect);
     let a = if row.visible { 0.55 } else { 0.25 };
     cx.icon(

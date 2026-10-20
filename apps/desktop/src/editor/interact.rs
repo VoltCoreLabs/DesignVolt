@@ -118,7 +118,18 @@ impl Editor {
             if !r.contains(self.mouse) {
                 continue;
             }
-            if panels::eye_rect(r).contains(self.mouse) {
+            if row.has_children && panels::caret_rect(r, row.depth).contains(self.mouse) {
+                if !self.collapsed.remove(&row.id) {
+                    self.collapsed.insert(row.id);
+                }
+            } else if panels::lock_rect(r).contains(self.mouse) {
+                super::ops_layer::set_locked(
+                    &mut self.session.borrow_mut().exec,
+                    row.id,
+                    !row.locked,
+                );
+                self.prune_selection();
+            } else if panels::eye_rect(r).contains(self.mouse) {
                 ops::set_visible(&mut self.session.borrow_mut().exec, row.id, !row.visible);
                 self.prune_selection();
             } else if mods.shift {

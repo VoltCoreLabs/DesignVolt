@@ -83,6 +83,9 @@ pub struct LayerRow {
     pub name: String,
     pub kind: NodeKind,
     pub visible: bool,
+    pub locked: bool,
+    pub has_children: bool,
+    pub collapsed: bool,
 }
 
 pub struct Editor {
@@ -107,6 +110,8 @@ pub struct Editor {
     pub(super) space: bool,
     pub(super) drag_key: u64,
     pub(super) clip: super::ops_clip::Clip,
+    /// Layers whose children are hidden in the layers panel.
+    pub(super) collapsed: std::collections::HashSet<NodeId>,
     /// How long the last canvas paint took (ms) and what it drew.
     pub(super) paint_ms: Cell<f32>,
     pub(super) paint_stats: Cell<PaintStats>,
@@ -139,6 +144,7 @@ impl Editor {
             space: false,
             drag_key: 0,
             clip: Default::default(),
+            collapsed: Default::default(),
             paint_ms: Cell::new(0.0),
             paint_stats: Cell::new(PaintStats::default()),
             next: None,
@@ -207,14 +213,20 @@ impl Editor {
                 break;
             }
             let Some(n) = page.node(id) else { continue };
+            let collapsed = self.collapsed.contains(&id);
             rows.push(LayerRow {
                 id,
                 depth,
                 name: n.name.clone(),
                 kind: n.kind,
                 visible: n.visible,
+                locked: n.locked,
+                has_children: !n.children.is_empty(),
+                collapsed,
             });
-            stack.extend(n.children.iter().map(|c| (*c, depth + 1)));
+            if !collapsed {
+                stack.extend(n.children.iter().map(|c| (*c, depth + 1)));
+            }
         }
         rows
     }

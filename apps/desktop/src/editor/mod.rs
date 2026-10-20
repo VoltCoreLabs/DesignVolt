@@ -19,6 +19,7 @@ mod panels;
 mod picker;
 mod picker_draw;
 mod picker_edit;
+mod picker_grad;
 mod picker_layout;
 mod props;
 mod recent;

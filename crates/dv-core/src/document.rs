@@ -3,6 +3,8 @@
 
 use std::collections::HashMap;
 
+use crate::paint::Paint;
+
 /// Stable node identifier, unique inside a document.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 pub struct NodeId(pub u64);
@@ -51,7 +53,7 @@ pub struct Node {
     pub kind: NodeKind,
     pub name: String,
     pub geom: Geometry,
-    pub fill: Option<Color>,
+    pub fill: Option<Paint>,
     pub stroke: Option<Stroke>,
     pub radius: f64,
     pub visible: bool,
@@ -67,7 +69,7 @@ impl Node {
             kind,
             name: name.into(),
             geom,
-            fill: Some(Color::rgb(200, 205, 220)),
+            fill: Some(Paint::Solid(Color::rgb(200, 205, 220))),
             stroke: None,
             radius: 0.0,
             visible: true,

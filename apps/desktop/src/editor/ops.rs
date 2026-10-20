@@ -16,8 +16,8 @@ const DUPLICATE_OFFSET: f64 = 20.0;
 pub fn new_node(kind: NodeKind, name: String, geom: Geometry) -> Node {
     let mut node = Node::new(kind, name, geom);
     node.fill = match kind {
-        NodeKind::Frame => Some(Color::rgb(255, 255, 255)),
-        NodeKind::Rectangle | NodeKind::Ellipse => Some(Color::rgb(217, 217, 217)),
+        NodeKind::Frame => Some(Color::rgb(255, 255, 255).into()),
+        NodeKind::Rectangle | NodeKind::Ellipse => Some(Color::rgb(217, 217, 217).into()),
         NodeKind::Group => None,
     };
     node
@@ -206,11 +206,14 @@ pub fn stress(ex: &mut Executor, n: usize) -> Vec<NodeId> {
             rotation: if i % 5 == 0 { next() * 90.0 } else { 0.0 },
         };
         let mut node = Node::new(kind, format!("Shape {}", i + 1), geom);
-        node.fill = Some(Color::rgb(
-            (next() * 255.0) as u8,
-            (next() * 255.0) as u8,
-            (next() * 255.0) as u8,
-        ));
+        node.fill = Some(
+            Color::rgb(
+                (next() * 255.0) as u8,
+                (next() * 255.0) as u8,
+                (next() * 255.0) as u8,
+            )
+            .into(),
+        );
         node.radius = if i % 4 == 0 { 12.0 } else { 0.0 };
         let id = ex.alloc_id();
         cmds.push(Command::Create {
@@ -440,7 +443,7 @@ mod tests {
         let f = create(&mut ex, NodeKind::Frame, "f".into(), None, g(0.0, 0.0)).unwrap();
         assert_eq!(
             ex.doc().page().node(f).unwrap().fill,
-            Some(Color::rgb(255, 255, 255))
+            Some(Color::rgb(255, 255, 255).into())
         );
     }
 

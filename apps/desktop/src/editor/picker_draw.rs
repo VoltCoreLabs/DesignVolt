@@ -1,6 +1,6 @@
 //! Drawing the color picker popup.
 
-use dv_core::Color;
+use dv_core::{Color, Gradient, GradientKind, Paint};
 use dv_ui::draw::Cx;
 use dv_ui::icons::Icon;
 use dv_ui::theme::colors::*;
@@ -9,9 +9,13 @@ use kurbo::Rect;
 use vello::peniko::Color as VColor;
 
 use super::color_fmt::components;
-use super::picker_edit::PickField;
+use super::paint_ui::paint_box;
+use super::picker::Picker;
+use super::picker_edit::{PickEdit, PickField};
+use super::picker_grad::{field_value, tab_kind, tab_of};
 use super::picker_layout::*;
 use super::state::Editor;
+use crate::i18n::{Lang, lang};
 
 const KNOB: f64 = 6.0;
 
@@ -46,23 +50,97 @@ fn value_box(cx: &mut Cx, r: Rect, text: &str, suffix: &str) {
     }
 }
 
+fn edit_box(cx: &mut Cx, r: Rect, e: &PickEdit) {
+    cx.fill(r, R_FIELD, hex(bg_app()));
+    e.input.draw_inline(cx, r, r.x0 + 6.0, r.y0 + 18.0);
+    cx.stroke(r, R_FIELD, 1.5, hex(accent()));
+}
+
+/// Short label of a gradient parameter.
+fn label(f: GField) -> &'static str {
+    let ru = lang() == Lang::Ru;
+    match f {
+        GField::Pos => {
+            if ru {
+                "Поз"
+            } else {
+                "Pos"
+            }
+        }
+        GField::Angle => {
+            if ru {
+                "Угол"
+            } else {
+                "Ang"
+            }
+        }
+        GField::X => "X",
+        GField::Y => "Y",
+        GField::Scale => {
+            if ru {
+                "Масш"
+            } else {
+                "Scl"
+            }
+        }
+    }
+}
+
+fn suffix(f: GField) -> &'static str {
+    if f == GField::Angle { "°" } else { "%" }
+}
+
 impl Editor {
     pub(super) fn draw_picker(&self, cx: &mut Cx) {
         let Some(p) = &self.picker else { return };
-        let recent = super::recent::get();
+        let shape = self.picker_shape(p.slot);
         let popup = self.popup(p.slot);
         cx.shadow(popup, R_CARD, alpha(0x000000, 0.25), 16.0, 8.0);
         cx.fill(popup, R_CARD, hex(bg_raised()));
         cx.stroke(popup, R_CARD, 1.0, alpha(overlay(), 0.12));
-        draw_surfaces(cx, popup, p);
-        self.draw_controls(cx, popup, p.color(), &recent);
+        let gradient = self.current_gradient();
+        if shape.tabs {
+            self.draw_tabs(cx, popup, shape, p);
+        }
+        if let Some(g) = &gradient {
+            draw_stops(cx, popup, shape, g, p.stop);
+        }
+        draw_surfaces(cx, popup, shape, p);
+        self.draw_controls(cx, popup, shape, p.color());
+        if let Some(g) = &gradient {
+            self.draw_params(cx, popup, shape, g, p.stop);
+        }
+        self.draw_recent(cx, popup, shape, p.color());
     }
 
-    fn draw_controls(&self, cx: &mut Cx, popup: Rect, color: Color, recent: &[Color]) {
+    fn draw_tabs(&self, cx: &mut Cx, popup: Rect, shape: Shape, p: &Picker) {
+        let fill = self.fill_for_tabs();
+        let active = tab_of(fill.as_ref());
+        for i in 0..TABS {
+            let r = tab_rect(popup, shape, i);
+            let sample = match tab_kind(i) {
+                None => Paint::Solid(p.color()),
+                Some(k) => {
+                    let mut g = Gradient::from_color(k, Color::rgb(30, 30, 34));
+                    g.stops[1].color = Color::rgb(245, 245, 248);
+                    Paint::Gradient(g)
+                }
+            };
+            paint_box(cx, r, R_FIELD, &sample);
+            let on = i == active;
+            let ring = if on {
+                hex(accent())
+            } else {
+                alpha(overlay(), 0.2)
+            };
+            cx.stroke(r, R_FIELD, if on { 2.0 } else { 1.0 }, ring);
+        }
+    }
+
+    fn draw_controls(&self, cx: &mut Cx, popup: Rect, shape: Shape, color: Color) {
         let mode = self.picker_mode;
-        let eye = eyedrop_rect(popup);
-        let active = self.eyedrop.is_some();
-        let bg = if active {
+        let eye = eyedrop_rect(popup, shape);
+        let bg = if self.eyedrop.is_some() {
             alpha(accent(), 0.3)
         } else {
             hex(bg_app())
@@ -77,7 +155,7 @@ impl Editor {
             hex(text_primary()),
         );
 
-        let m = mode_rect(popup);
+        let m = mode_rect(popup, shape);
         cx.fill(m, R_FIELD, hex(bg_app()));
         cx.text(
             mode.label(),
@@ -94,9 +172,8 @@ impl Editor {
             hex(text_secondary()),
         );
 
-        let texts = components(mode, color);
-        for (i, t) in texts.iter().enumerate() {
-            let r = field_rect(popup, mode, i);
+        for (i, t) in components(mode, color).iter().enumerate() {
+            let r = field_rect(popup, shape, mode, i);
             match self
                 .pick_edit
                 .as_ref()
@@ -107,7 +184,7 @@ impl Editor {
             }
         }
         if mode.has_alpha_field() {
-            let r = alpha_field_rect(popup, mode);
+            let r = alpha_field_rect(popup, shape, mode);
             let pct = format!("{:.0}", f64::from(color.a) / 255.0 * 100.0);
             match self
                 .pick_edit
@@ -118,34 +195,96 @@ impl Editor {
                 None => value_box(cx, r, &pct, "%"),
             }
         }
-        for (i, c) in recent.iter().enumerate() {
-            let r = recent_rect(popup, i);
+    }
+
+    fn draw_params(&self, cx: &mut Cx, popup: Rect, shape: Shape, g: &Gradient, stop: usize) {
+        for (i, f) in grad_fields(g.kind).iter().enumerate() {
+            let r = gfield_rect(popup, shape, i);
+            match self
+                .pick_edit
+                .as_ref()
+                .filter(|e| e.field == PickField::Grad(*f))
+            {
+                Some(e) => edit_box(cx, r, e),
+                None => {
+                    value_box(
+                        cx,
+                        r,
+                        &super::canvas::num(field_value(g, stop, *f)),
+                        suffix(*f),
+                    );
+                    cx.text(
+                        label(*f),
+                        FONT_SM,
+                        r.x0 + 6.0,
+                        r.y0 - 3.0,
+                        hex(text_disabled()),
+                    );
+                }
+            }
+        }
+        let rm = remove_stop_rect(popup, shape);
+        cx.fill(rm, R_FIELD, hex(bg_app()));
+        let c = rm.center();
+        cx.icon(
+            Icon::Minimize,
+            c.x - 7.0,
+            c.y - 7.0,
+            14.0,
+            hex(text_secondary()),
+        );
+    }
+
+    fn draw_recent(&self, cx: &mut Cx, popup: Rect, shape: Shape, color: Color) {
+        for (i, c) in super::recent::get().iter().enumerate() {
+            let r = recent_rect(popup, shape, i);
             cx.fill(r, R_FIELD, vcolor(*c));
-            let ring = if *c == color {
+            let on = *c == color;
+            let ring = if on {
                 hex(accent())
             } else {
                 alpha(overlay(), 0.2)
             };
-            cx.stroke(r, R_FIELD, if *c == color { 2.0 } else { 1.0 }, ring);
+            cx.stroke(r, R_FIELD, if on { 2.0 } else { 1.0 }, ring);
         }
     }
 }
 
-fn edit_box(cx: &mut Cx, r: Rect, e: &super::picker_edit::PickEdit) {
-    cx.fill(r, R_FIELD, hex(bg_app()));
-    e.input.draw_inline(cx, r, r.x0 + 6.0, r.y0 + 18.0);
-    cx.stroke(r, R_FIELD, 1.5, hex(accent()));
+/// The gradient line with a handle for each stop.
+fn draw_stops(cx: &mut Cx, popup: Rect, shape: Shape, g: &Gradient, selected: usize) {
+    let bar = stops_bar(popup, shape);
+    let mut line = Gradient::from_color(GradientKind::Linear, Color::rgb(0, 0, 0));
+    line.stops = g.stops.clone();
+    cx.fill(bar, 4.0, hex(bg_app()));
+    paint_box(cx, bar, 4.0, &Paint::Gradient(line));
+    cx.stroke(bar, 4.0, 1.0, alpha(overlay(), 0.2));
+    for (i, s) in g.stops.iter().enumerate() {
+        let c = handle_center(popup, shape, s.pos);
+        let on = i == selected;
+        let ring = if on {
+            hex(accent())
+        } else {
+            VColor::from_rgba8(255, 255, 255, 255)
+        };
+        cx.circle(c.x, c.y, HANDLE_R + 1.5, ring);
+        cx.circle(
+            c.x,
+            c.y,
+            HANDLE_R - 1.0,
+            vcolor(Color { a: 255, ..s.color }),
+        );
+    }
 }
 
-fn draw_surfaces(cx: &mut Cx, popup: Rect, p: &super::picker::Picker) {
+fn draw_surfaces(cx: &mut Cx, popup: Rect, shape: Shape, p: &Picker) {
     let pure_c = Color::from_hsv(p.h, 1.0, 1.0, 255);
-    let sv = part_rect(popup, Part::Sv);
+    let sv = part_rect(popup, shape, Part::Sv);
     let white = VColor::from_rgba8(255, 255, 255, 255);
     cx.gradient(sv, 4.0, false, &[(0.0, white), (1.0, vcolor(pure_c))]);
     let clear = VColor::from_rgba8(0, 0, 0, 0);
     let black = VColor::from_rgba8(0, 0, 0, 255);
     cx.gradient(sv, 4.0, true, &[(0.0, clear), (1.0, black)]);
-    let hue = part_rect(popup, Part::Hue);
+    let hue = part_rect(popup, shape, Part::Hue);
     let stops: Vec<(f32, VColor)> = (0..=6)
         .map(|i| {
             (
@@ -155,7 +294,7 @@ fn draw_surfaces(cx: &mut Cx, popup: Rect, p: &super::picker::Picker) {
         })
         .collect();
     cx.gradient(hue, BAR_H / 2.0, false, &stops);
-    let bar = part_rect(popup, Part::Alpha);
+    let bar = part_rect(popup, shape, Part::Alpha);
     let solid = Color::from_hsv(p.h, p.s, p.v, 255);
     cx.fill(bar, BAR_H / 2.0, hex(bg_app()));
     let transparent = VColor::from_rgba8(solid.r, solid.g, solid.b, 0);

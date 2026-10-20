@@ -1,6 +1,6 @@
 //! Typing into the fill and stroke fields (hex, opacity, stroke width) and the add/remove buttons.
 
-use dv_core::{Color, Stroke};
+use dv_core::{Color, Paint, Stroke};
 use dv_ui::input::{Key, Mods};
 use dv_ui::theme::metrics::FONT_UI;
 use dv_ui::widgets::text_input::{PAD_X, TextInput};
@@ -55,7 +55,7 @@ impl Editor {
     fn add_paint(&mut self, slot: Slot) {
         let ex = &mut self.session.borrow_mut().exec;
         match slot {
-            Slot::Fill => edit_fill(ex, &self.selection, None, |_| Some(DEFAULT_FILL)),
+            Slot::Fill => edit_fill(ex, &self.selection, None, |_| Some(DEFAULT_FILL.into())),
             Slot::Stroke => edit_stroke(ex, &self.selection, None, |_| Some(DEFAULT_STROKE)),
         }
     }
@@ -72,7 +72,7 @@ impl Editor {
     fn start_paint_edit(&mut self, slot: Slot, field: PField) {
         let (fill, stroke) = looks(self);
         let (color, width) = match (slot, fill, stroke) {
-            (Slot::Fill, Look::One(c), _) => (c, 0.0),
+            (Slot::Fill, Look::One(Paint::Solid(c)), _) => (c, 0.0),
             (Slot::Stroke, _, Look::One(s)) => (s.color, s.width),
             _ => return,
         };
@@ -107,7 +107,9 @@ impl Editor {
                     ..new
                 };
                 match slot {
-                    Slot::Fill => edit_fill(ex, sel, None, |c| Some(with(c))),
+                    Slot::Fill => edit_fill(ex, sel, None, |p| {
+                        Some(Paint::Solid(with(p.as_ref().and_then(Paint::solid))))
+                    }),
                     Slot::Stroke => edit_stroke(ex, sel, None, |s| {
                         let base = s.unwrap_or(DEFAULT_STROKE);
                         Some(Stroke {
@@ -121,7 +123,12 @@ impl Editor {
                 let Some(p) = parse_number(&text) else { return };
                 let a = percent_to_alpha(p);
                 match slot {
-                    Slot::Fill => edit_fill(ex, sel, None, |c| c.map(|c| Color { a, ..c })),
+                    Slot::Fill => edit_fill(ex, sel, None, |p| {
+                        p.map(|p| match p {
+                            Paint::Solid(c) => Paint::Solid(Color { a, ..c }),
+                            other => other,
+                        })
+                    }),
                     Slot::Stroke => edit_stroke(ex, sel, None, |s| {
                         s.map(|s| Stroke {
                             color: Color { a, ..s.color },

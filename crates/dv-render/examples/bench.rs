@@ -52,11 +52,14 @@ fn make_doc(n: usize) -> Document {
                 rotation: if i % 5 == 0 { rng.next() * 90.0 } else { 0.0 },
             },
         );
-        node.fill = Some(Color::rgb(
-            (rng.next() * 255.0) as u8,
-            (rng.next() * 255.0) as u8,
-            (rng.next() * 255.0) as u8,
-        ));
+        node.fill = Some(
+            Color::rgb(
+                (rng.next() * 255.0) as u8,
+                (rng.next() * 255.0) as u8,
+                (rng.next() * 255.0) as u8,
+            )
+            .into(),
+        );
         node.radius = if i % 4 == 0 { 12.0 } else { 0.0 };
         let id = doc.alloc_id();
         doc.apply(&Command::Create {

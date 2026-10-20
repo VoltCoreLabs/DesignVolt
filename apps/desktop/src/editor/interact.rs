@@ -94,6 +94,9 @@ pub enum Interaction {
 impl Editor {
     pub(super) fn press(&mut self, mods: Mods) {
         self.refresh_index();
+        if self.press_dropdown() {
+            return;
+        }
         if self.press_picker() {
             return;
         }

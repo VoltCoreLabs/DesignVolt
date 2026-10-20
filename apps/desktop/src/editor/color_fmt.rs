@@ -14,11 +14,6 @@ pub enum Mode {
 impl Mode {
     pub const ALL: [Mode; 5] = [Mode::Hex, Mode::Rgb, Mode::Hsl, Mode::Hsb, Mode::Css];
 
-    pub fn next(self) -> Mode {
-        let i = Mode::ALL.iter().position(|m| *m == self).unwrap_or(0);
-        Mode::ALL[(i + 1) % Mode::ALL.len()]
-    }
-
     pub fn label(self) -> &'static str {
         match self {
             Mode::Hex => "Hex",
@@ -215,14 +210,5 @@ mod tests {
         );
         assert!(parse_css("rgb(1, 2)", 255).is_none());
         assert!(parse_css("blue", 255).is_none());
-    }
-
-    #[test]
-    fn mode_cycles_through_all() {
-        let mut m = Mode::Hex;
-        for _ in 0..Mode::ALL.len() {
-            m = m.next();
-        }
-        assert_eq!(m, Mode::Hex);
     }
 }

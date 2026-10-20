@@ -119,6 +119,8 @@ pub struct Editor {
     pub(super) eyedrop: Option<super::paint_ui::Slot>,
     /// Waiting for a click on the object that becomes the pattern tile.
     pub(super) pick_source: bool,
+    /// The open drop-down list, if any.
+    pub(super) dropdown: Option<super::dropdown::Dropdown>,
     /// A layer name being typed, and the last row click (for double-click).
     pub(super) rename: Option<super::rename::Rename>,
     pub(super) last_row_click: Option<(NodeId, std::time::Instant)>,
@@ -162,6 +164,7 @@ impl Editor {
             pick_edit: None,
             eyedrop: None,
             pick_source: false,
+            dropdown: None,
             rename: None,
             last_row_click: None,
             collapsed: Default::default(),
@@ -323,6 +326,7 @@ impl Screen for Editor {
         let editing = self.prop_edit.as_mut().is_some_and(|e| e.input.update(dt));
         if self.selection.is_empty() {
             self.paint_edit = None;
+            self.dropdown = None;
             self.close_picker();
         }
         let painting = self.paint_edit.as_mut().is_some_and(|e| e.input.update(dt))
@@ -433,6 +437,7 @@ impl Screen for Editor {
             panels::right_panel(cx, layout.right, self)
         });
         self.draw_picker(&mut cx);
+        self.draw_dropdown(&mut cx);
         let p = self.intro(4.0);
         let clip = layout.toolbar.inflate(40.0, 40.0);
         cx.layer(clip, p, (0.0, 24.0 * (1.0 - p as f64)), |cx| {

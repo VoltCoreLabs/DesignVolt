@@ -1,10 +1,11 @@
 //! The color picker popup: state and interaction (drawing is in `picker_draw`).
 
-use dv_core::{Color, Paint, Shadow, Stroke};
+use dv_core::{Color, Effect, Paint, Stroke};
 use kurbo::{Point, Rect};
 
-use super::ops_paint::{DEFAULT_STROKE, edit_fill, edit_shadow, edit_stroke};
-use super::paint_ui::{Hit, Look, Slot, looks, shadow_look};
+use super::dropdown::Target;
+use super::ops_paint::{DEFAULT_STROKE, edit_effects, edit_fill, edit_stroke};
+use super::paint_ui::{Hit, Look, Slot, effects_look, looks, panel};
 use super::picker_edit::PickField;
 use super::picker_layout::*;
 use super::state::Editor;
@@ -69,9 +70,10 @@ impl Editor {
     }
 
     pub(super) fn popup(&self, slot: Slot) -> Rect {
+        let anchor = panel(self).anchor(slot);
         popup_rect(
             self.layout().right,
-            slot,
+            anchor,
             self.win.h,
             self.picker_shape(slot),
         )
@@ -87,8 +89,11 @@ impl Editor {
         let color = match (slot, fill, stroke) {
             (Slot::Fill, Look::One(p), _) => p.main_color(),
             (Slot::Stroke, _, Look::One(s)) => s.color,
-            (Slot::Shadow, _, _) => match shadow_look(self) {
-                Look::One(s) => s.color,
+            (Slot::Effect(i), _, _) => match effects_look(self) {
+                Look::One(l) => match l.get(i) {
+                    Some(e) if e.is_shadow() => e.color,
+                    _ => return,
+                },
                 _ => return,
             },
             _ => return,
@@ -132,11 +137,10 @@ impl Editor {
                     _ => Paint::Solid(color),
                 })
             }),
-            Slot::Shadow => edit_shadow(ex, &self.selection, key, |s| {
-                Some(Shadow {
-                    color,
-                    ..s.unwrap_or(Shadow::DEFAULT)
-                })
+            Slot::Effect(i) => edit_effects(ex, &self.selection, key, |l| {
+                if let Some(e) = l.get_mut(i) {
+                    *e = Effect { color, ..*e };
+                }
             }),
             Slot::Stroke => edit_stroke(ex, &self.selection, key, |s| {
                 Some(Stroke {
@@ -184,7 +188,7 @@ impl Editor {
                 Some(PHit::RemoveStop) => self.remove_selected_stop(),
                 Some(PHit::GField(f)) => self.start_pick_edit(PickField::Grad(f)),
                 Some(PHit::PickSource) => self.pick_source = true,
-                Some(PHit::Tiling) => self.cycle_tiling(),
+                Some(PHit::Tiling) => self.open_dropdown_for(Target::Tiling),
                 Some(PHit::PatField(f)) => self.start_pick_edit(PickField::Pat(f)),
                 Some(PHit::Eyedrop) => {
                     self.eyedrop = if self.eyedrop.is_some() {
@@ -193,7 +197,7 @@ impl Editor {
                         Some(slot)
                     };
                 }
-                Some(PHit::Mode) => self.picker_mode = self.picker_mode.next(),
+                Some(PHit::Mode) => self.open_dropdown_for(Target::ColorMode),
                 Some(PHit::Field(i)) => self.start_pick_edit(PickField::Comp(i)),
                 Some(PHit::AlphaField) => self.start_pick_edit(PickField::Alpha),
                 Some(PHit::Recent(i)) => self.set_picker_color(recent[i]),

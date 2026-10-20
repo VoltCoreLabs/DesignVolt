@@ -56,10 +56,6 @@ impl Editor {
         }
     }
 
-    pub(super) fn cycle_tiling(&mut self) {
-        self.edit_pattern(|p| p.tiling = p.tiling.next());
-    }
-
     /// The pattern source click: the object under the pointer becomes the tile, unless it
     /// is (or contains) one of the shapes being filled.
     pub(super) fn sample_source(&mut self) {

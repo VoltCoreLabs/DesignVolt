@@ -8,6 +8,9 @@ use vello::peniko::{BlendMode, Color as VColor, Fill};
 
 use crate::viewport::Viewport;
 
+/// Most the visibility query is widened for effects, in page units.
+const MAX_REACH: f64 = 4000.0;
+
 /// Nodes smaller than this on screen (px, both sides) are not drawn.
 const MIN_VISIBLE_PX: f64 = 0.6;
 
@@ -33,7 +36,11 @@ pub fn paint_page(
     size: (f64, f64),
     base: Affine,
 ) -> PaintStats {
-    let mut entries: Vec<_> = index.query(vp.visible_world(size)).collect();
+    // Shadows and blurs reach outside the node box, so look a little beyond the screen.
+    let reach = index.max_reach().min(MAX_REACH);
+    let mut entries: Vec<_> = index
+        .query(vp.visible_world(size).inflate(reach, reach))
+        .collect();
     entries.sort_unstable_by_key(|e| e.order);
     let mut stats = PaintStats {
         candidates: entries.len(),
@@ -82,7 +89,7 @@ pub(crate) fn draw_node(
     patterns: bool,
 ) {
     let g = &node.geom;
-    crate::effects::draw_shadow(scene, world, node);
+    crate::effects::draw_drop_shadows(scene, world, node);
     match node.kind {
         NodeKind::Group => {}
         NodeKind::Ellipse => {
@@ -105,6 +112,10 @@ fn fill_and_stroke(
     node: &dv_core::Node,
     patterns: bool,
 ) {
+    if let Some(blur) = crate::effects::layer_blur(node) {
+        crate::effects::draw_blurred(scene, world, node, blur);
+        return;
+    }
     match &node.fill {
         Some(Paint::Pattern(p)) => {
             if patterns {
@@ -116,6 +127,7 @@ fn fill_and_stroke(
         }
         None => {}
     }
+    crate::effects::draw_inner_shadows(scene, world, shape, node);
     if let Some(stroke) = node.stroke {
         scene.stroke(
             &crate::effects::line(&stroke),

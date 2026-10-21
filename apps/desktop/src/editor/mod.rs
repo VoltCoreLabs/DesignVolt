@@ -9,6 +9,7 @@ mod interact;
 mod keys;
 mod layer_drag;
 mod layout;
+mod measure_ui;
 mod ops;
 mod ops_clip;
 mod ops_group;

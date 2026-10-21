@@ -317,14 +317,17 @@ mod tests {
     const NONE: Mods = Mods {
         ctrl: false,
         shift: false,
+        alt: false,
     };
     const SHIFT: Mods = Mods {
         ctrl: false,
         shift: true,
+        alt: false,
     };
     const CTRL: Mods = Mods {
         ctrl: true,
         shift: false,
+        alt: false,
     };
 
     fn with(text: &str) -> Edit {
@@ -412,6 +415,7 @@ mod tests {
             Mods {
                 ctrl: true,
                 shift: true,
+                alt: false,
             },
         );
         assert_eq!(e.selected(), "beta");

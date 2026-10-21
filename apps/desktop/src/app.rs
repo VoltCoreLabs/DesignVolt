@@ -505,8 +505,9 @@ impl ApplicationHandler for App {
                 self.mods = Mods {
                     ctrl: s.control_key() || s.super_key(),
                     shift: s.shift_key(),
+                    alt: s.alt_key(),
                 };
-                return;
+                self.screen.mods_changed(self.mods);
             }
             WindowEvent::MouseInput {
                 state: ElementState::Released,

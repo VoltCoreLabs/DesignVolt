@@ -29,4 +29,5 @@ pub enum Key {
 pub struct Mods {
     pub ctrl: bool,
     pub shift: bool,
+    pub alt: bool,
 }

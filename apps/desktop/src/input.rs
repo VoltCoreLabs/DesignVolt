@@ -92,6 +92,8 @@ pub trait Screen {
         }
     }
     fn key(&mut self, _key: Key, _mods: Mods) {}
+    /// A modifier key (Ctrl, Shift, Alt) was pressed or released.
+    fn mods_changed(&mut self, _mods: Mods) {}
     fn mouse_up(&mut self) {}
     fn text(&mut self, _s: &str) {}
     fn pointer_hand(&self) -> bool;

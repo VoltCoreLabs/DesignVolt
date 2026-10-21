@@ -153,6 +153,7 @@ fn paint_overlay(ed: &Editor, cx: &mut Cx, vp: &Viewport, page: &Page, size: (f6
         };
         cx.text(&l.text, LABEL_PX, l.rect.x0 + 2.0, l.rect.y1 - 5.0, color);
     }
+    super::measure_ui::draw(ed, cx, vp, page);
     for g in &ed.guides {
         draw_guide(cx, vp, g);
     }

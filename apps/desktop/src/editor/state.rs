@@ -375,6 +375,10 @@ impl Screen for Editor {
         self.handle_wheel(dx, dy, mods);
     }
 
+    fn mods_changed(&mut self, mods: Mods) {
+        self.mods = mods;
+    }
+
     fn key(&mut self, key: Key, mods: Mods) {
         self.mods = mods;
         self.handle_key(key, mods);

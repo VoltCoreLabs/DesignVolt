@@ -37,6 +37,8 @@ pub enum Interaction {
     },
     /// Dragging in the color picker.
     PickColor,
+    /// Dragging a guide line out of a ruler, or an existing one.
+    Guide(super::guides::GuideDrag),
     /// Dragging selected layers by their rows in the layers panel.
     LayerDrag {
         start: Point,
@@ -184,6 +186,7 @@ impl Editor {
         let (world, cp) = (self.world_mouse(), self.canvas_point());
         if self.space || self.tool == Tool::Hand {
             self.start_pan(false);
+        } else if self.press_guides() {
         } else if let Some(kind) = self.tool.kind() {
             self.start_create(kind, world, cp);
         } else {
@@ -471,6 +474,7 @@ impl Editor {
                 self.session.borrow_mut().exec.break_merge();
             }
             Interaction::PickColor => self.release_picker(),
+            Interaction::Guide(d) => self.finish_guide(d),
             Interaction::LayerDrag { moved, id, .. } => {
                 if moved {
                     self.finish_layer_drag();
@@ -564,6 +568,13 @@ impl Editor {
                 }
                 Interaction::Rotate { .. } => Cursor::Rotate,
                 Interaction::Create { .. } => Cursor::Crosshair,
+                Interaction::Guide(d) => {
+                    if d.vertical {
+                        Cursor::ResizeEw
+                    } else {
+                        Cursor::ResizeNs
+                    }
+                }
                 Interaction::LayerDrag { .. }
                 | Interaction::PickColor
                 | Interaction::Marquee { .. } => Cursor::Default,
@@ -594,6 +605,9 @@ impl Editor {
         }
         if self.tool.kind().is_some() {
             return Cursor::Crosshair;
+        }
+        if let Some(c) = self.guide_cursor() {
+            return c;
         }
         let cp = self.canvas_point();
         match self.selection_frame() {

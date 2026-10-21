@@ -311,9 +311,17 @@ impl Node {
     }
 }
 
+/// A guide line the user dragged out of a ruler: a vertical line at x or a horizontal one at y.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct UserGuide {
+    pub vertical: bool,
+    pub pos: f64,
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct Page {
     pub name: String,
+    pub(crate) guides: Vec<UserGuide>,
     pub(crate) nodes: HashMap<NodeId, Node>,
     pub(crate) roots: Vec<NodeId>,
 }
@@ -328,6 +336,10 @@ impl Page {
 
     pub fn node(&self, id: NodeId) -> Option<&Node> {
         self.nodes.get(&id)
+    }
+
+    pub fn guides(&self) -> &[UserGuide] {
+        &self.guides
     }
 
     pub fn contains(&self, id: NodeId) -> bool {

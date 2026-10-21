@@ -1,7 +1,7 @@
 //! Continuing a mouse interaction while the pointer moves: pan, marquee, move, resize, draw.
 
 use dv_core::{Geometry, NodeId};
-use dv_geom::{parent_delta, snap_edges, snap_rect, to_parent_space};
+use dv_geom::{parent_delta, snap_edges, snap_rect, snap_to_lines, to_parent_space};
 use kurbo::{Point, Rect};
 
 use super::handles::{
@@ -147,6 +147,7 @@ impl Editor {
                 self.drag_picker();
                 Interaction::PickColor
             }
+            Interaction::Guide(d) => Interaction::Guide(self.drag_guide(d)),
             Interaction::LayerDrag { start, moved, id } => Interaction::LayerDrag {
                 start,
                 id,
@@ -222,7 +223,7 @@ impl Editor {
             d.x = 0.0;
         }
         self.guides.clear();
-        if !self.mods.ctrl && !snap_to.is_empty() {
+        if !self.mods.ctrl {
             let threshold = SNAP_PX / self.session.borrow().vp.zoom;
             let snap = snap_rect(bounds + d, snap_to, threshold);
             if !x_locked {
@@ -232,6 +233,15 @@ impl Editor {
                 d.y += snap.dy;
             }
             self.guides = snap.guides;
+            // User guides (rulers) pull where no object was close.
+            let (xs, ys) = self.guide_lines();
+            let (gx, gy) = snap_to_lines(bounds + d, &xs, &ys, threshold);
+            if !x_locked && snap.dx == 0.0 {
+                d.x += gx;
+            }
+            if !y_locked && snap.dy == 0.0 {
+                d.y += gy;
+            }
         }
         let list: Vec<(NodeId, Geometry)> = {
             let s = self.session.borrow();

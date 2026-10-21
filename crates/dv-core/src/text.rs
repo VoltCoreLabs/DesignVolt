@@ -19,7 +19,7 @@ use crate::paint::Paint;
 
 use crate::document::{
     Color, Document, Effect, EffectKind, Geometry, LineCap, LineJoin, Node, NodeId, NodeKind, Page,
-    Stroke, StrokePos, StrokeStyle,
+    Stroke, StrokePos, StrokeStyle, UserGuide,
 };
 
 const MAGIC: &str = "designvolt-document";
@@ -104,6 +104,13 @@ pub fn to_text(doc: &Document) -> String {
     let mut out = format!("{MAGIC}\t{VERSION}\nname\t{}\n", escape(&doc.name));
     for page in doc.pages() {
         out.push_str(&format!("page\t{}\n", escape(&page.name)));
+        for g in page.guides() {
+            out.push_str(&format!(
+                "guide\t{}\t{}\n",
+                if g.vertical { 'v' } else { 'h' },
+                g.pos
+            ));
+        }
         for id in page.draw_order() {
             let Some(n) = page.node(id) else { continue };
             let g = n.geom;
@@ -196,6 +203,15 @@ pub fn from_text(text: &str) -> Result<Document, ParseError> {
         match f.next() {
             Some("name") => name = unescape(f.next().unwrap_or("")),
             Some("page") => pages.push(Page::new(unescape(f.next().unwrap_or("")))),
+            Some("guide") => {
+                let page = pages
+                    .last_mut()
+                    .ok_or_else(|| err(n, "guide before any page"))?;
+                let vertical = f.next() == Some("v");
+                let pos = f.next().and_then(|v| v.parse().ok());
+                page.guides
+                    .extend(pos.map(|pos| UserGuide { vertical, pos }));
+            }
             Some("node") => {
                 let page = pages
                     .last_mut()
@@ -481,6 +497,24 @@ node	1	0	rect	0	0	10	10	0	0	3	ff0000ff	00ff00ff:2	old
         let b = add(&mut doc, NodeKind::Rectangle, "b", None);
         let mut back = from_text(&to_text(&doc)).unwrap();
         assert!(back.alloc_id().0 > b.0);
+    }
+
+    #[test]
+    fn user_guides_roundtrip() {
+        let mut doc = Document::default();
+        let guides = vec![
+            UserGuide {
+                vertical: true,
+                pos: 12.5,
+            },
+            UserGuide {
+                vertical: false,
+                pos: -40.0,
+            },
+        ];
+        doc.apply(&Command::SetGuides(guides.clone())).unwrap();
+        let back = from_text(&to_text(&doc)).unwrap();
+        assert_eq!(back.page().guides(), &guides[..]);
     }
 
     #[test]

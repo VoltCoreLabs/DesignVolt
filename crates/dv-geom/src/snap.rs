@@ -88,6 +88,14 @@ pub fn snap_rect(moving: Rect, others: &[Rect], threshold: f64) -> Snap {
     }
 }
 
+/// Snaps a moving rectangle to user guide lines: vertical ones at `xs`, horizontal at `ys`.
+/// Returns the correction on each axis (zero where nothing is close).
+pub fn snap_to_lines(moving: Rect, xs: &[f64], ys: &[f64], threshold: f64) -> (f64, f64) {
+    let dx = best_delta(&lines(moving.x0, moving.x1), xs.iter().copied(), threshold);
+    let dy = best_delta(&lines(moving.y0, moving.y1), ys.iter().copied(), threshold);
+    (dx.unwrap_or(0.0), dy.unwrap_or(0.0))
+}
+
 /// Snaps only the dragged `edges` of a resized rectangle. Returns the new rectangle.
 pub fn snap_edges(rect: Rect, edges: Edges, others: &[Rect], threshold: f64) -> (Rect, Vec<Guide>) {
     let mut r = rect;
@@ -186,6 +194,16 @@ mod tests {
             (0.0, 240.0),
             "the guide connects both boxes"
         );
+    }
+
+    #[test]
+    fn a_box_snaps_to_user_guides() {
+        // Right edge 98 is 2 short of the guide at 100; the vertical position is far from 500.
+        let (dx, dy) = snap_to_lines(r(58.0, 10.0, 98.0, 50.0), &[100.0], &[500.0], 6.0);
+        assert_eq!((dx, dy), (2.0, 0.0));
+        // A center snaps as well.
+        let (dx, _) = snap_to_lines(r(79.0, 0.0, 119.0, 10.0), &[100.0], &[], 6.0);
+        assert_eq!(dx, 1.0);
     }
 
     #[test]

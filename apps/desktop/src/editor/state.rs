@@ -106,6 +106,8 @@ pub struct Editor {
     pub(super) prop_edit: Option<super::props::PropEdit>,
     /// Guide lines shown while a drag snaps to other objects.
     pub(super) guides: Vec<dv_geom::Guide>,
+    /// Rulers and user guides are shown (Shift+R).
+    pub(super) rulers: bool,
     pub(super) interaction: Option<Interaction>,
     pub(super) space: bool,
     pub(super) drag_key: u64,
@@ -156,6 +158,7 @@ impl Editor {
             hover: None,
             prop_edit: None,
             guides: Vec::new(),
+            rulers: false,
             interaction: None,
             space: false,
             drag_key: 0,

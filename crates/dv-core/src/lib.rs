@@ -13,7 +13,7 @@ pub mod text;
 pub use command::{Command, CommandError, Props};
 pub use document::{
     Color, Document, Effect, EffectKind, Geometry, LineCap, LineJoin, Node, NodeId, NodeKind, Page,
-    Stroke, StrokePos, StrokeStyle,
+    Stroke, StrokePos, StrokeStyle, UserGuide,
 };
 pub use history::Executor;
 pub use paint::{Gradient, GradientKind, Paint, Pattern, Stop, Tiling};

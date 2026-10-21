@@ -78,6 +78,7 @@ pub(super) fn draw(ed: &Editor, cx: &mut Cx, canvas: Rect) {
         let outer = cx.xf;
         cx.xf = outer * origin;
         paint_overlay(ed, cx, &s.vp, page, size);
+        super::guides::draw(ed, cx, &s.vp, size);
         status_line(ed, cx, &s.vp, page.len(), size);
         if page.is_empty() && ed.interaction.is_none() {
             let hint = tr(Msg::EmptyCanvasHint);

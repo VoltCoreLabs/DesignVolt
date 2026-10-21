@@ -99,6 +99,7 @@ impl Editor {
                 '0' => self.set_zoom(1.0),
                 '1' => self.fit_all(),
                 '2' => self.fit_selection(),
+                'r' => self.toggle_rulers(),
                 _ => {}
             }
             return;

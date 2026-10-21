@@ -1087,3 +1087,73 @@ fn ctrl_click_picks_a_shape_inside_a_group_while_a_plain_click_picks_the_group()
     assert_eq!(ed.selection, [b], "Ctrl+click takes the shape inside");
     let _ = a;
 }
+
+fn guides(ed: &Editor) -> Vec<dv_core::UserGuide> {
+    ed.session.borrow().exec.doc().page().guides().to_vec()
+}
+
+#[test]
+fn dragging_out_of_a_ruler_makes_a_guide_and_back_removes_it() {
+    let mut ed = editor();
+    press_key(&mut ed, Key::Char('r'), SHIFT);
+    let c = ed.layout().canvas;
+    // Left ruler -> a vertical guide.
+    wdrag(
+        &mut ed,
+        (c.x0 + 5.0, c.y0 + 200.0),
+        (c.x0 + 300.0, c.y0 + 200.0),
+        NONE,
+    );
+    let list = guides(&ed);
+    assert_eq!(list.len(), 1);
+    assert!(list[0].vertical);
+    let expect = ed
+        .session
+        .borrow()
+        .vp
+        .to_world(Point::new(300.0, 0.0))
+        .x
+        .round();
+    assert_eq!(list[0].pos, expect);
+    // Undo removes it, redo brings it back.
+    press_key(&mut ed, Key::Undo, CTRL);
+    assert!(guides(&ed).is_empty());
+    press_key(&mut ed, Key::Redo, CTRL);
+    assert_eq!(guides(&ed).len(), 1);
+    // Dragging it back onto the ruler deletes it.
+    wdrag(
+        &mut ed,
+        (c.x0 + 300.0, c.y0 + 200.0),
+        (c.x0 + 5.0, c.y0 + 200.0),
+        NONE,
+    );
+    assert!(guides(&ed).is_empty());
+}
+
+#[test]
+fn a_moved_shape_snaps_to_a_guide() {
+    let mut ed = editor();
+    let id = draw_rect(&mut ed, (0.0, 0.0), (100.0, 100.0));
+    press_key(&mut ed, Key::Char('r'), SHIFT);
+    let c = ed.layout().canvas;
+    let gx = ed.session.borrow().vp.to_screen(Point::new(303.0, 0.0)).x;
+    wdrag(
+        &mut ed,
+        (c.x0 + 5.0, c.y0 + 400.0),
+        (c.x0 + gx, c.y0 + 400.0),
+        NONE,
+    );
+    let pos = guides(&ed)[0].pos;
+    // Move the shape so its right edge ends 2 units short of the guide.
+    drag(&mut ed, (50.0, 50.0), (pos - 52.0, 50.0), NONE);
+    assert_eq!(geom(&ed, id).0 + 100.0, pos);
+}
+
+/// Like `drag`, but in window coordinates (for the rulers, which are not on the page).
+fn wdrag(ed: &mut Editor, from: (f64, f64), to: (f64, f64), _mods: Mods) {
+    ed.mouse_moved(from.0, from.1);
+    ed.click(NONE);
+    ed.mouse_moved((from.0 + to.0) / 2.0, (from.1 + to.1) / 2.0);
+    ed.mouse_moved(to.0, to.1);
+    ed.mouse_up();
+}

@@ -1,7 +1,7 @@
 //! Reversible commands. `Document::apply` performs a command and returns its inverse, which is
 //! all that undo/redo needs. Every change of a document goes through a command.
 
-use crate::document::{Document, Effect, Geometry, Node, NodeId, Stroke};
+use crate::document::{Document, Effect, Geometry, Node, NodeId, Stroke, UserGuide};
 use crate::paint::Paint;
 
 /// Property changes; `None` leaves the property as it is.
@@ -55,6 +55,8 @@ pub enum Command {
         parent: Option<NodeId>,
         index: usize,
     },
+    /// Replaces the page's user guides (rulers).
+    SetGuides(Vec<UserGuide>),
     /// Several commands that undo as one.
     Batch(Vec<Command>),
 }
@@ -95,6 +97,10 @@ impl Document {
             Command::SetProps { id, props } => self.set_props(*id, props),
             Command::Reorder { id, index } => self.reorder(*id, *index),
             Command::Reparent { id, parent, index } => self.reparent(*id, *parent, *index),
+            Command::SetGuides(guides) => {
+                let old = std::mem::replace(&mut self.page_mut().guides, guides.clone());
+                Ok(Command::SetGuides(old))
+            }
             Command::Batch(cmds) => self.batch(cmds),
         }
     }
@@ -437,6 +443,19 @@ mod tests {
             Err(CommandError::MissingNode(NodeId(12345)))
         );
         assert_eq!(doc.page().node(a).unwrap().geom, before);
+    }
+
+    #[test]
+    fn set_guides_is_reversible() {
+        let mut doc = Document::default();
+        let g = vec![UserGuide {
+            vertical: true,
+            pos: 5.0,
+        }];
+        let inv = doc.apply(&Command::SetGuides(g.clone())).unwrap();
+        assert_eq!(doc.page().guides(), &g[..]);
+        doc.apply(&inv).unwrap();
+        assert!(doc.page().guides().is_empty());
     }
 
     #[test]

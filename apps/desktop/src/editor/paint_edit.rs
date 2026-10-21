@@ -6,8 +6,8 @@ use dv_ui::theme::metrics::FONT_UI;
 use dv_ui::widgets::text_input::{PAD_X, TextInput};
 
 use super::dropdown::Target;
-use super::ops_paint::{DEFAULT_FILL, DEFAULT_STROKE, edit_fill, edit_stroke};
-use super::paint_ui::{Hit, Look, PField, Slot, looks, panel, text_x};
+use super::ops_paint::{DEFAULT_FILL, DEFAULT_STROKE, edit_fill_at, edit_stroke};
+use super::paint_ui::{Hit, Look, PField, Slot, fill_look, looks, panel, text_x};
 use super::props::{filter_number_chars, parse_number};
 use super::state::Editor;
 
@@ -63,7 +63,9 @@ impl Editor {
     fn add_paint(&mut self, slot: Slot) {
         let ex = &mut self.session.borrow_mut().exec;
         match slot {
-            Slot::Fill => edit_fill(ex, &self.selection, None, |_| Some(DEFAULT_FILL.into())),
+            Slot::Fill(i) => {
+                edit_fill_at(ex, &self.selection, None, i, |_| Some(DEFAULT_FILL.into()))
+            }
             Slot::Stroke => edit_stroke(ex, &self.selection, None, |_| Some(DEFAULT_STROKE)),
             Slot::Effect(_) => {}
         }
@@ -77,7 +79,7 @@ impl Editor {
         self.close_picker();
         let ex = &mut self.session.borrow_mut().exec;
         match slot {
-            Slot::Fill => edit_fill(ex, &self.selection, None, |_| None),
+            Slot::Fill(i) => edit_fill_at(ex, &self.selection, None, i, |_| None),
             Slot::Stroke => edit_stroke(ex, &self.selection, None, |_| None),
             Slot::Effect(_) => {}
         }
@@ -88,7 +90,11 @@ impl Editor {
             self.start_effect_edit(i, field);
             return;
         }
-        let (fill, stroke) = looks(self);
+        let stroke = looks(self).1;
+        let fill = match slot {
+            Slot::Fill(i) => fill_look(self, i),
+            _ => Look::None,
+        };
         if let (Slot::Stroke, Look::One(s)) = (slot, &stroke)
             && let Some(v) = super::stroke_pop::field_value(s, field)
         {
@@ -96,7 +102,7 @@ impl Editor {
             return;
         }
         let (color, width) = match (slot, fill, stroke) {
-            (Slot::Fill, Look::One(Paint::Solid(c)), _) => (c, 0.0),
+            (Slot::Fill(_), Look::One(Paint::Solid(c)), _) => (c, 0.0),
             (Slot::Stroke, _, Look::One(s)) => (s.color, s.width),
             _ => return,
         };
@@ -151,7 +157,7 @@ impl Editor {
                     ..new
                 };
                 match slot {
-                    Slot::Fill => edit_fill(ex, sel, None, |p| {
+                    Slot::Fill(i) => edit_fill_at(ex, sel, None, i, |p| {
                         Some(Paint::Solid(with(p.as_ref().and_then(Paint::solid))))
                     }),
                     Slot::Stroke => edit_stroke(ex, sel, None, |s| {
@@ -168,7 +174,7 @@ impl Editor {
                 let Some(p) = parse_number(&text) else { return };
                 let a = percent_to_alpha(p);
                 match slot {
-                    Slot::Fill => edit_fill(ex, sel, None, |p| {
+                    Slot::Fill(i) => edit_fill_at(ex, sel, None, i, |p| {
                         p.map(|p| match p {
                             Paint::Solid(c) => Paint::Solid(Color { a, ..c }),
                             other => other,

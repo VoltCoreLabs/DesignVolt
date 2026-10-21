@@ -2,8 +2,8 @@
 
 use dv_core::{NodeId, Paint, Pattern};
 
-use super::ops_paint::edit_fill;
-use super::paint_ui::{Look, looks};
+use super::ops_paint::edit_fill_at;
+use super::paint_ui::{Look, fill_look};
 use super::picker_layout::PatField;
 use super::state::Editor;
 
@@ -29,7 +29,7 @@ pub fn set_field(p: &mut Pattern, f: PatField, v: f64) {
 
 impl Editor {
     pub(super) fn current_pattern(&self) -> Option<Pattern> {
-        match looks(self).0 {
+        match fill_look(self, self.fill_idx()) {
             Look::One(Paint::Pattern(p)) => Some(p),
             _ => None,
         }
@@ -38,7 +38,7 @@ impl Editor {
     /// Applies `f` to the pattern of every selected shape that has one.
     pub(super) fn edit_pattern(&mut self, f: impl Fn(&mut Pattern)) {
         let ex = &mut self.session.borrow_mut().exec;
-        edit_fill(ex, &self.selection, None, |old| {
+        edit_fill_at(ex, &self.selection, None, self.fill_idx(), |old| {
             old.map(|p| match p {
                 Paint::Pattern(mut q) => {
                     f(&mut q);
@@ -72,7 +72,7 @@ impl Editor {
         };
         let Some(source) = source else { return };
         let ex = &mut self.session.borrow_mut().exec;
-        edit_fill(ex, &self.selection, None, |old| {
+        edit_fill_at(ex, &self.selection, None, self.fill_idx(), |old| {
             Some(Paint::Pattern(match old {
                 Some(Paint::Pattern(p)) => Pattern { source, ..p },
                 _ => Pattern::new(source),

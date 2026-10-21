@@ -18,12 +18,14 @@ fn run(ex: &mut Executor, label: &'static str, key: Option<u64>, cmds: Vec<Comma
     };
 }
 
-/// Replaces the fill of every shape of the selection by `f(old)`. Edits sharing a `key`
-/// (a drag in the picker) form one undo step.
-pub fn edit_fill(
+/// Replaces the fill at `index` (0 is the main fill, the rest are the extra ones above it) of
+/// every shape of the selection by `f(old)`. `None` removes that fill; a shape that has
+/// fewer fills gets the new one at the end. Edits sharing a `key` form one undo step.
+pub fn edit_fill_at(
     ex: &mut Executor,
     ids: &[NodeId],
     key: Option<u64>,
+    index: usize,
     f: impl Fn(Option<Paint>) -> Option<Paint>,
 ) {
     let page = ex.doc().page();
@@ -31,9 +33,20 @@ pub fn edit_fill(
         .geo_tops(ids)
         .into_iter()
         .filter_map(|id| {
-            let fill = f(page.node(id)?.fill.clone());
+            let n = page.node(id)?;
+            let mut all: Vec<Paint> = n.fill.iter().chain(&n.extra_fills).cloned().collect();
+            match f(all.get(index).cloned()) {
+                Some(p) if index < all.len() => all[index] = p,
+                Some(p) => all.push(p),
+                None if index < all.len() => {
+                    all.remove(index);
+                }
+                None => {}
+            }
+            let mut rest = all.into_iter();
             let props = Props {
-                fill: Some(fill),
+                fill: Some(rest.next()),
+                extra_fills: Some(rest.collect()),
                 ..Props::default()
             };
             Some(Command::SetProps { id, props })
@@ -110,11 +123,11 @@ mod tests {
         let mut ex = Executor::new(Document::default());
         let (a, b) = (shape(&mut ex), shape(&mut ex));
         let red = Color::rgb(255, 0, 0);
-        edit_fill(&mut ex, &[a, b], None, |_| Some(red.into()));
+        edit_fill_at(&mut ex, &[a, b], None, 0, |_| Some(red.into()));
         let page = ex.doc().page();
         assert_eq!(page.node(a).unwrap().fill, Some(red.into()));
         assert_eq!(page.node(b).unwrap().fill, Some(red.into()));
-        edit_fill(&mut ex, &[a], None, |_| None);
+        edit_fill_at(&mut ex, &[a], None, 0, |_| None);
         assert_eq!(ex.doc().page().node(a).unwrap().fill, None);
         ex.undo();
         ex.undo();
@@ -129,7 +142,9 @@ mod tests {
         let mut ex = Executor::new(Document::default());
         let a = shape(&mut ex);
         for v in [10, 20, 30] {
-            edit_fill(&mut ex, &[a], Some(7), |_| Some(Color::rgb(v, 0, 0).into()));
+            edit_fill_at(&mut ex, &[a], Some(7), 0, |_| {
+                Some(Color::rgb(v, 0, 0).into())
+            });
         }
         assert_eq!(
             ex.doc().page().node(a).unwrap().fill,
@@ -173,5 +188,30 @@ mod tests {
         assert_eq!(ex.doc().page().node(a).unwrap().stroke.unwrap().width, 4.0);
         edit_stroke(&mut ex, &[a], None, |_| None);
         assert!(ex.doc().page().node(a).unwrap().stroke.is_none());
+    }
+
+    #[test]
+    fn several_fills_stack_and_the_first_is_promoted_when_removed() {
+        let mut ex = Executor::new(Document::default());
+        let a = shape(&mut ex);
+        let (red, green) = (Color::rgb(255, 0, 0), Color::rgb(0, 255, 0));
+        edit_fill_at(&mut ex, &[a], None, 1, |old| {
+            assert!(old.is_none(), "index 1 is a new fill");
+            Some(red.into())
+        });
+        edit_fill_at(&mut ex, &[a], None, 2, |_| Some(green.into()));
+        let n = ex.doc().page().node(a).unwrap();
+        assert_eq!(n.fill, Some(DEFAULT_FILL.into()));
+        assert_eq!(n.extra_fills, [red.into(), green.into()]);
+        edit_fill_at(&mut ex, &[a], None, 0, |_| None);
+        let n = ex.doc().page().node(a).unwrap();
+        assert_eq!(n.fill, Some(red.into()));
+        assert_eq!(n.extra_fills, [green.into()]);
+        ex.undo();
+        let n = ex.doc().page().node(a).unwrap();
+        assert_eq!(
+            (n.fill.clone(), n.extra_fills.len()),
+            (Some(DEFAULT_FILL.into()), 2)
+        );
     }
 }

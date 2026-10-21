@@ -39,7 +39,7 @@ fn action_tip(a: Action) -> &'static str {
 
 fn slot_name(slot: Slot) -> &'static str {
     match slot {
-        Slot::Fill => t("заливку", "fill"),
+        Slot::Fill(_) => t("заливку", "fill"),
         Slot::Stroke => t("обводку", "stroke"),
         Slot::Effect(_) => t("эффект", "effect"),
     }

@@ -4,8 +4,8 @@ use dv_core::{Color, Effect, Paint, Stroke};
 use kurbo::{Point, Rect};
 
 use super::dropdown::Target;
-use super::ops_paint::{DEFAULT_STROKE, edit_effects, edit_fill, edit_stroke};
-use super::paint_ui::{Hit, Look, Slot, effects_look, looks, panel};
+use super::ops_paint::{DEFAULT_STROKE, edit_effects, edit_fill_at, edit_stroke};
+use super::paint_ui::{Hit, Look, Slot, effects_look, fill_look, looks, panel};
 use super::picker_edit::PickField;
 use super::picker_layout::*;
 use super::state::Editor;
@@ -53,16 +53,17 @@ fn frac(r: Rect, p: Point, vertical: bool) -> f64 {
 impl Editor {
     /// What the popup shows for its slot right now.
     pub(super) fn picker_shape(&self, slot: Slot) -> Shape {
-        let grad = match (slot, looks(self).0) {
-            (Slot::Fill, Look::One(Paint::Gradient(g))) => Some(g.kind),
+        let fill = match slot {
+            Slot::Fill(i) => fill_look(self, i),
+            _ => Look::None,
+        };
+        let grad = match (slot, fill.clone()) {
+            (Slot::Fill(_), Look::One(Paint::Gradient(g))) => Some(g.kind),
             _ => None,
         };
-        let pattern = matches!(
-            (slot, looks(self).0),
-            (Slot::Fill, Look::One(Paint::Pattern(_)))
-        );
+        let pattern = matches!((slot, fill), (Slot::Fill(_), Look::One(Paint::Pattern(_))));
         Shape {
-            tabs: slot == Slot::Fill,
+            tabs: matches!(slot, Slot::Fill(_)),
             grad,
             pattern,
             rows: recent_rows(super::recent::get().len()),
@@ -85,9 +86,13 @@ impl Editor {
             self.close_picker();
             return;
         }
-        let (fill, stroke) = looks(self);
+        let stroke = looks(self).1;
+        let fill = match slot {
+            Slot::Fill(i) => fill_look(self, i),
+            _ => Look::None,
+        };
         let color = match (slot, fill, stroke) {
-            (Slot::Fill, Look::One(p), _) => p.main_color(),
+            (Slot::Fill(_), Look::One(p), _) => p.main_color(),
             (Slot::Stroke, _, Look::One(s)) => s.color,
             (Slot::Effect(i), _, _) => match effects_look(self) {
                 Look::One(l) => match l.get(i) {
@@ -128,7 +133,7 @@ impl Editor {
         let stop = self.picker.as_ref().map_or(0, |p| p.stop);
         let ex = &mut self.session.borrow_mut().exec;
         match slot {
-            Slot::Fill => edit_fill(ex, &self.selection, key, |old| {
+            Slot::Fill(_) => edit_fill_at(ex, &self.selection, key, self.fill_idx(), |old| {
                 Some(match old {
                     Some(Paint::Gradient(mut g)) => {
                         let i = stop.min(g.stops.len() - 1);
@@ -299,6 +304,16 @@ impl Editor {
         self.session.borrow_mut().exec.break_merge();
         if let Some(c) = color {
             super::recent::push(c);
+        }
+    }
+}
+
+impl Editor {
+    /// Index of the fill the picker edits (0 when it edits something else).
+    pub(super) fn fill_idx(&self) -> usize {
+        match self.picker.as_ref().map(|p| p.slot) {
+            Some(Slot::Fill(i)) => i,
+            _ => 0,
         }
     }
 }

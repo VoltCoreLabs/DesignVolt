@@ -8,7 +8,7 @@ use dv_ui::theme::metrics::*;
 use kurbo::Rect;
 use vello::kurbo::{Affine, RoundedRect};
 
-use super::paint_layout::{GAP_X, LABELED_TEXT_X, MAX_EFFECTS, TEXT_X};
+use super::paint_layout::{GAP_X, LABELED_TEXT_X, MAX_EFFECTS, MAX_FILLS, TEXT_X};
 pub use super::paint_layout::{Hit, Look, PField, Panel, Slot, text_x};
 use super::state::Editor;
 use crate::i18n::{Msg, tr};
@@ -25,6 +25,35 @@ pub fn looks(ed: &Editor) -> (Look<Paint>, Look<Stroke>) {
     let fill = fold(nodes.iter().map(|n| n.fill.clone()));
     let stroke = fold(nodes.iter().map(|n| n.stroke));
     (fill, stroke)
+}
+
+/// How many fill rows the selection shows: the most fills any selected shape has.
+pub fn fill_rows(ed: &Editor) -> usize {
+    let s = ed.session.borrow();
+    let page = s.exec.doc().page();
+    page.geo_tops(&ed.selection)
+        .into_iter()
+        .filter_map(|id| page.node(id))
+        .map(|n| usize::from(n.fill.is_some()) + n.extra_fills.len())
+        .max()
+        .unwrap_or(0)
+        .min(MAX_FILLS)
+}
+
+/// The `i`-th fill of the selected shapes (0 is the main fill).
+pub fn fill_look(ed: &Editor, i: usize) -> Look<Paint> {
+    let s = ed.session.borrow();
+    let page = s.exec.doc().page();
+    let nodes: Vec<_> = page
+        .geo_tops(&ed.selection)
+        .into_iter()
+        .filter_map(|id| page.node(id))
+        .collect();
+    fold(
+        nodes
+            .iter()
+            .map(|n| n.fill.iter().chain(&n.extra_fills).nth(i).cloned()),
+    )
 }
 
 /// The effects of the selected shapes, when they all have the same list.
@@ -61,7 +90,7 @@ fn fold<T: PartialEq + Clone>(mut it: impl Iterator<Item = Option<T>>) -> Look<T
 
 /// The panel layout for what the selection has now.
 pub fn panel(ed: &Editor) -> Panel {
-    let (fill, stroke) = looks(ed);
+    let (_, stroke) = looks(ed);
     let mask = match effects_look(ed) {
         Look::One(list) => list
             .iter()
@@ -70,12 +99,7 @@ pub fn panel(ed: &Editor) -> Panel {
             .fold(0u32, |m, (i, _)| m | (1 << i)),
         _ => 0,
     };
-    Panel::new(
-        ed.layout().right,
-        fill != Look::None,
-        stroke != Look::None,
-        mask,
-    )
+    Panel::new(ed.layout().right, fill_rows(ed), stroke != Look::None, mask)
 }
 
 /// Name of an effect kind.
@@ -114,37 +138,48 @@ impl Editor {
             return None;
         }
         let at = |r: Rect| r.contains(self.mouse);
-        let (fill, stroke) = looks(self);
+        let (_, stroke) = looks(self);
         if stroke != Look::None && at(p.style_rect()) {
             return Some(Hit::Style);
         }
         if stroke != Look::None && at(p.settings_rect()) {
             return Some(Hit::StrokeSettings);
         }
-        for (slot, has) in [
-            (Slot::Fill, fill != Look::None),
-            (Slot::Stroke, stroke != Look::None),
-        ] {
-            if !has {
-                if at(p.add_rect(slot)) {
-                    return Some(Hit::Add(slot));
-                }
-                continue;
-            }
+        let rows = fill_rows(self);
+        if rows < MAX_FILLS && at(p.add_rect(Slot::Fill(0))) {
+            return Some(Hit::Add(Slot::Fill(rows)));
+        }
+        for i in 0..rows {
+            let slot = Slot::Fill(i);
             if at(p.remove_rect(slot)) {
                 return Some(Hit::Remove(slot));
             }
             if at(p.swatch_rect(slot)) {
                 return Some(Hit::Swatch(slot));
             }
-            let fields: &[PField] = if slot == Slot::Fill {
-                &[PField::Hex, PField::Alpha]
+            for f in [PField::Hex, PField::Alpha] {
+                if at(p.field_rect(slot, f)) {
+                    return Some(Hit::Field(slot, f));
+                }
+            }
+        }
+        {
+            let slot = Slot::Stroke;
+            if stroke == Look::None {
+                if at(p.add_rect(slot)) {
+                    return Some(Hit::Add(slot));
+                }
             } else {
-                &[PField::Hex, PField::Alpha, PField::Width]
-            };
-            for f in fields {
-                if at(p.field_rect(slot, *f)) {
-                    return Some(Hit::Field(slot, *f));
+                if at(p.remove_rect(slot)) {
+                    return Some(Hit::Remove(slot));
+                }
+                if at(p.swatch_rect(slot)) {
+                    return Some(Hit::Swatch(slot));
+                }
+                for f in [PField::Hex, PField::Alpha, PField::Width] {
+                    if at(p.field_rect(slot, f)) {
+                        return Some(Hit::Field(slot, f));
+                    }
                 }
             }
         }
@@ -296,24 +331,36 @@ pub(super) fn editable(
 }
 
 /// Fill or stroke: its title with the "+" button, and the row with swatch, values and "-".
-fn slot(cx: &mut Cx, ed: &Editor, p: &Panel, which: Slot, color: Look<Paint>, width: Option<f64>) {
-    let title = if which == Slot::Fill {
-        tr(Msg::SectionFill)
-    } else {
-        tr(Msg::SectionStroke)
-    };
-    super::panels::section_title(
-        cx,
-        p.right.x0 + 1.0,
-        p.right.x1,
-        p.title_y(which),
-        title,
-        true,
-    );
+fn slot(
+    cx: &mut Cx,
+    ed: &Editor,
+    p: &Panel,
+    which: Slot,
+    color: Look<Paint>,
+    width: Option<f64>,
+    head: bool,
+) {
     let hot = |r: Rect| r.contains(ed.mouse);
+    if head {
+        let title = if matches!(which, Slot::Fill(_)) {
+            tr(Msg::SectionFill)
+        } else {
+            tr(Msg::SectionStroke)
+        };
+        super::panels::section_title(
+            cx,
+            p.right.x0 + 1.0,
+            p.right.x1,
+            p.title_y(which),
+            title,
+            true,
+        );
+    }
     if color == Look::None {
-        let add = p.add_rect(which);
-        icon_button(cx, add, Icon::Plus, hot(add));
+        if head {
+            let add = p.add_rect(which);
+            icon_button(cx, add, Icon::Plus, hot(add));
+        }
         return;
     }
     let remove = p.remove_rect(which);
@@ -436,14 +483,22 @@ fn effect_field(cx: &mut Cx, ed: &Editor, p: &Panel, s: Slot, f: PField, label: 
 /// Draws the Fill, Stroke and Effects sections of the right panel.
 pub fn sections(cx: &mut Cx, _right: Rect, ed: &Editor) {
     let p = panel(ed);
-    let (fill, stroke) = looks(ed);
-    slot(cx, ed, &p, Slot::Fill, fill, None);
+    let (_, stroke) = looks(ed);
+    let rows = fill_rows(ed);
+    slot(cx, ed, &p, Slot::Fill(0), fill_look(ed, 0), None, true);
+    if rows > 0 && rows < MAX_FILLS {
+        let add = p.add_rect(Slot::Fill(0));
+        icon_button(cx, add, Icon::Plus, add.contains(ed.mouse));
+    }
+    for i in 1..rows {
+        slot(cx, ed, &p, Slot::Fill(i), fill_look(ed, i), None, false);
+    }
     let (look, width) = match stroke {
         Look::One(s) => (Look::One(Paint::Solid(s.color)), Some(s.width)),
         Look::Mixed => (Look::Mixed, None),
         Look::None => (Look::None, None),
     };
-    slot(cx, ed, &p, Slot::Stroke, look, width);
+    slot(cx, ed, &p, Slot::Stroke, look, width, true);
     if let Some(s) = stroke_style_look(ed) {
         let r = p.style_rect();
         drop_button(cx, r, style_name(s), r.contains(ed.mouse));

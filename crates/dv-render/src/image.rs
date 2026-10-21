@@ -148,6 +148,12 @@ fn cached(asset: u64, bytes: &ImageBytes) -> Option<ImageData> {
     })
 }
 
+/// The pixel size of the image `asset` of the page (decoded once, then cached).
+pub fn image_size(page: &Page, asset: u64) -> Option<(f64, f64)> {
+    let img = cached(asset, page.image(asset)?)?;
+    Some((f64::from(img.width), f64::from(img.height)))
+}
+
 /// Where the image goes inside a `w` x `h` box: maps image pixels to box coordinates.
 pub fn placement(f: &ImageFill, iw: f64, ih: f64, w: f64, h: f64) -> Affine {
     let (mode, scale) = (f.mode, f.scale);

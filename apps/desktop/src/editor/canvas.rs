@@ -80,6 +80,7 @@ pub(super) fn draw(ed: &Editor, cx: &mut Cx, canvas: Rect) {
         paint_overlay(ed, cx, &s.vp, page, size);
         super::guides::draw(ed, cx, &s.vp, size);
         super::grad_handles::draw(ed, cx, &s.vp);
+        super::image_crop_frame::draw(ed, cx);
         status_line(ed, cx, &s.vp, page.len(), size);
         if page.is_empty() && ed.interaction.is_none() {
             let hint = tr(Msg::EmptyCanvasHint);

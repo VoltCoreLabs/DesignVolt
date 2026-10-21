@@ -115,25 +115,38 @@ pub fn draw_blurred(scene: &mut Scene, world: Affine, node: &Node, blur: f64) {
     );
 }
 
-/// Samples of the layer blur approximation.
-const BLUR_SAMPLES: usize = 24;
+/// Most samples per axis of the layer blur.
+const MAX_SAMPLES: usize = 12;
+const MIN_SAMPLES: usize = 4;
 
-/// Offsets that spread equal weights like a 2D Gaussian of deviation `sigma`: radii are the
-/// quantiles of the Gaussian, angles follow the golden angle.
-pub fn blur_offsets(sigma: f64) -> Vec<(f64, f64)> {
-    (0..BLUR_SAMPLES)
-        .map(|i| {
-            let u = (i as f64 + 0.5) / BLUR_SAMPLES as f64;
-            let r = sigma * (-2.0 * (1.0 - u).ln()).sqrt();
-            let a = i as f64 * 2.399_963_229_728_653;
-            (r * a.cos(), r * a.sin())
-        })
+/// The inverse of the standard normal CDF (Abramowitz and Stegun 26.2.23, error < 5e-4).
+fn normal_quantile(p: f64) -> f64 {
+    let q = p.min(1.0 - p);
+    let t = (-2.0 * q.ln()).sqrt();
+    let x = t
+        - (2.515_517 + 0.802_853 * t + 0.010_328 * t * t)
+            / (1.0 + 1.432_788 * t + 0.189_269 * t * t + 0.001_308 * t * t * t);
+    if p < 0.5 { -x } else { x }
+}
+
+/// Samples per axis for a blur of deviation `sigma_px` screen pixels: enough that the copies
+/// overlap into a smooth result, few when the blur is small.
+pub fn blur_samples(sigma_px: f64) -> usize {
+    ((sigma_px / 2.5).ceil() as usize).clamp(MIN_SAMPLES, MAX_SAMPLES)
+}
+
+/// `n` offsets along one axis that carry equal weight under a Gaussian of deviation `sigma`.
+pub fn blur_offsets(sigma: f64, n: usize) -> Vec<f64> {
+    (0..n)
+        .map(|i| sigma * normal_quantile((i as f64 + 0.5) / n as f64))
         .collect()
 }
 
-/// Blurs anything `draw` paints: it is drawn once per sample offset, each time into a layer
-/// of equal weight that is added to the others, which averages the copies. Used where Vello
-/// has no blurred primitive (gradients, images, strokes).
+/// Blurs anything `draw` paints (Vello only blurs a solid rounded box itself). A Gaussian is
+/// separable, so the shape is drawn on a grid of horizontal and vertical offsets: every
+/// column is a group of equally weighted copies added together, and the groups of all rows
+/// are added again. That averages `n * n` copies with two small weights instead of one tiny
+/// one, which keeps the 8-bit layers from banding.
 pub fn blurred(
     scene: &mut Scene,
     world: Affine,
@@ -141,13 +154,23 @@ pub fn blurred(
     blur: f64,
     draw: impl Fn(&mut Scene, Affine),
 ) {
+    let sigma = (blur / 2.0).max(0.01);
+    let [a, b, c, d, ..] = world.as_coeffs();
+    let zoom = (a * d - b * c).abs().sqrt();
+    let n = blur_samples(sigma * zoom);
     let add = BlendMode::new(Mix::Normal, Compose::Plus);
-    let weight = 1.0 / BLUR_SAMPLES as f32;
+    let weight = 1.0 / n as f32;
+    let offs = blur_offsets(sigma, n);
     scene.push_layer(Fill::NonZero, BlendMode::default(), 1.0, world, clip);
-    for (dx, dy) in blur_offsets((blur / 2.0).max(0.01)) {
-        let at = world * Affine::translate((dx, dy));
+    for dy in &offs {
         scene.push_layer(Fill::NonZero, add, weight, world, clip);
-        draw(scene, at);
+        scene.push_layer(Fill::NonZero, BlendMode::default(), 1.0, world, clip);
+        for dx in &offs {
+            scene.push_layer(Fill::NonZero, add, weight, world, clip);
+            draw(scene, world * Affine::translate((*dx, *dy)));
+            scene.pop_layer();
+        }
+        scene.pop_layer();
         scene.pop_layer();
     }
     scene.pop_layer();
@@ -276,15 +299,23 @@ mod tests {
     }
 
     #[test]
-    fn blur_offsets_are_centered_and_spread_like_the_deviation() {
-        let o = blur_offsets(10.0);
-        assert_eq!(o.len(), BLUR_SAMPLES);
-        let n = o.len() as f64;
-        let (mx, my) = o.iter().fold((0.0, 0.0), |a, p| (a.0 + p.0, a.1 + p.1));
-        assert!(mx.abs() / n < 3.0 && my.abs() / n < 3.0, "mean {mx} {my}");
-        let var = o.iter().map(|p| p.0 * p.0 + p.1 * p.1).sum::<f64>() / n;
-        // A 2D Gaussian has E[r^2] = 2 sigma^2.
-        assert!((var / 200.0 - 1.0).abs() < 0.25, "variance {var}");
-        assert!(o.iter().all(|p| p.0.hypot(p.1) < 30.0));
+    fn blur_offsets_are_symmetric_and_spread_like_the_deviation() {
+        for n in [4, 7, 12] {
+            let o = blur_offsets(10.0, n);
+            assert_eq!(o.len(), n);
+            let mean = o.iter().sum::<f64>() / n as f64;
+            assert!(mean.abs() < 1e-3, "mean {mean}");
+            assert!((o[0] + o[n - 1]).abs() < 1e-3, "symmetric");
+            let var = o.iter().map(|x| x * x).sum::<f64>() / n as f64;
+            // Equal-weight quantiles of N(0, 10^2) have a little less spread than the whole.
+            assert!((0.6..=1.1).contains(&(var / 100.0)), "n {n} variance {var}");
+        }
+    }
+
+    #[test]
+    fn small_blurs_use_few_samples_and_large_ones_are_capped() {
+        assert_eq!(blur_samples(1.0), MIN_SAMPLES);
+        assert!(blur_samples(20.0) > MIN_SAMPLES);
+        assert_eq!(blur_samples(1000.0), MAX_SAMPLES);
     }
 }

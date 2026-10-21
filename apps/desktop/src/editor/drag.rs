@@ -148,6 +148,10 @@ impl Editor {
                 Interaction::PickColor
             }
             Interaction::Guide(d) => Interaction::Guide(self.drag_guide(d)),
+            Interaction::CropCorner(d) => {
+                self.drag_crop_corner(d);
+                Interaction::CropCorner(d)
+            }
             Interaction::Crop(d) => {
                 self.drag_crop(d);
                 Interaction::Crop(d)

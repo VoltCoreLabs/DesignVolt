@@ -51,7 +51,7 @@ fn value_box(cx: &mut Cx, r: Rect, text: &str, suffix: &str) {
     }
 }
 
-fn edit_box(cx: &mut Cx, r: Rect, e: &PickEdit) {
+pub(super) fn edit_box(cx: &mut Cx, r: Rect, e: &PickEdit) {
     cx.fill(r, R_FIELD, hex(bg_app()));
     e.input.draw_inline(cx, r, r.x0 + 6.0, r.y0 + 18.0);
     cx.stroke(r, R_FIELD, 1.5, hex(accent()));

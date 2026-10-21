@@ -11,6 +11,7 @@ arboard = { version = "3.7.0", default-features = false }
 kurbo = "0.13"
 pollster = "1.0.1"
 png = "0.18"
+rfd = "0.15"
 skrifa = "0.44"
 vello = "0.11.0"
 winit = "0.30"

@@ -16,14 +16,14 @@
 - Критерий выхода: стек подтверждён или заменён (запись в ADR)
 
 ### M1. Ядро документа и холст
-- [~] Модель: файл → страницы → слои (arena), id узлов, иерархия — дерево узлов (фрейм, прямоугольник, эллипс) с стабильными id; страница пока одна (2026-10-19)
+- [~] Модель: файл → страницы → слои (arena), id узлов, иерархия — дерево узлов (фрейм, прямоугольник, эллипс) с стабильными id; группы, несколько страниц с undo и своим видом (2026-10-21)
 - [x] Команды, undo/redo, склейка шагов (перетаскивание = один шаг) — обратимые команды, история 500 шагов, перетаскивание = один шаг (2026-10-19)
 - [~] Примитивы: rectangle, ellipse, line, polygon, star, arrow — прямоугольник, эллипс, фрейм; линия, многоугольник, звезда, стрелка нет
 - [~] Выделение: клик, рамка, shift/ctrl, выбор вглубь группы, hit-testing (`rstar`) — клик, Shift+клик, рамка, слой в панели, rstar; выбора вглубь группы нет (2026-10-19)
 - [~] Трансформации: move, resize (с shift/alt), rotate, flip, nudge стрелками — перенос (Shift — по оси), ресайз за 8 маркеров, поворот за углом (Shift — 15°), стрелки (D-024); маркеры на контуре повёрнутой фигуры (D-025); повернуть на 90° и отразить по горизонтали и вертикали кнопками (D-026); alt-режимов нет (2026-10-19)
 - [~] Группы, фреймы, порядок слоёв (z-order), lock, hide — фреймы (вложенность, выбор за название), скрытие слоя; групп, z-order и блокировки в интерфейсе нет
-- [~] Привязки (snap), умные направляющие, измерения расстояний (alt) — привязка краёв и центров к соседям с направляющими при переносе и ресайзе, Ctrl отключает, работает для всех видов объектов (D-024, D-025); измерений расстояний нет (2026-10-19)
-- [~] Линейки, направляющие, сетки (pixel grid, layout grid) — бесконечная сетка точек, как в Figma, готова (D-023); линейки, направляющие и пиксельная сетка нет (2026-10-19)
+- [~] Привязки (snap), умные направляющие, измерения расстояний (alt) — привязка краёв и центров к соседям с направляющими при переносе и ресайзе, Ctrl отключает, работает для всех видов объектов (D-024, D-025); измерения расстояний по Alt готовы (2026-10-21)
+- [~] Линейки, направляющие, сетки (pixel grid, layout grid) — бесконечная сетка точек, как в Figma, готова (D-023); линейки и направляющие пользователя готовы (Shift+R, 2026-10-21); пиксельной сетки нет
 - [~] Viewport: зум к выделению / ко всему, миникарта-навигация, hand tool — зум колесом, Shift+0/1/2, подгонка, панорамирование пробелом/средней кнопкой/рукой; миникарты нет (2026-10-19)
 - [~] Буфер обмена внутри приложения (copy, paste, paste in place, duplicate) — дублирование Ctrl+D; copy/paste узлов нет
 - [ ] Scale tool (K): пропорциональное масштабирование с эффектами и обводками
@@ -36,7 +36,7 @@
 ### M2. Дизайн-система UI
 - [x] Токены (светлая и тёмная темы), типографика, иконки — светлая и тёмная темы, шрифт Golos Text, иконки Phosphor (2026-10-19)
 - [~] Движок анимаций: `Animated<T>`, spring, easing, планировщик кадров — есть Spring, easing, перерисовка только при анимации; обобщённого `Animated<T>` нет (2026-10-19)
-- [~] Виджеты: Button, IconButton, Toggle, TextInput, NumberField (scrub), Slider, Dropdown, Tooltip, ContextMenu, Tabs, Splitter, Modal, Toast — готовы Button, TextInput, меню, модалка, переключатель, выпадающий список сортировки; не хватает IconButton, Toggle, NumberField, Slider, Tooltip, Tabs, Splitter, Toast
+- [~] Виджеты: Button, IconButton, Toggle, TextInput, NumberField (scrub), Slider, Dropdown, Tooltip, ContextMenu, Tabs, Splitter, Modal, Toast — готовы Button, TextInput, меню, модалка, переключатель, выпадающий список сортировки; Tooltip готов (анимированные подсказки, 2026-10-21); не хватает IconButton, Toggle, NumberField, Slider, Tabs, Splitter, Toast
 - [~] Каркас окна: тулбар, левая панель (слои, страницы, ассеты), правая панель (свойства, прототип), статусная строка — слои и свойства показывают данные документа (числовые поля X, Y, W, H, угол, радиус редактируются (D-024)); вкладки Assets/Prototype/Inspect и страницы — заглушки (2026-10-19)
 - [~] Горячие клавиши и их настройка, командная палитра (Quick Actions) — шорткаты полей ввода и выбора карточек; настройки и палитры нет
 - [~] Доступность (AccessKit), локализация (ru/en) — локализация RU/EN готова, AccessKit нет (2026-10-19)
@@ -45,15 +45,15 @@
 - [ ] Pen tool, Безье, редактирование узлов и ручек, pencil
 - [ ] Vector networks (как в Figma: не только пути, но и графы), flatten, outline stroke
 - [ ] Булевы операции: union, subtract, intersect, exclude
-- [ ] Заливки: solid, linear / radial / angular / diamond gradient, image fill, несколько заливок на слой
-- [ ] Обводки: inside / center / outside, dash, caps, joins, variable width, arrowheads
-- [ ] Эффекты: drop shadow, inner shadow, layer blur, background blur
+- [~] Заливки: solid, linear / radial / angular / diamond gradient, image fill, несколько заливок на слой — готово: solid, 4 градиента, узор, изображение (PNG/JPEG), несколько заливок (2026-10-21)
+- [~] Обводки: inside / center / outside, dash, caps, joins, variable width, arrowheads — готово: inside/center/outside, dash, caps, joins, miter (2026-10-20); остальное нет
+- [~] Эффекты: drop shadow, inner shadow, layer blur, background blur — готово: drop/inner shadow, layer blur, список эффектов (2026-10-20); background blur нет
 - [ ] Каталог эффектов для любых слоёв: несколько теней и обводок, glow, outer/inner glow, bevel/emboss, noise, grain, texture, glass, progressive blur, motion blur, color overlay, gradient overlay, duotone, pixelate, displacement, mesh gradient, lens/chromatic effects
 - [ ] Эффекты текста: градиентная и image-заливка текста, обводка и тени у текста, glow, 3D/extrude, warp (arc, wave, flag, bulge), текст по пути/кривой, outline-текст, per-character стили
 - [ ] Пресеты эффектов, сохранение в стили, комбинации эффектов, порядок эффектов, включение/выключение каждого
-- [ ] Opacity, blend modes, маски, corner radius (в т.ч. по углам и smoothing)
-- [ ] Цветовое пространство (sRGB, Display P3), пипетка, цветовой пикер
-- [ ] Изображения: вставка, crop, fill/fit/tile, базовая коррекция
+- [~] Opacity, blend modes, маски, corner radius (в т.ч. по углам и smoothing) — готово: opacity (2026-10-20); остальное нет
+- [~] Цветовое пространство (sRGB, Display P3), пипетка, цветовой пикер — готово: пипетка, недавние цвета, форматы значений (2026-10-20)
+- [~] Изображения: вставка, crop, fill/fit/tile, базовая коррекция — готово: fill/fit/tile/stretch, перетаскивание файла (2026-10-21)
 - [ ] Crop tool, eraser, image editing (exposure, contrast, saturation, temperature…)
 - [ ] Симуляция дальтонизма (protanopia, deuteranopia, tritanopia, achromatopsia)
 

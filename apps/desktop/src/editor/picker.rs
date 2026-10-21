@@ -200,6 +200,8 @@ impl Editor {
                 Some(PHit::GField(f)) => self.start_pick_edit(PickField::Grad(f)),
                 Some(PHit::PickSource) => self.pick_source = true,
                 Some(PHit::ImageMode(k)) => self.set_image_mode(dv_core::ImageMode::ALL[k]),
+                Some(PHit::ImageLoad) => self.begin_upload(),
+                Some(PHit::ImageScale) => self.start_pick_edit(PickField::ImageScale),
                 Some(PHit::Tiling) => self.open_dropdown_for(Target::Tiling),
                 Some(PHit::PatField(f)) => self.start_pick_edit(PickField::Pat(f)),
                 Some(PHit::Eyedrop) => {

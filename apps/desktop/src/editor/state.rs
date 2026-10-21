@@ -105,6 +105,8 @@ pub struct Editor {
     pub(super) shown_page: usize,
     /// The picker shows the image tab and waits for an image file to be dropped.
     pub(super) image_wait: bool,
+    /// The result of the file dialog that is open (it runs on its own thread).
+    pub(super) upload: Option<std::sync::mpsc::Receiver<Option<std::path::PathBuf>>>,
     pub(super) tooltip: dv_ui::widgets::tooltip::Tooltip,
     /// Layer rows scrolled off the top of the list.
     pub(super) layer_scroll: usize,
@@ -167,6 +169,7 @@ impl Editor {
             selection: Vec::new(),
             shown_page,
             image_wait: false,
+            upload: None,
             tooltip: dv_ui::widgets::tooltip::Tooltip::new(),
             layer_scroll: 0,
             layer_wheel: 0.0,
@@ -372,7 +375,7 @@ impl Screen for Editor {
             self.layer_scroll = self.layer_scroll.min(self.layer_scroll_max());
         }
         let hovered = self.toolbar.hit(&self.layout(), self.mouse.x, self.mouse.y);
-        let busy = self.toolbar.update(dt, hovered) | self.update_tooltip(dt);
+        let busy = self.toolbar.update(dt, hovered) | self.update_tooltip(dt) | self.poll_upload();
         self.refresh_index();
         let saving = self
             .session

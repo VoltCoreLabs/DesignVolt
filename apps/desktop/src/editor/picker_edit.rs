@@ -21,6 +21,8 @@ pub enum PickField {
     Alpha,
     Grad(GField),
     Pat(PatField),
+    /// Scale of the image tiles, in percent.
+    ImageScale,
 }
 
 pub struct PickEdit {
@@ -31,7 +33,7 @@ pub struct PickEdit {
 /// Keeps what a picker field can hold in `mode`.
 pub fn filter(mode: Mode, field: PickField, s: &str) -> String {
     match (field, mode) {
-        (PickField::Grad(_) | PickField::Pat(_), _) => s
+        (PickField::Grad(_) | PickField::Pat(_) | PickField::ImageScale, _) => s
             .chars()
             .filter(|c| c.is_ascii_digit() || *c == '.' || *c == '-')
             .collect(),
@@ -47,7 +49,7 @@ pub fn filter(mode: Mode, field: PickField, s: &str) -> String {
 
 fn max_chars(mode: Mode, field: PickField) -> usize {
     match (field, mode) {
-        (PickField::Grad(_) | PickField::Pat(_), _) => 7,
+        (PickField::Grad(_) | PickField::Pat(_) | PickField::ImageScale, _) => 7,
         (PickField::Alpha, _) => 3,
         (_, Mode::Hex) => 6,
         (_, Mode::Css) => 32,
@@ -62,6 +64,10 @@ impl Editor {
         };
         let mode = self.picker_mode;
         let text = match field {
+            PickField::ImageScale => {
+                let v = self.current_image().map_or(100.0, |i| i.scale * 100.0);
+                super::props::edit_text(v)
+            }
             PickField::Comp(i) => components(mode, color).get(i).cloned().unwrap_or_default(),
             PickField::Alpha => format!("{:.0}", f64::from(color.a) / 255.0 * 100.0),
             PickField::Pat(f) => {
@@ -101,6 +107,12 @@ impl Editor {
             }
             return;
         }
+        if e.field == PickField::ImageScale {
+            if let Some(v) = parse_number(&text) {
+                self.set_image_scale((v / 100.0).clamp(0.01, 50.0));
+            }
+            return;
+        }
         if let PickField::Pat(f) = e.field {
             if let Some(v) = parse_number(&text) {
                 self.edit_pattern(|p| set_field_pat(p, f, v));
@@ -108,7 +120,7 @@ impl Editor {
             return;
         }
         let new = match e.field {
-            PickField::Grad(_) | PickField::Pat(_) => None,
+            PickField::Grad(_) | PickField::Pat(_) | PickField::ImageScale => None,
             PickField::Alpha => parse_number(&text).map(|v| dv_core::Color {
                 a: percent_to_alpha(v),
                 ..old
@@ -134,6 +146,7 @@ impl Editor {
                 let i = PAT_FIELDS.iter().position(|x| *x == f).unwrap_or(0);
                 pat_field_rect(popup, shape, i)
             }
+            PickField::ImageScale => super::picker_layout::image_scale_rect(popup, shape),
             PickField::Grad(f) => {
                 let k = shape.grad.map(grad_fields).unwrap_or(&[]);
                 let i = k.iter().position(|x| *x == f).unwrap_or(0);

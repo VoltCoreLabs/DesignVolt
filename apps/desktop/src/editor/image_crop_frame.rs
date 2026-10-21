@@ -174,8 +174,9 @@ mod tests {
         // The same drag from the top-left corner keeps the bottom-right one.
         let (scale, offset) = scaled_about(0, Point::new(-100.0, -50.0), &f, IMG, BOX);
         let after = frame_corners(&ImageFill { scale, offset, ..f }, IMG, BOX);
-        assert_eq!(after[2], before[2]);
-        assert!((after[0].x + 100.0).abs() < 1e-6);
+        assert!((after[2].x - before[2].x).abs() < 1e-6 && (after[2].y - before[2].y).abs() < 1e-6);
+        // The proportions are kept: the larger of the two drags decides the size.
+        assert!((after[0].x + 150.0).abs() < 1e-6 && (after[0].y + 50.0).abs() < 1e-6);
     }
 
     #[test]

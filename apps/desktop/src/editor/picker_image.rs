@@ -6,7 +6,12 @@ use dv_ui::theme::colors::*;
 use dv_ui::theme::metrics::*;
 use kurbo::Rect;
 
-use super::picker_layout::{Shape, image_box_rect, image_mode_rect};
+use super::paint_ui::value_box;
+use super::picker_draw::edit_box;
+use super::picker_edit::PickField;
+use super::picker_layout::{
+    Shape, image_box_rect, image_load_rect, image_mode_rect, image_scale_label, image_scale_rect,
+};
 use super::state::Editor;
 use crate::i18n::{Lang, lang};
 
@@ -66,6 +71,42 @@ impl Editor {
             r.y0 + 18.0,
             hex(text_secondary()),
         );
+        let load = image_load_rect(popup, shape);
+        let bg = if load.contains(self.mouse) {
+            hex(bg_hover())
+        } else {
+            hex(bg_raised())
+        };
+        cx.fill(load, R_FIELD, bg);
+        let label = t("Загрузить", "Upload");
+        let w = cx.text_width(label, FONT_UI);
+        cx.text(
+            label,
+            FONT_UI,
+            load.center().x - w / 2.0,
+            load.y0 + 18.0,
+            hex(text_primary()),
+        );
+        let (lx, ly) = image_scale_label(popup, shape);
+        cx.text(
+            t("Масштаб плитки", "Tile scale"),
+            FONT_UI,
+            lx,
+            ly,
+            hex(text_secondary()),
+        );
+        let sr = image_scale_rect(popup, shape);
+        match self
+            .pick_edit
+            .as_ref()
+            .filter(|e| e.field == PickField::ImageScale)
+        {
+            Some(e) => edit_box(cx, sr, e),
+            None => {
+                let v = current.map_or(100.0, |i| i.scale * 100.0);
+                value_box(cx, sr, &super::canvas::num(v), "%");
+            }
+        }
         for (k, mode) in ImageMode::ALL.into_iter().enumerate() {
             let m = image_mode_rect(popup, shape, k);
             let on = current.is_some_and(|i| i.mode == mode);

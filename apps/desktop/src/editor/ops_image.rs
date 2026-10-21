@@ -127,6 +127,59 @@ impl Editor {
         }
     }
 
+    /// Opens the system file dialog on its own thread; the chosen file is taken by
+    /// `poll_upload`.
+    pub(super) fn begin_upload(&mut self) {
+        if self.upload.is_some() {
+            return;
+        }
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let path = rfd::FileDialog::new()
+                .add_filter("Images", &["png", "jpg", "jpeg"])
+                .pick_file();
+            let _ = tx.send(path);
+        });
+        self.upload = Some(rx);
+    }
+
+    /// Applies the file chosen in the dialog; true while the dialog is still open.
+    pub(super) fn poll_upload(&mut self) -> bool {
+        let Some(rx) = &self.upload else {
+            return false;
+        };
+        match rx.try_recv() {
+            Ok(path) => {
+                self.upload = None;
+                if let Some(path) = path {
+                    self.drop_image_file(&path);
+                }
+                false
+            }
+            Err(std::sync::mpsc::TryRecvError::Empty) => true,
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                self.upload = None;
+                false
+            }
+        }
+    }
+
+    pub(super) fn set_image_scale(&mut self, scale: f64) {
+        let index = self.fill_idx();
+        super::ops_paint::edit_fill_at(
+            &mut self.session.borrow_mut().exec,
+            &self.selection,
+            None,
+            index,
+            |old| {
+                old.map(|p| match p {
+                    Paint::Image(i) => Paint::Image(ImageFill { scale, ..i }),
+                    other => other,
+                })
+            },
+        );
+    }
+
     /// Placement mode of the image fill the picker edits.
     pub(super) fn current_image(&self) -> Option<ImageFill> {
         match fill_look(self, self.fill_idx()) {

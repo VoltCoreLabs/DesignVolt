@@ -15,4 +15,5 @@ winit.workspace = true
 dv-core.workspace = true
 dv-geom.workspace = true
 dv-render.workspace = true
+rfd.workspace = true
 kurbo.workspace = true

@@ -93,6 +93,10 @@ pub enum PHit {
     PatField(PatField),
     /// One of the four image placement modes (fill, fit, tile, stretch).
     ImageMode(usize),
+    /// The button that opens the file dialog.
+    ImageLoad,
+    /// The tile scale field of the image editor.
+    ImageScale,
 }
 
 /// What the popup contains: decides its height and where things are.
@@ -132,17 +136,23 @@ fn offs(s: Shape) -> Offs {
     if s.pattern || s.image {
         let pat_a = y;
         let pat_b = pat_a + FIELD_H + GAP_V + 8.0;
+        // The image editor has a third row (tile scale), kept in `params`.
+        let row_c = pat_b + FIELD_H + GAP_V;
         return Offs {
             tabs,
             stops: 0.0,
             sv: 0.0,
             bars: 0.0,
             fields: 0.0,
-            params: 0.0,
+            params: row_c,
             recents: 0.0,
             pat_a,
             pat_b,
-            end: pat_b + FIELD_H + PAD,
+            end: if s.image {
+                row_c + FIELD_H + PAD
+            } else {
+                pat_b + FIELD_H + PAD
+            },
         };
     }
     let stops = y;
@@ -305,10 +315,29 @@ pub fn image_mode_rect(p: Rect, s: Shape, k: usize) -> Rect {
     Rect::new(x, y, x + w, y + FIELD_H)
 }
 
+const LOAD_W: f64 = 92.0;
+
+/// The "Upload" button at the end of the first row of the image editor.
+pub fn image_load_rect(p: Rect, s: Shape) -> Rect {
+    let y = p.y0 + offs(s).pat_a;
+    Rect::new(p.x1 - PAD - LOAD_W, y, p.x1 - PAD, y + FIELD_H)
+}
+
+/// The tile scale field (right half of the third row; its label is on the left).
+pub fn image_scale_rect(p: Rect, s: Shape) -> Rect {
+    let y = p.y0 + offs(s).params;
+    Rect::new(p.x1 - PAD - 80.0, y, p.x1 - PAD, y + FIELD_H)
+}
+
+/// Where the label of the scale field goes.
+pub fn image_scale_label(p: Rect, s: Shape) -> (f64, f64) {
+    (p.x0 + PAD, p.y0 + offs(s).params + 18.0)
+}
+
 /// The box above the modes: what image is used, or the hint to drop a file.
 pub fn image_box_rect(p: Rect, s: Shape) -> Rect {
     let y = p.y0 + offs(s).pat_a;
-    Rect::new(p.x0 + PAD, y, p.x1 - PAD, y + FIELD_H)
+    Rect::new(p.x0 + PAD, y, p.x1 - PAD - LOAD_W - FIELD_GAP, y + FIELD_H)
 }
 
 pub fn pat_field_rect(p: Rect, s: Shape, i: usize) -> Rect {
@@ -336,6 +365,12 @@ pub fn hit(p: Rect, s: Shape, at: Point, mode: Mode, recent: usize, stops: &[f64
             return Some(PHit::Tab(i));
         }
         if s.image {
+            if image_load_rect(p, s).contains(at) {
+                return Some(PHit::ImageLoad);
+            }
+            if image_scale_rect(p, s).contains(at) {
+                return Some(PHit::ImageScale);
+            }
             return (0..4)
                 .find(|k| image_mode_rect(p, s, *k).contains(at))
                 .map(PHit::ImageMode);
@@ -511,5 +546,28 @@ mod tests {
             Some(PHit::StopsBar(t)) => assert!((t - 0.5).abs() < 0.05),
             other => panic!("{other:?}"),
         }
+    }
+
+    #[test]
+    fn the_image_editor_has_a_load_button_modes_and_a_scale_field() {
+        let s = Shape {
+            tabs: true,
+            grad: None,
+            pattern: false,
+            image: true,
+            rows: 0,
+        };
+        let p = Rect::new(0.0, 0.0, W, height(s));
+        let at = |r: Rect| hit(p, s, r.center(), Mode::Hex, 0, &[]);
+        assert_eq!(at(image_load_rect(p, s)), Some(PHit::ImageLoad));
+        assert_eq!(at(image_scale_rect(p, s)), Some(PHit::ImageScale));
+        for k in 0..4 {
+            assert_eq!(at(image_mode_rect(p, s, k)), Some(PHit::ImageMode(k)));
+        }
+        assert!(
+            image_box_rect(p, s).x1 < image_load_rect(p, s).x0,
+            "no overlap"
+        );
+        assert!(image_scale_rect(p, s).y1 < p.y1);
     }
 }

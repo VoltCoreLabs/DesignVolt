@@ -55,6 +55,9 @@ impl Editor {
         if let Some(i) = self.toolbar.hit(&l, self.mouse.x, self.mouse.y) {
             return Some((l.tools[i], tool_tip(i).to_string()));
         }
+        if let Some(tip) = self.picker_tip() {
+            return Some(tip);
+        }
         if self.stroke_pop || self.picker.is_some() {
             return None;
         }
@@ -158,5 +161,50 @@ impl Editor {
         if self.tooltip.over(self.mouse) {
             self.tooltip.dismiss();
         }
+    }
+}
+
+fn tab_tip(i: usize) -> &'static str {
+    match i {
+        0 => t("Сплошной цвет", "Solid color"),
+        1 => t("Линейный градиент", "Linear gradient"),
+        2 => t("Радиальный градиент", "Radial gradient"),
+        3 => t("Угловой градиент", "Angular gradient"),
+        4 => t("Ромбовидный градиент", "Diamond gradient"),
+        5 => t("Узор", "Pattern"),
+        _ => t("Изображение", "Image"),
+    }
+}
+
+impl Editor {
+    /// Tooltips inside the open color picker: the fill type tabs and the icon buttons.
+    fn picker_tip(&self) -> Option<(Rect, String)> {
+        use super::picker_layout::{TABS, eyedrop_rect, remove_stop_rect, tab_rect};
+        let slot = self.picker.as_ref()?.slot;
+        let popup = self.popup(slot);
+        if !popup.contains(self.mouse) {
+            return None;
+        }
+        let shape = self.picker_shape(slot);
+        if shape.tabs {
+            for i in 0..TABS {
+                let r = tab_rect(popup, shape, i);
+                if r.contains(self.mouse) {
+                    return Some((r, tab_tip(i).to_string()));
+                }
+            }
+        }
+        if shape.pattern || shape.image {
+            return None;
+        }
+        let eye = eyedrop_rect(popup, shape);
+        if eye.contains(self.mouse) {
+            return Some((eye, t("Пипетка", "Eyedropper").to_string()));
+        }
+        let rm = remove_stop_rect(popup, shape);
+        if shape.grad.is_some() && rm.contains(self.mouse) {
+            return Some((rm, t("Удалить точку", "Remove stop").to_string()));
+        }
+        None
     }
 }

@@ -536,6 +536,7 @@ impl ApplicationHandler for App {
                     self.screen.right_click(self.mods);
                 }
             }
+            WindowEvent::DroppedFile(path) => self.screen.dropped_file(&path),
             WindowEvent::MouseWheel { delta, .. } => {
                 let (dx, dy) = match delta {
                     MouseScrollDelta::LineDelta(x, y) => {

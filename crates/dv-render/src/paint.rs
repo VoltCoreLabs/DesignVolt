@@ -114,6 +114,9 @@ fn fill_and_stroke(
     }
     for fill in node.fill.iter().chain(&node.extra_fills) {
         match fill {
+            Paint::Image(i) => {
+                crate::image::draw(scene, page, world, shape, (node.geom.w, node.geom.h), i)
+            }
             Paint::Pattern(p) => {
                 if patterns {
                     crate::pattern::draw(scene, page, world, shape, node, p);

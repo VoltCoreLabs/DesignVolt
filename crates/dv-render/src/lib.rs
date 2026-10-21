@@ -7,6 +7,7 @@ mod effects;
 mod gradient;
 mod gradient_handles;
 mod grid;
+pub mod image;
 mod paint;
 mod pattern;
 mod viewport;

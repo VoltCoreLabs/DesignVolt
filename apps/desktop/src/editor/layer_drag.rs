@@ -85,7 +85,7 @@ pub fn move_to(ex: &mut Executor, ids: &[NodeId], parent: Option<NodeId>, index:
 impl Editor {
     /// The row and zone the dragged layers would be dropped on, for the current pointer.
     pub(super) fn layer_drop(&self) -> Option<(usize, Zone)> {
-        let left = self.layout().left;
+        let left = self.layers_left();
         let rows = self.layer_rows(panels::max_layer_rows(left));
         let i = (0..rows.len()).find(|i| panels::layer_row_rect(left, *i).contains(self.mouse))?;
         let rect = panels::layer_row_rect(left, i);
@@ -104,7 +104,7 @@ impl Editor {
         let Some((i, z)) = self.layer_drop() else {
             return;
         };
-        let rows = self.layer_rows(panels::max_layer_rows(self.layout().left));
+        let rows = self.layer_rows(panels::max_layer_rows(self.layers_left()));
         let mut s = self.session.borrow_mut();
         let page = s.exec.doc().page();
         let Some(node) = page.node(rows[i].id) else {

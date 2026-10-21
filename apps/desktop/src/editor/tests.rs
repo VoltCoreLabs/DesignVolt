@@ -1161,3 +1161,24 @@ fn wdrag(ed: &mut Editor, from: (f64, f64), to: (f64, f64), _mods: Mods) {
     ed.mouse_moved(to.0, to.1);
     ed.mouse_up();
 }
+
+#[test]
+fn pages_switch_with_their_own_shapes_and_selection() {
+    let mut ed = editor();
+    ed.tool = super::state::Tool::Rectangle;
+    drag(&mut ed, (0.0, 0.0), (100.0, 80.0), NONE);
+    assert_eq!(roots(&ed).len(), 1);
+    ed.add_page();
+    assert_eq!(ed.session.borrow().exec.doc().current_page(), 1);
+    assert!(roots(&ed).is_empty(), "the new page is empty");
+    assert!(ed.selection.is_empty());
+    ed.switch_page(0);
+    assert_eq!(roots(&ed).len(), 1);
+    ed.switch_page(1);
+    // Undo walks back: the page insert is the last step, then the shape on page 1.
+    press_key(&mut ed, Key::Undo, CTRL);
+    assert_eq!(ed.page_count(), 1);
+    assert_eq!(roots(&ed).len(), 1);
+    press_key(&mut ed, Key::Undo, CTRL);
+    assert!(roots(&ed).is_empty());
+}

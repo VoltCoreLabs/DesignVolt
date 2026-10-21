@@ -17,6 +17,7 @@ mod ops_group;
 mod ops_layer;
 mod ops_order;
 mod ops_paint;
+mod pages;
 mod paint_edit;
 mod paint_fx;
 mod paint_layout;

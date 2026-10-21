@@ -17,6 +17,8 @@ const DOUBLE_CLICK: Duration = Duration::from_millis(400);
 /// A name being typed.
 pub struct Rename {
     pub id: NodeId,
+    /// Set when a page (not a layer) is being renamed; `id` is unused then.
+    pub page: Option<usize>,
     pub input: TextInput,
     /// Left edge of the text on screen, to place the caret by a click.
     pub text_x: f64,
@@ -49,13 +51,25 @@ impl Editor {
         input.insert(&name);
         input.select_all();
         input.focused = true;
-        self.rename = Some(Rename { id, input, text_x });
+        self.rename = Some(Rename {
+            id,
+            page: None,
+            input,
+            text_x,
+        });
     }
 
     pub(super) fn commit_rename(&mut self) {
         let Some(r) = self.rename.take() else { return };
         if let Some(name) = clean_name(r.input.text()) {
-            ops_layer::set_name(&mut self.session.borrow_mut().exec, r.id, name);
+            let mut s = self.session.borrow_mut();
+            match r.page {
+                Some(i) => {
+                    let cmd = dv_core::Command::RenamePage { index: i, name };
+                    let _ = s.exec.execute("Rename page", cmd);
+                }
+                None => ops_layer::set_name(&mut s.exec, r.id, name),
+            }
         }
     }
 
@@ -63,9 +77,14 @@ impl Editor {
     /// else it applies the name.
     pub(super) fn press_in_rename(&mut self) -> bool {
         let Some(r) = &self.rename else { return false };
-        let left = self.layout().left;
-        let on_row = (0..self.layer_rows(super::panels::max_layer_rows(left)).len())
-            .any(|i| super::panels::layer_row_rect(left, i).contains(self.mouse));
+        let on_row = match r.page {
+            Some(i) => super::pages::row_rect(self.layout().left, i).contains(self.mouse),
+            None => {
+                let left = self.layers_left();
+                (0..self.layer_rows(super::panels::max_layer_rows(left)).len())
+                    .any(|i| super::panels::layer_row_rect(left, i).contains(self.mouse))
+            }
+        };
         if on_row && self.mouse.x >= r.text_x {
             let x = self.mouse.x - r.text_x + PAD_X;
             let (font, shift) = (&self.assets.font, self.mods.shift);

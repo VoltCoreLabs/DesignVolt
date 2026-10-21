@@ -29,6 +29,8 @@ pub struct Session {
     pub vp: Viewport,
     /// The page origin has been moved to the middle of the canvas once.
     pub centered: bool,
+    /// The view each page had when it was left (by page index).
+    pub views: Vec<Option<Viewport>>,
     path: Option<PathBuf>,
     saved_revision: u64,
     unsaved_for: f32,
@@ -47,6 +49,7 @@ impl Session {
             exec: Executor::new(doc),
             vp: Viewport::default(),
             centered: false,
+            views: Vec::new(),
             path,
             saved_revision,
             unsaved_for: 0.0,

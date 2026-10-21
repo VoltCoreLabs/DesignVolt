@@ -176,7 +176,8 @@ pub fn topbar(cx: &mut Cx, r: Rect, ed: &Editor) {
         mx += cx.text(tr(item), FONT_UI, mx, 25.0, hex(text_secondary())) + 20.0;
     }
 
-    let title = format!("{}  /  {}", ed.project, tr(Msg::Page1));
+    let page = ed.session.borrow().exec.doc().page().name.clone();
+    let title = format!("{}  /  {}", ed.project, page);
     let title = cx.fit(&title, FONT_UI, (r.width() - 2.0 * (mx + 220.0)).max(80.0));
     let w = cx.text_width(&title, FONT_UI);
     cx.text(
@@ -243,29 +244,15 @@ pub fn left_panel(cx: &mut Cx, r: Rect, ed: &Editor) {
         y0 + 98.0,
         hex(text_secondary()),
     );
-    cx.icon(
-        Icon::Plus,
-        x1 - 28.0,
-        y0 + 86.0,
-        14.0,
-        hex(text_secondary()),
-    );
-    let page_row = Rect::new(x0 + 8.0, y0 + 108.0, x1 - 8.0, y0 + 108.0 + ROW_H);
-    cx.fill(page_row, R_BUTTON, alpha(accent(), 0.16));
-    cx.text(
-        tr(Msg::Page1),
-        FONT_UI,
-        page_row.x0 + 12.0,
-        page_row.y0 + 18.0,
-        hex(text_primary()),
-    );
-    divider(cx, x0, x1, y0 + 176.0);
+    super::pages::draw(cx, r, ed);
+    let lr = super::pages::layers_area(r, ed.page_count());
+    divider(cx, x0, x1, lr.y0 + 176.0);
 
-    cx.clip(Rect::new(x0, y0 + 177.0, x1, r.y1), |cx| {
-        for (i, row) in ed.layer_rows(max_layer_rows(r)).iter().enumerate() {
-            layer_row(cx, ed, layer_row_rect(r, i), row);
+    cx.clip(Rect::new(x0, lr.y0 + 177.0, x1, r.y1), |cx| {
+        for (i, row) in ed.layer_rows(max_layer_rows(lr)).iter().enumerate() {
+            layer_row(cx, ed, layer_row_rect(lr, i), row);
         }
-        drop_indicator(cx, r, ed);
+        drop_indicator(cx, lr, ed);
     });
 }
 
@@ -325,7 +312,11 @@ fn layer_row(cx: &mut Cx, ed: &Editor, rect: Rect, row: &super::state::LayerRow)
         );
     }
     cx.icon(kind_icon(row.kind), x, rect.y0 + 7.0, 14.0, strong);
-    if let Some(r) = ed.rename.as_ref().filter(|r| r.id == row.id) {
+    if let Some(r) = ed
+        .rename
+        .as_ref()
+        .filter(|r| r.page.is_none() && r.id == row.id)
+    {
         let boxr = Rect::new(x + 18.0, rect.y0 + 3.0, rect.x1 - 6.0, rect.y1 - 3.0);
         cx.fill(boxr, R_BUTTON, hex(bg_raised()));
         cx.stroke(boxr, R_BUTTON, 1.5, hex(accent()));

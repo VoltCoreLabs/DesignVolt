@@ -9,6 +9,8 @@ const LIMIT: usize = 500;
 struct Entry {
     label: &'static str,
     key: Option<u64>,
+    /// The page that was current when the step ran; undo and redo switch back to it.
+    page: usize,
     undo: Command,
     redo: Command,
 }
@@ -31,6 +33,11 @@ impl Executor {
 
     pub fn doc(&self) -> &Document {
         &self.doc
+    }
+
+    /// Switches the page being edited (not an undo step).
+    pub fn set_page(&mut self, index: usize) {
+        self.doc.set_current_page(index);
     }
 
     /// Reserves a node id for a `Command::Create`.
@@ -73,10 +80,12 @@ impl Executor {
         key: Option<u64>,
         cmd: Command,
     ) -> Result<(), CommandError> {
+        let page = self.doc.current_page();
         let inverse = self.doc.apply(&cmd)?;
         self.redo.clear();
         if let (Some(k), Some(top)) = (key, self.undo.last_mut())
             && top.key == Some(k)
+            && top.page == page
         {
             top.redo = cmd;
             return Ok(());
@@ -87,6 +96,7 @@ impl Executor {
         self.undo.push(Entry {
             label,
             key,
+            page,
             undo: inverse,
             redo: cmd,
         });
@@ -104,6 +114,7 @@ impl Executor {
         let Some(entry) = self.undo.pop() else {
             return false;
         };
+        self.doc.set_current_page(entry.page);
         let ok = self.doc.apply(&entry.undo).is_ok();
         if ok {
             self.redo.push(entry);
@@ -115,6 +126,7 @@ impl Executor {
         let Some(entry) = self.redo.pop() else {
             return false;
         };
+        self.doc.set_current_page(entry.page);
         let ok = self.doc.apply(&entry.redo).is_ok();
         if ok {
             self.undo.push(entry);
@@ -271,5 +283,89 @@ mod tests {
         ex.undo();
         assert!(ex.doc().page().contains(child));
         assert_eq!(ex.doc().page().node(child).unwrap().parent, Some(frame));
+    }
+
+    #[test]
+    fn undo_returns_to_the_page_of_the_edit() {
+        use crate::document::Page;
+        let mut ex = Executor::new(Document::default());
+        let a = add(&mut ex, "a");
+        ex.execute(
+            "Add page",
+            Command::InsertPage {
+                index: 1,
+                page: Box::new(Page::new("Page 2")),
+            },
+        )
+        .unwrap();
+        assert_eq!(ex.doc().current_page(), 1);
+        let b = add(&mut ex, "b");
+        ex.undo();
+        assert_eq!(ex.doc().current_page(), 1);
+        assert!(!ex.doc().page().contains(b));
+        // Undoing the page insert goes back to the first page, which still has `a`.
+        ex.undo();
+        assert_eq!(ex.doc().pages().len(), 1);
+        assert!(ex.doc().page().contains(a));
+        // Redo the page, then switch away and undo the edit of page 1 from page 0.
+        ex.redo();
+        ex.redo();
+        assert!(ex.doc().page().contains(b));
+        ex.doc.set_current_page(0);
+        ex.undo();
+        assert_eq!(ex.doc().current_page(), 1);
+        assert!(!ex.doc().page().contains(b));
+    }
+
+    #[test]
+    fn pages_can_be_renamed_moved_and_removed() {
+        use crate::document::Page;
+        let mut ex = Executor::new(Document::default());
+        for n in ["B", "C"] {
+            let at = ex.doc().pages().len();
+            ex.execute(
+                "Add page",
+                Command::InsertPage {
+                    index: at,
+                    page: Box::new(Page::new(n)),
+                },
+            )
+            .unwrap();
+        }
+        let names = |ex: &Executor| {
+            ex.doc()
+                .pages()
+                .iter()
+                .map(|p| p.name.clone())
+                .collect::<Vec<_>>()
+        };
+        ex.execute("Move", Command::MovePage { from: 2, to: 0 })
+            .unwrap();
+        assert_eq!(names(&ex), ["C", "Page 1", "B"]);
+        assert_eq!(ex.doc().current_page(), 0, "the current page moves along");
+        ex.execute(
+            "Rename",
+            Command::RenamePage {
+                index: 1,
+                name: "X".into(),
+            },
+        )
+        .unwrap();
+        ex.execute("Remove", Command::RemovePage { index: 0 })
+            .unwrap();
+        assert_eq!(names(&ex), ["X", "B"]);
+        ex.undo();
+        ex.undo();
+        ex.undo();
+        assert_eq!(names(&ex), ["Page 1", "B", "C"]);
+        assert!(
+            ex.execute("Remove", Command::RemovePage { index: 9 })
+                .is_err()
+        );
+        let mut one = Executor::new(Document::default());
+        assert!(
+            one.execute("Remove", Command::RemovePage { index: 0 })
+                .is_err()
+        );
     }
 }

@@ -101,6 +101,8 @@ pub struct Editor {
     pub(super) mods: Mods,
     pub(super) index: SpatialIndex,
     pub(super) selection: Vec<NodeId>,
+    /// The page the editor state (selection, view) belongs to.
+    pub(super) shown_page: usize,
     pub(super) hover: Option<NodeId>,
     /// The property field of the right panel that is being typed into.
     pub(super) prop_edit: Option<super::props::PropEdit>,
@@ -143,6 +145,7 @@ impl Editor {
             let doc = s.exec.doc();
             SpatialIndex::build(doc.page(), doc.revision())
         };
+        let shown_page = session.borrow().exec.doc().current_page();
         Self {
             assets,
             session,
@@ -155,6 +158,7 @@ impl Editor {
             mods: Mods::default(),
             index,
             selection: Vec::new(),
+            shown_page,
             hover: None,
             prop_edit: None,
             guides: Vec::new(),
@@ -224,6 +228,7 @@ impl Editor {
 
     /// Rebuilds the spatial index when the document changed since it was built.
     pub(super) fn refresh_index(&mut self) {
+        self.sync_page();
         let s = self.session.borrow();
         let doc = s.exec.doc();
         if self.index.revision() != doc.revision() {

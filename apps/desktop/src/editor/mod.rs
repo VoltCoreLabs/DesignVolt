@@ -3,6 +3,7 @@ mod color_fmt;
 mod drag;
 mod dropdown;
 mod flip;
+mod grad_handles;
 mod guides;
 mod handles;
 mod interact;

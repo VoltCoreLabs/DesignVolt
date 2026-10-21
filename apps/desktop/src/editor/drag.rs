@@ -148,6 +148,10 @@ impl Editor {
                 Interaction::PickColor
             }
             Interaction::Guide(d) => Interaction::Guide(self.drag_guide(d)),
+            Interaction::GradHandle(d) => {
+                self.drag_grad_handle(d);
+                Interaction::GradHandle(d)
+            }
             Interaction::LayerDrag { start, moved, id } => Interaction::LayerDrag {
                 start,
                 id,

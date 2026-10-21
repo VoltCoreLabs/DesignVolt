@@ -26,6 +26,13 @@ pub(super) fn draw(ed: &Editor, cx: &mut Cx, vp: &Viewport, page: &Page) {
         return;
     };
     for m in dv_geom::measure(from, to) {
+        if let Some((p, q)) = m.ext {
+            // Carries the measurement to the edge of the hovered shape.
+            let mut ext = BezPath::new();
+            ext.move_to(vp.to_screen(p));
+            ext.line_to(vp.to_screen(q));
+            cx.stroke_path(&ext, 1.0, alpha(danger(), 0.6));
+        }
         let (a, b) = (vp.to_screen(m.a), vp.to_screen(m.b));
         let mut path = BezPath::new();
         path.move_to(a);

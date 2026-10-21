@@ -216,6 +216,10 @@ impl Editor {
             }
             return true;
         }
+        // Gradient handles live on the canvas: grabbing one keeps the picker open.
+        if self.over_canvas() && self.press_grad_handle() {
+            return true;
+        }
         self.close_picker();
         // A click on the swatch that opened it only closes it.
         matches!(self.paint_hit(), Some(Hit::Swatch(s)) if s == slot)

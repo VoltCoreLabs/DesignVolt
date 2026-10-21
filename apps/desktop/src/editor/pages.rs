@@ -102,6 +102,7 @@ impl Editor {
             }
         }
         self.shown_page = cur;
+        self.layer_scroll = 0;
         self.selection.clear();
         self.hover = None;
         self.interaction = None;

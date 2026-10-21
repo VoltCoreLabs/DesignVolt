@@ -253,6 +253,7 @@ pub fn left_panel(cx: &mut Cx, r: Rect, ed: &Editor) {
             layer_row(cx, ed, layer_row_rect(lr, i), row);
         }
         drop_indicator(cx, lr, ed);
+        scrollbar(cx, ed, lr);
     });
 }
 
@@ -488,4 +489,24 @@ fn selection_info(ed: &Editor) -> Option<Info> {
             })
         }
     }
+}
+
+/// A thin scroll thumb at the right edge of the layers list when it does not fit.
+fn scrollbar(cx: &mut Cx, ed: &Editor, lr: Rect) {
+    let fit = max_layer_rows(lr);
+    let total = ed.layer_total();
+    if total <= fit || fit == 0 {
+        return;
+    }
+    let top = lr.y0 + LAYERS_TOP;
+    let h = fit as f64 * ROW_H;
+    let thumb = (h * fit as f64 / total as f64).max(24.0);
+    let max = (total - fit) as f64;
+    let y = top + (h - thumb) * (ed.layer_scroll as f64 / max).min(1.0);
+    let x = lr.x1 - 5.0;
+    cx.fill(
+        Rect::new(x, y, x + 3.0, y + thumb),
+        1.5,
+        alpha(overlay(), 0.22),
+    );
 }

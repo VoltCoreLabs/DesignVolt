@@ -252,6 +252,7 @@ impl App {
             xf: Affine::scale(scale),
         };
         self.bar.draw(&mut cx, lw, &state);
+        self.bar.draw_tip(&mut cx, lw);
 
         let handle = &self.ctx.devices[gfx.surface.dev_id];
         let frame = match gfx.surface.surface.get_current_texture() {
@@ -352,6 +353,7 @@ impl App {
             return true;
         }
         let home = !matches!(self.place, Place::Welcome);
+        self.bar.dismiss_tip();
         let Some(part) = self.bar.hit(self.logical_width(), home) else {
             return false;
         };

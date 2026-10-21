@@ -8,6 +8,9 @@ use dv_ui::icons::Icon;
 use dv_ui::theme::colors::*;
 use dv_ui::theme::metrics::{FONT_MD, FONT_UI, R_BUTTON};
 use dv_ui::theme::motion::*;
+use dv_ui::widgets::tooltip::Tooltip;
+
+use crate::i18n::{Lang, lang};
 
 pub const HEIGHT: f64 = 40.0;
 const BTN_W: f64 = 46.0;
@@ -37,6 +40,7 @@ pub struct BarState<'a> {
 pub struct TitleBar {
     hover: [Spring; 5],
     label_in: Spring,
+    tip: Tooltip,
     shown_label: Option<String>,
     mouse: Point,
 }
@@ -65,11 +69,30 @@ fn rects(w: f64) -> Rects {
     }
 }
 
+fn t(ru: &'static str, en: &'static str) -> &'static str {
+    if lang() == Lang::Ru { ru } else { en }
+}
+
+/// The tooltip of the button under the pointer.
+fn tip_for(hot: Option<Part>, w: f64, state: &BarState) -> Option<(Rect, &'static str)> {
+    let r = rects(w);
+    match hot? {
+        Part::Home => Some((r.home, t("Все проекты", "All projects"))),
+        Part::Settings => Some((r.settings, t("Настройки", "Settings"))),
+        Part::Minimize => Some((r.min, t("Свернуть", "Minimize"))),
+        Part::Maximize if state.maximized => Some((r.max, t("Восстановить", "Restore"))),
+        Part::Maximize => Some((r.max, t("Развернуть", "Maximize"))),
+        Part::Close => Some((r.close, t("Закрыть", "Close"))),
+        Part::Drag => None,
+    }
+}
+
 impl TitleBar {
     pub fn new() -> Self {
         Self {
             hover: std::array::from_fn(|_| Spring::new(0.0, HOVER_STIFFNESS, HOVER_DAMPING)),
             label_in: Spring::new(0.0, MOVE_STIFFNESS, MOVE_DAMPING),
+            tip: Tooltip::new(),
             shown_label: None,
             mouse: Point::new(-1.0, -1.0),
         }
@@ -127,7 +150,19 @@ impl TitleBar {
         }
         self.label_in.target = 1.0;
         self.label_in.step(dt);
-        self.hover.iter().any(|h| !h.settled()) || !self.label_in.settled()
+        let target = tip_for(hot, w, state);
+        let tip_busy = self.tip.update(dt, target.as_ref().map(|(r, s)| (*r, *s)));
+        self.hover.iter().any(|h| !h.settled()) || !self.label_in.settled() || tip_busy
+    }
+
+    /// Draws the tooltip above everything else.
+    pub fn draw_tip(&self, cx: &mut Cx, w: f64) {
+        self.tip.draw(cx, Rect::new(0.0, 0.0, w, HEIGHT + 200.0));
+    }
+
+    /// A press hides the tooltip until the pointer moves to another button.
+    pub fn dismiss_tip(&mut self) {
+        self.tip.dismiss();
     }
 
     pub fn draw(&self, cx: &mut Cx, w: f64, state: &BarState) {

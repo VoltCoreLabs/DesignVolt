@@ -534,6 +534,11 @@ impl Editor {
     }
 
     pub(super) fn handle_wheel(&mut self, dx: f64, dy: f64, mods: Mods) {
+        let lr = self.layers_left();
+        if lr.contains(self.mouse) && self.mouse.y > lr.y0 + 176.0 {
+            self.scroll_layers(-dy);
+            return;
+        }
         if !self.over_canvas() {
             return;
         }

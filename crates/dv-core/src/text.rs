@@ -69,6 +69,7 @@ fn kind_code(k: NodeKind) -> &'static str {
         NodeKind::Rectangle => "rect",
         NodeKind::Ellipse => "ellipse",
         NodeKind::Group => "group",
+        NodeKind::Path => "path",
     }
 }
 
@@ -78,6 +79,7 @@ fn kind_from(s: &str) -> Option<NodeKind> {
         "rect" => Some(NodeKind::Rectangle),
         "ellipse" => Some(NodeKind::Ellipse),
         "group" => Some(NodeKind::Group),
+        "path" => Some(NodeKind::Path),
         _ => None,
     }
 }
@@ -156,6 +158,7 @@ pub fn to_text(doc: &Document) -> String {
                     .collect::<Vec<_>>()
                     .join("|")
             };
+            let vector = n.vector.as_ref().map_or("-".to_string(), |v| v.to_code());
             let extras = if n.extra_fills.is_empty() {
                 "-".to_string()
             } else {
@@ -166,7 +169,7 @@ pub fn to_text(doc: &Document) -> String {
                     .join("~")
             };
             out.push_str(&format!(
-                "node\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
+                "node\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
                 id.0,
                 n.parent.map_or(0, |p| p.0),
                 kind_code(n.kind),
@@ -182,7 +185,8 @@ pub fn to_text(doc: &Document) -> String {
                 escape(&n.name),
                 n.opacity,
                 effects,
-                extras
+                extras,
+                vector
             ));
         }
     }
@@ -379,10 +383,12 @@ fn parse_node<'a>(
         .next()
         .map(|s| s.split('~').filter_map(Paint::from_code).collect())
         .unwrap_or_default();
+    let vector = f.next().and_then(crate::vector::Vector::from_code);
     let mut node = Node::new(kind, name, geom);
     node.opacity = opacity;
     node.effects = effects;
     node.extra_fills = extra_fills;
+    node.vector = vector;
     node.fill = fill;
     node.stroke = stroke;
     node.radius = radius;
@@ -711,5 +717,33 @@ node	1	0	rect	0	0	10	10	0	0	3	ff0000ff	00ff00ff:2	old
         assert!(doc.page().image(8).is_none());
         doc.apply(&inv).unwrap();
         assert!(doc.page().image(8).is_some());
+    }
+
+    #[test]
+    fn path_nodes_keep_their_points() {
+        use crate::vector::{Anchor, Vector};
+        let mut doc = Document::default();
+        let a = doc.alloc_id();
+        let mut node = Node::new(NodeKind::Path, "p", Geometry::default());
+        node.fill = None;
+        node.vector = Some(Vector {
+            anchors: vec![
+                Anchor::corner(0.0, 0.0),
+                Anchor::smooth(30.0, 10.5, 5.0, -4.0),
+            ],
+            closed: true,
+            size: (30.0, 10.5),
+        });
+        doc.apply(&Command::Create {
+            id: a,
+            parent: None,
+            index: 0,
+            node,
+        })
+        .unwrap();
+        let back = from_text(&to_text(&doc)).unwrap();
+        let n = back.page().node(a).unwrap();
+        assert_eq!(n.kind, NodeKind::Path);
+        assert_eq!(n.vector, doc.page().node(a).unwrap().vector);
     }
 }

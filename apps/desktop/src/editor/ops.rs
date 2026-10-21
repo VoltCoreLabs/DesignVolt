@@ -18,7 +18,7 @@ pub fn new_node(kind: NodeKind, name: String, geom: Geometry) -> Node {
     node.fill = match kind {
         NodeKind::Frame => Some(Color::rgb(255, 255, 255).into()),
         NodeKind::Rectangle | NodeKind::Ellipse => Some(Color::rgb(217, 217, 217).into()),
-        NodeKind::Group => None,
+        NodeKind::Group | NodeKind::Path => None,
     };
     node
 }

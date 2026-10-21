@@ -30,6 +30,7 @@ pub enum Tool {
     Frame,
     Rectangle,
     Ellipse,
+    Pen,
     Hand,
 }
 
@@ -41,6 +42,7 @@ impl Tool {
             1 => Some(Tool::Frame),
             2 => Some(Tool::Rectangle),
             3 => Some(Tool::Ellipse),
+            4 => Some(Tool::Pen),
             6 => Some(Tool::Hand),
             _ => None,
         }
@@ -52,6 +54,7 @@ impl Tool {
             Tool::Frame => 1,
             Tool::Rectangle => 2,
             Tool::Ellipse => 3,
+            Tool::Pen => 4,
             Tool::Hand => 6,
         }
     }
@@ -61,7 +64,7 @@ impl Tool {
             Tool::Frame => Some(NodeKind::Frame),
             Tool::Rectangle => Some(NodeKind::Rectangle),
             Tool::Ellipse => Some(NodeKind::Ellipse),
-            Tool::Select | Tool::Hand => None,
+            Tool::Select | Tool::Hand | Tool::Pen => None,
         }
     }
 }
@@ -103,6 +106,8 @@ pub struct Editor {
     pub(super) selection: Vec<NodeId>,
     /// The page the editor state (selection, view) belongs to.
     pub(super) shown_page: usize,
+    /// The path being drawn with the pen tool.
+    pub(super) pen: Option<super::pen::Pen>,
     /// The picker shows the image tab and waits for an image file to be dropped.
     pub(super) image_wait: bool,
     /// The result of the file dialog that is open (it runs on its own thread).
@@ -168,6 +173,7 @@ impl Editor {
             index,
             selection: Vec::new(),
             shown_page,
+            pen: None,
             image_wait: false,
             upload: None,
             tooltip: dv_ui::widgets::tooltip::Tooltip::new(),
@@ -218,6 +224,9 @@ impl Editor {
     }
 
     pub(super) fn set_tool(&mut self, tool: Tool) {
+        if self.tool == Tool::Pen && tool != Tool::Pen {
+            self.pen_finish(false);
+        }
         self.tool = tool;
         self.toolbar.select(tool.index());
         self.interaction = None;

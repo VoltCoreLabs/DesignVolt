@@ -72,6 +72,7 @@ fn kind_icon(kind: NodeKind) -> Icon {
         NodeKind::Rectangle => Icon::Square,
         NodeKind::Ellipse => Icon::Circle,
         NodeKind::Group => Icon::Folder,
+        NodeKind::Path => Icon::Pen,
     }
 }
 

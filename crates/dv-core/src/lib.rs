@@ -10,6 +10,7 @@ pub mod history;
 pub mod image;
 pub mod paint;
 pub mod text;
+pub mod vector;
 
 pub use command::{Command, CommandError, Props};
 pub use document::{
@@ -20,3 +21,4 @@ pub use history::Executor;
 pub use image::{ImageBytes, ImageFill, ImageMode};
 pub use paint::{Gradient, GradientKind, Paint, Pattern, Stop, Tiling};
 pub use text::{ParseError, from_text, to_text};
+pub use vector::{Anchor, Vector};

@@ -109,9 +109,32 @@ fn fill_and_stroke(
     patterns: bool,
 ) {
     if let Some(blur) = crate::effects::layer_blur(node) {
-        crate::effects::draw_blurred(scene, world, node, blur);
+        let plain = matches!(node.fill, Some(Paint::Solid(_)))
+            && node.extra_fills.is_empty()
+            && node.stroke.is_none();
+        if plain {
+            crate::effects::draw_blurred(scene, world, node, blur);
+        } else {
+            let clip = Rect::new(0.0, 0.0, node.geom.w, node.geom.h)
+                .inflate(blur * 3.0 + 4.0, blur * 3.0 + 4.0);
+            crate::effects::blurred(scene, world, &clip, blur, |scene, at| {
+                paint_look(scene, page, at, shape, node, patterns);
+            });
+        }
         return;
     }
+    paint_look(scene, page, world, shape, node, patterns);
+}
+
+/// The fills, inner shadows and stroke of a node, sharp.
+fn paint_look(
+    scene: &mut Scene,
+    page: &Page,
+    world: Affine,
+    shape: &impl vello::kurbo::Shape,
+    node: &dv_core::Node,
+    patterns: bool,
+) {
     for fill in node.fill.iter().chain(&node.extra_fills) {
         match fill {
             Paint::Image(i) => {

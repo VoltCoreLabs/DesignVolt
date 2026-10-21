@@ -310,7 +310,7 @@ pub fn pat_tiling_rect(p: Rect, s: Shape) -> Rect {
 /// Segment `k` of the four placement modes of the image editor.
 pub fn image_mode_rect(p: Rect, s: Shape, k: usize) -> Rect {
     let y = p.y0 + offs(s).pat_b;
-    let w = (W - 2.0 * PAD - FIELD_GAP * 3.0) / 4.0;
+    let w = (W - 2.0 * PAD - FIELD_GAP * 4.0) / 5.0;
     let x = p.x0 + PAD + k as f64 * (w + FIELD_GAP);
     Rect::new(x, y, x + w, y + FIELD_H)
 }
@@ -371,7 +371,7 @@ pub fn hit(p: Rect, s: Shape, at: Point, mode: Mode, recent: usize, stops: &[f64
             if image_scale_rect(p, s).contains(at) {
                 return Some(PHit::ImageScale);
             }
-            return (0..4)
+            return (0..5)
                 .find(|k| image_mode_rect(p, s, *k).contains(at))
                 .map(PHit::ImageMode);
         }
@@ -561,7 +561,7 @@ mod tests {
         let at = |r: Rect| hit(p, s, r.center(), Mode::Hex, 0, &[]);
         assert_eq!(at(image_load_rect(p, s)), Some(PHit::ImageLoad));
         assert_eq!(at(image_scale_rect(p, s)), Some(PHit::ImageScale));
-        for k in 0..4 {
+        for k in 0..5 {
             assert_eq!(at(image_mode_rect(p, s, k)), Some(PHit::ImageMode(k)));
         }
         assert!(

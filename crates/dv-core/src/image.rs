@@ -12,15 +12,18 @@ pub enum ImageMode {
     Fit,
     /// Repeated at its own size (times `scale`).
     Tile,
+    /// Like fill, but zoomed by `scale` and moved by `offset` (cropped by hand).
+    Crop,
     /// Stretched to the shape.
     Stretch,
 }
 
 impl ImageMode {
-    pub const ALL: [ImageMode; 4] = [
+    pub const ALL: [ImageMode; 5] = [
         ImageMode::Fill,
         ImageMode::Fit,
         ImageMode::Tile,
+        ImageMode::Crop,
         ImageMode::Stretch,
     ];
 
@@ -29,6 +32,7 @@ impl ImageMode {
             ImageMode::Fill => "fill",
             ImageMode::Fit => "fit",
             ImageMode::Tile => "tile",
+            ImageMode::Crop => "crop",
             ImageMode::Stretch => "stretch",
         }
     }
@@ -43,8 +47,10 @@ impl ImageMode {
 pub struct ImageFill {
     pub asset: u64,
     pub mode: ImageMode,
-    /// Size of the tiles relative to the image (tile mode only).
+    /// Size of the tiles (tile mode) or the zoom (crop mode), relative to the image.
     pub scale: f64,
+    /// Crop mode: how far the image is moved, as a fraction of the shape size.
+    pub offset: (f64, f64),
 }
 
 impl ImageFill {
@@ -53,22 +59,35 @@ impl ImageFill {
             asset,
             mode: ImageMode::Fill,
             scale: 1.0,
+            offset: (0.0, 0.0),
         }
     }
 
     pub fn to_code(self) -> String {
-        format!("{};{};{}", self.asset, self.mode.code(), self.scale)
+        format!(
+            "{};{};{};{};{}",
+            self.asset,
+            self.mode.code(),
+            self.scale,
+            self.offset.0,
+            self.offset.1
+        )
     }
 
+    /// The offset columns are optional (older files end after the scale).
     pub fn from_code(s: &str) -> Option<Self> {
         let mut f = s.split(';');
         let asset = f.next()?.parse().ok()?;
         let mode = ImageMode::from_code(f.next()?)?;
-        let scale = f.next()?.parse::<f64>().ok().filter(|v| v.is_finite())?;
+        let num = |v: Option<&str>| v?.parse::<f64>().ok().filter(|v| v.is_finite());
+        let scale = num(f.next())?;
+        let ox = num(f.next()).unwrap_or(0.0);
+        let oy = num(f.next()).unwrap_or(0.0);
         Some(Self {
             asset,
             mode,
             scale: scale.clamp(0.01, 50.0),
+            offset: (ox.clamp(-50.0, 50.0), oy.clamp(-50.0, 50.0)),
         })
     }
 }
@@ -139,11 +158,21 @@ mod tests {
     fn image_fill_codes_round_trip_and_reject_garbage() {
         let f = ImageFill {
             asset: 12,
-            mode: ImageMode::Tile,
-            scale: 0.5,
+            mode: ImageMode::Crop,
+            scale: 1.5,
+            offset: (0.25, -0.5),
         };
         assert_eq!(ImageFill::from_code(&f.to_code()), Some(f));
         assert!(ImageFill::from_code("12;nope;1").is_none());
         assert!(ImageFill::from_code("x;fill;1").is_none());
+    }
+
+    #[test]
+    fn old_codes_without_an_offset_still_load() {
+        let f = ImageFill::from_code("3;tile;0.5").unwrap();
+        assert_eq!(
+            (f.mode, f.scale, f.offset),
+            (ImageMode::Tile, 0.5, (0.0, 0.0))
+        );
     }
 }

@@ -24,6 +24,7 @@ fn mode_label(m: ImageMode) -> &'static str {
         ImageMode::Fill => t("Заполнить", "Fill"),
         ImageMode::Fit => t("Вписать", "Fit"),
         ImageMode::Tile => t("Плитка", "Tile"),
+        ImageMode::Crop => t("Обрезка", "Crop"),
         ImageMode::Stretch => t("Растянуть", "Stretch"),
     }
 }

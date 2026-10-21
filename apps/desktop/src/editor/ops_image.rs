@@ -77,8 +77,24 @@ impl Editor {
         let Some(img) = dv_render::image::decode(&bytes) else {
             return;
         };
-        let bytes: ImageBytes = Arc::new(bytes);
-        let has_target = {
+        self.apply_image(Arc::new(bytes), (img.width, img.height), true);
+    }
+
+    /// Pastes the picture on the system clipboard as a new rectangle; false when there is none.
+    pub(super) fn paste_clipboard_image(&mut self) -> bool {
+        let Some((w, h, rgba)) = dv_ui::clipboard::get_image() else {
+            return false;
+        };
+        let Some(png) = dv_render::image::encode_png(w, h, &rgba) else {
+            return false;
+        };
+        self.apply_image(Arc::new(png), (w, h), false);
+        true
+    }
+
+    /// Puts an image into the selected shapes (`into_selection`), or into a new rectangle.
+    fn apply_image(&mut self, bytes: ImageBytes, (iw, ih): (u32, u32), into_selection: bool) {
+        let has_target = into_selection && {
             let s = self.session.borrow();
             let page = s.exec.doc().page();
             !page.geo_tops(&self.selection).is_empty()
@@ -94,7 +110,7 @@ impl Editor {
             self.image_wait = false;
             return;
         }
-        let (w, h) = shape_size(img.width, img.height);
+        let (w, h) = shape_size(iw, ih);
         let c = self.layout().canvas;
         let center: Point = self
             .session

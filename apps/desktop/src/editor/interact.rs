@@ -39,6 +39,7 @@ pub enum Interaction {
     PickColor,
     /// Dragging a gradient handle on the canvas.
     GradHandle(super::grad_handles::GradDrag),
+    Crop(super::image_crop::CropDrag),
     /// Dragging a guide line out of a ruler, or an existing one.
     Guide(super::guides::GuideDrag),
     /// Dragging selected layers by their rows in the layers panel.
@@ -191,7 +192,7 @@ impl Editor {
         let (world, cp) = (self.world_mouse(), self.canvas_point());
         if self.space || self.tool == Tool::Hand {
             self.start_pan(false);
-        } else if self.press_grad_handle() || self.press_guides() {
+        } else if self.press_grad_handle() || self.press_crop() || self.press_guides() {
         } else if let Some(kind) = self.tool.kind() {
             self.start_create(kind, world, cp);
         } else {
@@ -480,7 +481,9 @@ impl Editor {
             }
             Interaction::PickColor => self.release_picker(),
             Interaction::Guide(d) => self.finish_guide(d),
-            Interaction::GradHandle(_) => self.session.borrow_mut().exec.break_merge(),
+            Interaction::GradHandle(_) | Interaction::Crop(_) => {
+                self.session.borrow_mut().exec.break_merge()
+            }
             Interaction::LayerDrag { moved, id, .. } => {
                 if moved {
                     self.finish_layer_drag();
@@ -539,6 +542,9 @@ impl Editor {
             self.scroll_layers(-dy);
             return;
         }
+        if !mods.ctrl && !mods.shift && self.wheel_crop(dy) {
+            return;
+        }
         if !self.over_canvas() {
             return;
         }
@@ -579,7 +585,7 @@ impl Editor {
                 }
                 Interaction::Rotate { .. } => Cursor::Rotate,
                 Interaction::Create { .. } => Cursor::Crosshair,
-                Interaction::GradHandle(_) => Cursor::Move,
+                Interaction::GradHandle(_) | Interaction::Crop(_) => Cursor::Move,
                 Interaction::Guide(d) => {
                     if d.vertical {
                         Cursor::ResizeEw
@@ -608,6 +614,9 @@ impl Editor {
         }
         if self.action_hit().is_some() {
             return Cursor::Pointer;
+        }
+        if self.crop_hover() {
+            return Cursor::Move;
         }
         if !self.over_canvas() {
             return Cursor::Default;

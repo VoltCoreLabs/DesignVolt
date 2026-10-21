@@ -12,6 +12,8 @@ const PASTE_STEP: f64 = 16.0;
 pub struct Clip {
     trees: Vec<Vec<(NodeId, Node)>>,
     pastes: u32,
+    /// Image files the copied shapes use, so they can be pasted on another page.
+    images: Vec<(u64, dv_core::ImageBytes)>,
 }
 
 impl Clip {
@@ -30,6 +32,17 @@ impl Clip {
             })
             .collect();
         self.pastes = 0;
+        self.images = self
+            .trees
+            .iter()
+            .flatten()
+            .flat_map(|(_, n)| n.fill.iter().chain(&n.extra_fills))
+            .filter_map(|p| match p {
+                dv_core::Paint::Image(i) => Some(i.asset),
+                _ => None,
+            })
+            .filter_map(|a| page.image(a).map(|b| (a, b.clone())))
+            .collect();
         self.trees.len()
     }
 
@@ -40,7 +53,15 @@ impl Clip {
         }
         self.pastes += 1;
         let shift = PASTE_STEP * f64::from(self.pastes);
-        let mut cmds = Vec::new();
+        let mut cmds: Vec<Command> = self
+            .images
+            .iter()
+            .filter(|(a, _)| ex.doc().page().image(*a).is_none())
+            .map(|(a, b)| Command::AddImage {
+                id: *a,
+                bytes: b.clone(),
+            })
+            .collect();
         let mut made = Vec::new();
         for tree in &self.trees {
             let map: HashMap<NodeId, NodeId> =
@@ -124,6 +145,48 @@ mod tests {
         assert_eq!(
             ex.doc().page().node(second[0]).unwrap().geom.x,
             10.0 + 2.0 * PASTE_STEP
+        );
+    }
+
+    #[test]
+    fn pasting_on_another_page_brings_the_images_along() {
+        use dv_core::{ImageFill, Page, Paint, Props};
+        let (mut ex, _f, r) = setup();
+        let bytes: dv_core::ImageBytes = std::sync::Arc::new(vec![1, 2, 3]);
+        ex.execute(
+            "Image",
+            Command::Batch(vec![
+                Command::AddImage {
+                    id: 99,
+                    bytes: bytes.clone(),
+                },
+                Command::SetProps {
+                    id: r,
+                    props: Props {
+                        fill: Some(Some(Paint::Image(ImageFill::new(99)))),
+                        ..Props::default()
+                    },
+                },
+            ]),
+        )
+        .unwrap();
+        let mut clip = Clip::default();
+        clip.copy(&ex, &[r]);
+        ex.execute(
+            "Add page",
+            Command::InsertPage {
+                index: 1,
+                page: Box::new(Page::new("Two")),
+            },
+        )
+        .unwrap();
+        assert!(ex.doc().page().image(99).is_none());
+        clip.paste(&mut ex);
+        assert_eq!(ex.doc().page().image(99), Some(&bytes));
+        ex.undo();
+        assert!(
+            ex.doc().page().image(99).is_none(),
+            "one undo step takes both"
         );
     }
 }

@@ -38,6 +38,21 @@ pub fn decode(bytes: &[u8]) -> Option<Decoded> {
     ok.then_some(d)
 }
 
+/// Encodes straight RGBA pixels as a PNG file.
+pub fn encode_png(width: u32, height: u32, rgba: &[u8]) -> Option<Vec<u8>> {
+    if width == 0 || height == 0 || rgba.len() != width as usize * height as usize * 4 {
+        return None;
+    }
+    let mut out = Vec::new();
+    {
+        let mut enc = png::Encoder::new(&mut out, width, height);
+        enc.set_color(png::ColorType::Rgba);
+        enc.set_depth(png::BitDepth::Eight);
+        enc.write_header().ok()?.write_image_data(rgba).ok()?;
+    }
+    Some(out)
+}
+
 fn decode_png(bytes: &[u8]) -> Option<Decoded> {
     let mut decoder = png::Decoder::new(std::io::Cursor::new(bytes));
     decoder.set_transformations(png::Transformations::EXPAND | png::Transformations::STRIP_16);
@@ -134,8 +149,13 @@ fn cached(asset: u64, bytes: &ImageBytes) -> Option<ImageData> {
 }
 
 /// Where the image goes inside a `w` x `h` box: maps image pixels to box coordinates.
-pub fn placement(mode: ImageMode, iw: f64, ih: f64, w: f64, h: f64, scale: f64) -> Affine {
+pub fn placement(f: &ImageFill, iw: f64, ih: f64, w: f64, h: f64) -> Affine {
+    let (mode, scale) = (f.mode, f.scale);
     let (sx, sy) = match mode {
+        ImageMode::Crop => {
+            let s = (w / iw).max(h / ih) * scale;
+            (s, s)
+        }
         ImageMode::Fill => {
             let s = (w / iw).max(h / ih);
             (s, s)
@@ -149,6 +169,10 @@ pub fn placement(mode: ImageMode, iw: f64, ih: f64, w: f64, h: f64, scale: f64) 
     };
     let (tx, ty) = match mode {
         ImageMode::Tile | ImageMode::Stretch => (0.0, 0.0),
+        ImageMode::Crop => (
+            (w - iw * sx) / 2.0 + f.offset.0 * w,
+            (h - ih * sy) / 2.0 + f.offset.1 * h,
+        ),
         _ => ((w - iw * sx) / 2.0, (h - ih * sy) / 2.0),
     };
     Affine::translate((tx, ty)) * Affine::scale_non_uniform(sx, sy)
@@ -170,7 +194,7 @@ pub fn draw(
         return;
     };
     let (iw, ih) = (f64::from(img.width), f64::from(img.height));
-    let place = placement(fill.mode, iw, ih, w, h, fill.scale);
+    let place = placement(fill, iw, ih, w, h);
     let brush = ImageBrush::new(img);
     if fill.mode == ImageMode::Tile {
         let brush = Brush::Image(brush.with_extend(Extend::Repeat));
@@ -194,18 +218,37 @@ mod tests {
     use super::*;
     use vello::kurbo::Point;
 
+    fn mode(mode: ImageMode, scale: f64) -> ImageFill {
+        ImageFill {
+            mode,
+            scale,
+            ..ImageFill::new(1)
+        }
+    }
+
+    #[test]
+    fn crop_zooms_around_the_center_and_moves_by_the_offset() {
+        let mut f = mode(ImageMode::Crop, 2.0);
+        let p = placement(&f, 100.0, 100.0, 100.0, 100.0);
+        assert_eq!(p * Point::new(50.0, 50.0), Point::new(50.0, 50.0));
+        assert_eq!(p * Point::new(100.0, 100.0), Point::new(150.0, 150.0));
+        f.offset = (0.1, -0.2);
+        let p = placement(&f, 100.0, 100.0, 100.0, 100.0);
+        assert_eq!(p * Point::new(50.0, 50.0), Point::new(60.0, 30.0));
+    }
+
     #[test]
     fn fill_covers_and_fit_contains() {
-        let fill = placement(ImageMode::Fill, 200.0, 100.0, 100.0, 100.0, 1.0);
+        let fill = placement(&mode(ImageMode::Fill, 1.0), 200.0, 100.0, 100.0, 100.0);
         // The wide image is scaled to the height and centered: it overflows left and right.
         assert_eq!(fill * Point::new(0.0, 0.0), Point::new(-50.0, 0.0));
         assert_eq!(fill * Point::new(200.0, 100.0), Point::new(150.0, 100.0));
-        let fit = placement(ImageMode::Fit, 200.0, 100.0, 100.0, 100.0, 1.0);
+        let fit = placement(&mode(ImageMode::Fit, 1.0), 200.0, 100.0, 100.0, 100.0);
         assert_eq!(fit * Point::new(0.0, 0.0), Point::new(0.0, 25.0));
         assert_eq!(fit * Point::new(200.0, 100.0), Point::new(100.0, 75.0));
-        let stretch = placement(ImageMode::Stretch, 200.0, 100.0, 100.0, 50.0, 1.0);
+        let stretch = placement(&mode(ImageMode::Stretch, 1.0), 200.0, 100.0, 100.0, 50.0);
         assert_eq!(stretch * Point::new(200.0, 100.0), Point::new(100.0, 50.0));
-        let tile = placement(ImageMode::Tile, 20.0, 10.0, 100.0, 100.0, 2.0);
+        let tile = placement(&mode(ImageMode::Tile, 2.0), 20.0, 10.0, 100.0, 100.0);
         assert_eq!(tile * Point::new(20.0, 10.0), Point::new(40.0, 20.0));
     }
 
@@ -231,5 +274,15 @@ mod tests {
         assert!(decode(b"not an image").is_none());
         assert!(decode(&tiny_png()[..20]).is_none(), "truncated file");
         assert!(decode(&[0xFF, 0xD8, 1, 2, 3]).is_none(), "broken jpeg");
+    }
+
+    #[test]
+    fn encoded_png_decodes_back_to_the_same_pixels() {
+        let px = [10, 20, 30, 255, 40, 50, 60, 0, 70, 80, 90, 128, 1, 2, 3, 4];
+        let png = encode_png(2, 2, &px).unwrap();
+        let d = decode(&png).unwrap();
+        assert_eq!((d.width, d.height, d.rgba.as_slice()), (2, 2, &px[..]));
+        assert!(encode_png(2, 2, &px[..8]).is_none());
+        assert!(encode_png(0, 2, &[]).is_none());
     }
 }

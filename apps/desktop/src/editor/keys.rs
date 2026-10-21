@@ -207,10 +207,15 @@ impl Editor {
     fn copy_selection(&mut self) {
         if !self.selection.is_empty() {
             self.clip.copy(&self.session.borrow().exec, &self.selection);
+            // Shapes copied last win over a picture that is still on the system clipboard.
+            dv_ui::clipboard::clear();
         }
     }
 
     fn paste(&mut self) {
+        if self.paste_clipboard_image() {
+            return;
+        }
         let made = self.clip.paste(&mut self.session.borrow_mut().exec);
         if !made.is_empty() {
             self.selection = made;

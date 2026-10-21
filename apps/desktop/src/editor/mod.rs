@@ -6,6 +6,7 @@ mod flip;
 mod grad_handles;
 mod guides;
 mod handles;
+mod image_crop;
 mod interact;
 mod keys;
 mod layer_drag;

@@ -1,4 +1,4 @@
-//! System clipboard (text only) via `arboard`. Failures are ignored: copy/paste just does nothing.
+//! System clipboard (text and images) via `arboard`. Failures are ignored: copy/paste just does nothing.
 
 use std::cell::RefCell;
 
@@ -22,4 +22,17 @@ pub fn get_text() -> Option<String> {
 
 pub fn set_text(s: &str) {
     with_clipboard(|c| c.set_text(s.to_string()).ok());
+}
+
+/// An image on the clipboard as straight RGBA pixels (`width`, `height`, bytes), if there is one.
+pub fn get_image() -> Option<(u32, u32, Vec<u8>)> {
+    with_clipboard(|c| {
+        let img = c.get_image().ok()?;
+        Some((img.width as u32, img.height as u32, img.bytes.into_owned()))
+    })
+}
+
+/// Empties the clipboard (so an old picture is not pasted after shapes were copied).
+pub fn clear() {
+    with_clipboard(|c| c.clear().ok());
 }

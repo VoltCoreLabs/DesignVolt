@@ -115,6 +115,44 @@ pub fn draw_blurred(scene: &mut Scene, world: Affine, node: &Node, blur: f64) {
     );
 }
 
+/// Samples of the layer blur approximation.
+const BLUR_SAMPLES: usize = 24;
+
+/// Offsets that spread equal weights like a 2D Gaussian of deviation `sigma`: radii are the
+/// quantiles of the Gaussian, angles follow the golden angle.
+pub fn blur_offsets(sigma: f64) -> Vec<(f64, f64)> {
+    (0..BLUR_SAMPLES)
+        .map(|i| {
+            let u = (i as f64 + 0.5) / BLUR_SAMPLES as f64;
+            let r = sigma * (-2.0 * (1.0 - u).ln()).sqrt();
+            let a = i as f64 * 2.399_963_229_728_653;
+            (r * a.cos(), r * a.sin())
+        })
+        .collect()
+}
+
+/// Blurs anything `draw` paints: it is drawn once per sample offset, each time into a layer
+/// of equal weight that is added to the others, which averages the copies. Used where Vello
+/// has no blurred primitive (gradients, images, strokes).
+pub fn blurred(
+    scene: &mut Scene,
+    world: Affine,
+    clip: &Rect,
+    blur: f64,
+    draw: impl Fn(&mut Scene, Affine),
+) {
+    let add = BlendMode::new(Mix::Normal, Compose::Plus);
+    let weight = 1.0 / BLUR_SAMPLES as f32;
+    scene.push_layer(Fill::NonZero, BlendMode::default(), 1.0, world, clip);
+    for (dx, dy) in blur_offsets((blur / 2.0).max(0.01)) {
+        let at = world * Affine::translate((dx, dy));
+        scene.push_layer(Fill::NonZero, add, weight, world, clip);
+        draw(scene, at);
+        scene.pop_layer();
+    }
+    scene.pop_layer();
+}
+
 /// The Vello stroke for the document stroke: width, dashes, joins and caps. Inside and
 /// outside strokes are drawn twice as wide and cut to the right side by `draw_stroke`.
 pub fn line(s: &DStroke) -> Stroke {
@@ -235,5 +273,18 @@ mod tests {
             ..Effect::new(EffectKind::DropShadow)
         });
         assert!(reach(&n) >= plain + 30.0);
+    }
+
+    #[test]
+    fn blur_offsets_are_centered_and_spread_like_the_deviation() {
+        let o = blur_offsets(10.0);
+        assert_eq!(o.len(), BLUR_SAMPLES);
+        let n = o.len() as f64;
+        let (mx, my) = o.iter().fold((0.0, 0.0), |a, p| (a.0 + p.0, a.1 + p.1));
+        assert!(mx.abs() / n < 3.0 && my.abs() / n < 3.0, "mean {mx} {my}");
+        let var = o.iter().map(|p| p.0 * p.0 + p.1 * p.1).sum::<f64>() / n;
+        // A 2D Gaussian has E[r^2] = 2 sigma^2.
+        assert!((var / 200.0 - 1.0).abs() < 0.25, "variance {var}");
+        assert!(o.iter().all(|p| p.0.hypot(p.1) < 30.0));
     }
 }

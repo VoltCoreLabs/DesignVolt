@@ -57,6 +57,24 @@ pub enum Command {
     },
     /// Replaces the page's user guides (rulers).
     SetGuides(Vec<UserGuide>),
+    /// Inserts a page at `index` and makes it the current one.
+    InsertPage {
+        index: usize,
+        page: Box<crate::document::Page>,
+    },
+    /// Removes a page (never the last one); the neighbour becomes current.
+    RemovePage {
+        index: usize,
+    },
+    RenamePage {
+        index: usize,
+        name: String,
+    },
+    /// Moves the page at `from` so that it ends up at `to`.
+    MovePage {
+        from: usize,
+        to: usize,
+    },
     /// Several commands that undo as one.
     Batch(Vec<Command>),
 }
@@ -67,6 +85,8 @@ pub enum CommandError {
     DuplicateNode(NodeId),
     InvalidParent(NodeId),
     EmptyRestore,
+    /// A page index is out of range, or the last page would be removed.
+    InvalidPage(usize),
 }
 
 impl Document {
@@ -101,8 +121,79 @@ impl Document {
                 let old = std::mem::replace(&mut self.page_mut().guides, guides.clone());
                 Ok(Command::SetGuides(old))
             }
+            Command::InsertPage { index, page } => self.insert_page(*index, page),
+            Command::RemovePage { index } => self.remove_page(*index),
+            Command::RenamePage { index, name } => {
+                let page = self
+                    .pages_mut()
+                    .get_mut(*index)
+                    .ok_or(CommandError::InvalidPage(*index))?;
+                let old = std::mem::replace(&mut page.name, name.clone());
+                Ok(Command::RenamePage {
+                    index: *index,
+                    name: old,
+                })
+            }
+            Command::MovePage { from, to } => self.move_page(*from, *to),
             Command::Batch(cmds) => self.batch(cmds),
         }
+    }
+
+    fn insert_page(
+        &mut self,
+        index: usize,
+        page: &crate::document::Page,
+    ) -> Result<Command, CommandError> {
+        let len = self.pages().len();
+        if index > len {
+            return Err(CommandError::InvalidPage(index));
+        }
+        for id in page.draw_order() {
+            self.reserve_id(id);
+        }
+        self.pages_mut().insert(index, page.clone());
+        self.set_current_raw(index);
+        Ok(Command::RemovePage { index })
+    }
+
+    fn remove_page(&mut self, index: usize) -> Result<Command, CommandError> {
+        let len = self.pages().len();
+        if index >= len || len == 1 {
+            return Err(CommandError::InvalidPage(index));
+        }
+        let cur = self.current_page();
+        let page = self.pages_mut().remove(index);
+        let next = if cur > index {
+            cur - 1
+        } else {
+            cur.min(len - 2)
+        };
+        self.set_current_raw(next);
+        Ok(Command::InsertPage {
+            index,
+            page: Box::new(page),
+        })
+    }
+
+    fn move_page(&mut self, from: usize, to: usize) -> Result<Command, CommandError> {
+        let len = self.pages().len();
+        if from >= len || to >= len {
+            return Err(CommandError::InvalidPage(from.max(to)));
+        }
+        let cur = self.current_page();
+        let page = self.pages_mut().remove(from);
+        self.pages_mut().insert(to, page);
+        let next = if cur == from {
+            to
+        } else if from < cur && cur <= to {
+            cur - 1
+        } else if to <= cur && cur < from {
+            cur + 1
+        } else {
+            cur
+        };
+        self.set_current_raw(next);
+        Ok(Command::MovePage { from: to, to: from })
     }
 
     fn create(

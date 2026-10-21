@@ -318,7 +318,7 @@ pub struct UserGuide {
     pub pos: f64,
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct Page {
     pub name: String,
     pub(crate) guides: Vec<UserGuide>,
@@ -505,6 +505,28 @@ impl Document {
 
     pub fn pages(&self) -> &[Page] {
         &self.pages
+    }
+
+    /// Index of the page being edited.
+    pub fn current_page(&self) -> usize {
+        self.current
+    }
+
+    /// Switches the page being edited (a view change, not undoable). Out of range is ignored.
+    pub fn set_current_page(&mut self, index: usize) {
+        if index < self.pages.len() && index != self.current {
+            self.current = index;
+            self.revision += 1;
+        }
+    }
+
+    pub(crate) fn pages_mut(&mut self) -> &mut Vec<Page> {
+        self.revision += 1;
+        &mut self.pages
+    }
+
+    pub(crate) fn set_current_raw(&mut self, index: usize) {
+        self.current = index;
     }
 
     /// Increases on every change, so caches can tell when to rebuild.

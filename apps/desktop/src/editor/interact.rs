@@ -143,7 +143,10 @@ impl Editor {
     }
 
     fn press_layers(&mut self, mods: Mods) {
-        let left = self.layout().left;
+        if self.press_pages() {
+            return;
+        }
+        let left = self.layers_left();
         let rows = self.layer_rows(panels::max_layer_rows(left));
         for (i, row) in rows.iter().enumerate() {
             let r = panels::layer_row_rect(left, i);
@@ -628,7 +631,7 @@ impl Editor {
     }
 
     fn layer_row_under_mouse(&self) -> bool {
-        let left = self.layout().left;
+        let left = self.layers_left();
         let rows = self.layer_rows(panels::max_layer_rows(left));
         (0..rows.len()).any(|i| panels::layer_row_rect(left, i).contains(self.mouse))
     }

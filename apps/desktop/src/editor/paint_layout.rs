@@ -8,10 +8,13 @@ use super::panels::{FILL_TOP, ROW, SEC_HEAD};
 
 /// Most effects one shape shows rows for.
 pub const MAX_EFFECTS: usize = 8;
+/// Most fills one shape shows rows for.
+pub const MAX_FILLS: usize = 8;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Slot {
-    Fill,
+    /// The `i`-th fill of the shape (0 is `Node::fill`, the rest are `extra_fills`).
+    Fill(usize),
     Stroke,
     /// The `i`-th effect of the shape.
     Effect(usize),
@@ -86,8 +89,8 @@ pub struct Panel {
 }
 
 impl Panel {
-    pub fn new(right: Rect, has_fill: bool, has_stroke: bool, blur_mask: u32) -> Panel {
-        let stroke_top = FILL_TOP + SEC_HEAD + if has_fill { ROW } else { 0.0 } + 4.0;
+    pub fn new(right: Rect, fills: usize, has_stroke: bool, blur_mask: u32) -> Panel {
+        let stroke_top = FILL_TOP + SEC_HEAD + fills as f64 * ROW + 4.0;
         let effects_top = stroke_top + SEC_HEAD + if has_stroke { 2.0 * ROW } else { 0.0 } + 4.0;
         Panel {
             right,
@@ -99,7 +102,7 @@ impl Panel {
 
     pub fn top(&self, slot: Slot) -> f64 {
         match slot {
-            Slot::Fill => FILL_TOP,
+            Slot::Fill(_) => FILL_TOP,
             Slot::Stroke => self.stroke_top,
             Slot::Effect(_) => self.effects_top,
         }
@@ -113,6 +116,9 @@ impl Panel {
     /// The control row of a slot (for an effect: its second line with swatch and values).
     pub fn row(&self, slot: Slot) -> Rect {
         let mut y = self.right.y0 + self.top(slot) + SEC_HEAD;
+        if let Slot::Fill(i) = slot {
+            y += i as f64 * ROW;
+        }
         if let Slot::Effect(i) = slot {
             y += i as f64 * 2.0 * ROW + ROW;
         }
@@ -199,17 +205,17 @@ mod tests {
 
     #[test]
     fn empty_sections_are_only_titles_and_grow_when_filled() {
-        let none = Panel::new(right(), false, false, 0);
-        let all = Panel::new(right(), true, true, 0);
+        let none = Panel::new(right(), 0, false, 0);
+        let all = Panel::new(right(), 1, true, 0);
         assert!(all.top(Slot::Stroke) > none.top(Slot::Stroke));
         assert!(all.top(Slot::Effect(0)) - none.top(Slot::Effect(0)) >= 3.0 * ROW);
         // Collapsed: the next section starts right below this title.
-        assert!(none.top(Slot::Stroke) - none.top(Slot::Fill) < SEC_HEAD + 10.0);
+        assert!(none.top(Slot::Stroke) - none.top(Slot::Fill(0)) < SEC_HEAD + 10.0);
     }
 
     #[test]
     fn effect_rows_stack_and_stay_inside_the_panel() {
-        let p = Panel::new(right(), true, true, 0);
+        let p = Panel::new(right(), 1, true, 0);
         let a = p.row(Slot::Effect(0));
         let b = p.row(Slot::Effect(1));
         assert!(b.y0 - a.y0 >= 2.0 * ROW - 0.1);
@@ -222,7 +228,7 @@ mod tests {
 
     #[test]
     fn shadow_fields_do_not_overlap_and_a_blur_gets_one_wide_field() {
-        let p = Panel::new(right(), true, true, 0b10);
+        let p = Panel::new(right(), 1, true, 0b10);
         let mut last = p.swatch_rect(Slot::Effect(0)).x1;
         for f in [PField::ShX, PField::ShY, PField::ShBlur] {
             let r = p.field_rect(Slot::Effect(0), f);

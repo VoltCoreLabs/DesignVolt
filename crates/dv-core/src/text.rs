@@ -148,8 +148,17 @@ pub fn to_text(doc: &Document) -> String {
                     .collect::<Vec<_>>()
                     .join("|")
             };
+            let extras = if n.extra_fills.is_empty() {
+                "-".to_string()
+            } else {
+                n.extra_fills
+                    .iter()
+                    .map(Paint::to_code)
+                    .collect::<Vec<_>>()
+                    .join("~")
+            };
             out.push_str(&format!(
-                "node\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
+                "node\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
                 id.0,
                 n.parent.map_or(0, |p| p.0),
                 kind_code(n.kind),
@@ -164,7 +173,8 @@ pub fn to_text(doc: &Document) -> String {
                 stroke,
                 escape(&n.name),
                 n.opacity,
-                effects
+                effects,
+                extras
             ));
         }
     }
@@ -347,9 +357,14 @@ fn parse_node<'a>(
         .filter(|v| v.is_finite())
         .map_or(1.0, |v| v.clamp(0.0, 1.0));
     let effects = f.next().map(parse_effects).unwrap_or_default();
+    let extra_fills = f
+        .next()
+        .map(|s| s.split('~').filter_map(Paint::from_code).collect())
+        .unwrap_or_default();
     let mut node = Node::new(kind, name, geom);
     node.opacity = opacity;
     node.effects = effects;
+    node.extra_fills = extra_fills;
     node.fill = fill;
     node.stroke = stroke;
     node.radius = radius;
@@ -609,5 +624,32 @@ node	1	0	rect	0	0	10	10	0	0	3	ff0000ff	00ff00ff:2	old
         let back = from_text(&text).unwrap();
         assert_eq!(back.page().len(), 10_000);
         same(&doc, &back);
+    }
+
+    #[test]
+    fn extra_fills_round_trip() {
+        let mut doc = Document::default();
+        let a = doc.alloc_id();
+        let node = Node::new(NodeKind::Rectangle, "a", Geometry::default());
+        doc.apply(&Command::Create {
+            id: a,
+            parent: None,
+            index: 0,
+            node,
+        })
+        .unwrap();
+        let grad = Paint::Gradient(crate::paint::Gradient::from_color(
+            crate::paint::GradientKind::Radial,
+            Color::rgb(1, 2, 3),
+        ));
+        let props = Props {
+            fill: Some(Some(Color::rgb(9, 9, 9).into())),
+            extra_fills: Some(vec![grad.clone(), Color::rgb(7, 8, 9).into()]),
+            ..Props::default()
+        };
+        doc.apply(&Command::SetProps { id: a, props }).unwrap();
+        let back = from_text(&to_text(&doc)).unwrap();
+        let n = back.page().node(a).unwrap();
+        assert_eq!(n.extra_fills, [grad, Color::rgb(7, 8, 9).into()]);
     }
 }

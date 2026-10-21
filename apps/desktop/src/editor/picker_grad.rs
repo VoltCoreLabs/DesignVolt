@@ -2,8 +2,8 @@
 
 use dv_core::{Color, Gradient, GradientKind, Paint};
 
-use super::ops_paint::edit_fill;
-use super::paint_ui::{Look, looks};
+use super::ops_paint::edit_fill_at;
+use super::paint_ui::{Look, fill_look};
 use super::picker_layout::{GField, Part, TABS};
 use super::state::Editor;
 
@@ -59,7 +59,7 @@ const _: () = assert!(TABS == 6);
 impl Editor {
     /// The gradient of the selection when all selected shapes share it.
     pub(super) fn current_gradient(&self) -> Option<Gradient> {
-        match looks(self).0 {
+        match fill_look(self, self.fill_idx()) {
             Look::One(Paint::Gradient(g)) => Some(g),
             _ => None,
         }
@@ -67,7 +67,7 @@ impl Editor {
 
     /// The common fill of the selection, for marking the active tab.
     pub(super) fn fill_for_tabs(&self) -> Option<Paint> {
-        match looks(self).0 {
+        match fill_look(self, self.fill_idx()) {
             Look::One(p) => Some(p),
             _ => None,
         }
@@ -82,7 +82,7 @@ impl Editor {
     /// Applies `f` to the gradient of every selected shape that has one.
     pub(super) fn edit_gradient(&mut self, key: Option<u64>, f: impl Fn(&mut Gradient)) {
         let ex = &mut self.session.borrow_mut().exec;
-        edit_fill(ex, &self.selection, key, |old| {
+        edit_fill_at(ex, &self.selection, key, self.fill_idx(), |old| {
             old.map(|p| match p {
                 Paint::Gradient(mut g) => {
                     f(&mut g);
@@ -174,7 +174,7 @@ impl Editor {
         let color = self.picker.as_ref().map(|p| p.color());
         {
             let ex = &mut self.session.borrow_mut().exec;
-            edit_fill(ex, &self.selection, None, |old| {
+            edit_fill_at(ex, &self.selection, None, self.fill_idx(), |old| {
                 let base = old.as_ref().map(Paint::main_color).or(color)?;
                 Some(match (kind, old) {
                     (None, _) => Paint::Solid(base),

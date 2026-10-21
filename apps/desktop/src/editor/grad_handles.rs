@@ -31,7 +31,7 @@ struct Shown {
 
 impl Editor {
     fn shown_gradient(&self) -> Option<Shown> {
-        if self.picker.as_ref()?.slot != Slot::Fill {
+        if !matches!(self.picker.as_ref()?.slot, Slot::Fill(_)) {
             return None;
         }
         let g = self.current_gradient()?;

@@ -270,6 +270,8 @@ pub struct Node {
     /// Opacity of the whole shape (0..1), together with its children.
     pub opacity: f64,
     pub effects: Vec<Effect>,
+    /// Fills painted over `fill`, in drawing order. Only used when `fill` is set.
+    pub extra_fills: Vec<Paint>,
     pub visible: bool,
     pub locked: bool,
     pub parent: Option<NodeId>,
@@ -303,6 +305,7 @@ impl Node {
             radius: 0.0,
             opacity: 1.0,
             effects: Vec::new(),
+            extra_fills: Vec::new(),
             visible: true,
             locked: false,
             parent: None,

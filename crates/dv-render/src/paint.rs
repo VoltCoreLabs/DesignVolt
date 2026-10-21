@@ -112,16 +112,17 @@ fn fill_and_stroke(
         crate::effects::draw_blurred(scene, world, node, blur);
         return;
     }
-    match &node.fill {
-        Some(Paint::Pattern(p)) => {
-            if patterns {
-                crate::pattern::draw(scene, page, world, shape, node, p);
+    for fill in node.fill.iter().chain(&node.extra_fills) {
+        match fill {
+            Paint::Pattern(p) => {
+                if patterns {
+                    crate::pattern::draw(scene, page, world, shape, node, p);
+                }
+            }
+            fill => {
+                crate::gradient::fill_paint(scene, world, shape, node.geom.w, node.geom.h, fill)
             }
         }
-        Some(fill) => {
-            crate::gradient::fill_paint(scene, world, shape, node.geom.w, node.geom.h, fill);
-        }
-        None => {}
     }
     crate::effects::draw_inner_shadows(scene, world, shape, node);
     if let Some(stroke) = node.stroke {

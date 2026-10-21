@@ -26,6 +26,7 @@ mod paint_fx;
 mod paint_layout;
 mod paint_ui;
 mod panels;
+mod pen;
 mod picker;
 mod picker_draw;
 mod picker_edit;

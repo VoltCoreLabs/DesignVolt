@@ -1205,3 +1205,69 @@ fn the_layers_list_scrolls_with_the_wheel_and_stays_in_range() {
     ed.wheel(0.0, 100_000.0, NONE);
     assert_eq!(ed.layer_scroll, 0, "and at the start");
 }
+
+#[test]
+fn the_pen_draws_a_path_with_clicks_and_finishes_with_enter() {
+    let mut ed = editor();
+    press_key(&mut ed, Key::Char('p'), NONE);
+    assert_eq!(ed.tool, super::state::Tool::Pen);
+    for (x, y) in [(0.0, 0.0), (100.0, 0.0), (100.0, 80.0)] {
+        mv(&mut ed, x, y);
+        ed.click(NONE);
+        ed.mouse_up();
+    }
+    assert!(
+        roots(&ed).is_empty(),
+        "nothing is created before the path is finished"
+    );
+    press_key(&mut ed, Key::Enter, NONE);
+    let ids = roots(&ed);
+    assert_eq!(ids.len(), 1);
+    let s = ed.session.borrow();
+    let n = s.exec.doc().page().node(ids[0]).unwrap();
+    assert_eq!(n.kind, NodeKind::Path);
+    assert_eq!(n.vector.as_ref().unwrap().anchors.len(), 3);
+    assert!(!n.vector.as_ref().unwrap().closed);
+    assert_eq!((n.geom.w, n.geom.h), (100.0, 80.0));
+    drop(s);
+    assert_eq!(ed.selection, ids);
+    assert_eq!(ed.tool, super::state::Tool::Select);
+    press_key(&mut ed, Key::Undo, CTRL);
+    assert!(roots(&ed).is_empty());
+}
+
+#[test]
+fn clicking_the_first_point_closes_the_path_and_dragging_makes_it_smooth() {
+    let mut ed = editor();
+    press_key(&mut ed, Key::Char('p'), NONE);
+    mv(&mut ed, 0.0, 0.0);
+    ed.click(NONE);
+    ed.mouse_up();
+    // Press and drag: the second point gets handles.
+    mv(&mut ed, 100.0, 0.0);
+    ed.click(NONE);
+    mv(&mut ed, 100.0, 40.0);
+    ed.mouse_up();
+    mv(&mut ed, 50.0, 80.0);
+    ed.click(NONE);
+    ed.mouse_up();
+    mv(&mut ed, 0.0, 0.0);
+    ed.click(NONE);
+    ed.mouse_up();
+    let ids = roots(&ed);
+    assert_eq!(ids.len(), 1, "the closing click finished the path");
+    let s = ed.session.borrow();
+    let v = s
+        .exec
+        .doc()
+        .page()
+        .node(ids[0])
+        .unwrap()
+        .vector
+        .clone()
+        .unwrap();
+    assert!(v.closed);
+    assert_eq!(v.anchors.len(), 3);
+    assert!(v.anchors[1].out_y > 30.0 && v.anchors[1].in_y < -30.0);
+    assert_eq!((v.anchors[0].out_x, v.anchors[0].out_y), (0.0, 0.0));
+}

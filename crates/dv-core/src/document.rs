@@ -16,6 +16,8 @@ pub enum NodeKind {
     Ellipse,
     /// A container without a look of its own: it only holds shapes together.
     Group,
+    /// A path drawn with the pen (`Node::vector`).
+    Path,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -272,6 +274,8 @@ pub struct Node {
     pub effects: Vec<Effect>,
     /// Fills painted over `fill`, in drawing order. Only used when `fill` is set.
     pub extra_fills: Vec<Paint>,
+    /// The path of a `NodeKind::Path` node.
+    pub vector: Option<crate::vector::Vector>,
     pub visible: bool,
     pub locked: bool,
     pub parent: Option<NodeId>,
@@ -306,6 +310,7 @@ impl Node {
             opacity: 1.0,
             effects: Vec::new(),
             extra_fills: Vec::new(),
+            vector: None,
             visible: true,
             locked: false,
             parent: None,

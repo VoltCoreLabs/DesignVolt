@@ -41,6 +41,8 @@ pub enum Interaction {
     GradHandle(super::grad_handles::GradDrag),
     Crop(super::image_crop::CropDrag),
     CropCorner(super::image_crop_frame::CornerDrag),
+    /// Pulling the handle of the point the pen just added.
+    PenDrag,
     /// Dragging a guide line out of a ruler, or an existing one.
     Guide(super::guides::GuideDrag),
     /// Dragging selected layers by their rows in the layers panel.
@@ -198,6 +200,8 @@ impl Editor {
             || self.press_crop()
             || self.press_guides()
         {
+        } else if self.tool == Tool::Pen {
+            self.pen_press(world);
         } else if let Some(kind) = self.tool.kind() {
             self.start_create(kind, world, cp);
         } else {
@@ -485,6 +489,7 @@ impl Editor {
                 self.session.borrow_mut().exec.break_merge();
             }
             Interaction::PickColor => self.release_picker(),
+            Interaction::PenDrag => {}
             Interaction::Guide(d) => self.finish_guide(d),
             Interaction::GradHandle(_) | Interaction::Crop(_) | Interaction::CropCorner(_) => {
                 self.session.borrow_mut().exec.break_merge()
@@ -524,6 +529,7 @@ impl Editor {
                 NodeKind::Rectangle => tr(Msg::NameRectangle),
                 NodeKind::Ellipse => tr(Msg::NameEllipse),
                 NodeKind::Group => tr(Msg::NameGroup),
+                NodeKind::Path => "Path",
             };
             let name = ops::next_name(page, base);
             let geom = Geometry {
@@ -591,7 +597,7 @@ impl Editor {
                 Interaction::Rotate { .. } => Cursor::Rotate,
                 Interaction::Create { .. } => Cursor::Crosshair,
                 Interaction::GradHandle(_) | Interaction::Crop(_) => Cursor::Move,
-                Interaction::CropCorner(_) => Cursor::Crosshair,
+                Interaction::CropCorner(_) | Interaction::PenDrag => Cursor::Crosshair,
                 Interaction::Guide(d) => {
                     if d.vertical {
                         Cursor::ResizeEw

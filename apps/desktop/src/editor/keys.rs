@@ -48,6 +48,19 @@ impl Editor {
             self.prop_key(key, mods);
             return;
         }
+        if self.pen.is_some() {
+            match key {
+                Key::Enter | Key::Escape => {
+                    self.pen_finish(false);
+                    return;
+                }
+                Key::Backspace | Key::Delete => {
+                    self.pen_backspace();
+                    return;
+                }
+                _ => {}
+            }
+        }
         match key {
             Key::Space => self.space = true,
             Key::Escape => self.escape(),
@@ -109,6 +122,7 @@ impl Editor {
             'f' => self.set_tool(Tool::Frame),
             'r' => self.set_tool(Tool::Rectangle),
             'o' => self.set_tool(Tool::Ellipse),
+            'p' => self.set_tool(Tool::Pen),
             'h' => self.set_tool(Tool::Hand),
             _ => {}
         }

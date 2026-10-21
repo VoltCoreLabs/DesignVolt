@@ -55,6 +55,7 @@ pub fn hit_local(node: &Node, p: Point) -> bool {
     let g = &node.geom;
     match node.kind {
         NodeKind::Group => false,
+        NodeKind::Path => crate::vector_path::hit_path(node, p),
         NodeKind::Frame | NodeKind::Rectangle => {
             p.x >= 0.0 && p.y >= 0.0 && p.x <= g.w && p.y <= g.h
         }

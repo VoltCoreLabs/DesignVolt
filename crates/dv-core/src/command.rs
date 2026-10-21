@@ -14,6 +14,7 @@ pub struct Props {
     pub opacity: Option<f64>,
     pub effects: Option<Vec<Effect>>,
     pub extra_fills: Option<Vec<Paint>>,
+    pub vector: Option<crate::vector::Vector>,
     pub visible: Option<bool>,
     pub locked: Option<bool>,
 }
@@ -312,6 +313,11 @@ impl Document {
         }
         if let Some(v) = props.opacity {
             old.opacity = Some(std::mem::replace(&mut n.opacity, v));
+        }
+        if let Some(v) = &props.vector {
+            // A node without a path cannot be set back to none: only paths take this.
+            let before = n.vector.replace(v.clone());
+            old.vector = Some(before.unwrap_or_else(|| v.clone()));
         }
         if let Some(v) = &props.extra_fills {
             old.extra_fills = Some(std::mem::replace(&mut n.extra_fills, v.clone()));

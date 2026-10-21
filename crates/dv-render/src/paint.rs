@@ -88,6 +88,12 @@ pub(crate) fn draw_node(
     crate::effects::draw_drop_shadows(scene, world, node);
     match node.kind {
         NodeKind::Group => {}
+        NodeKind::Path => {
+            if let Some(v) = &node.vector {
+                let path = dv_geom::vector_path(v, g.w, g.h);
+                fill_and_stroke(scene, page, world, &path, node, patterns);
+            }
+        }
         NodeKind::Ellipse => {
             let shape = Ellipse::new((g.w / 2.0, g.h / 2.0), (g.w / 2.0, g.h / 2.0), 0.0);
             fill_and_stroke(scene, page, world, &shape, node, patterns);

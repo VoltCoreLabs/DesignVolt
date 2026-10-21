@@ -31,17 +31,17 @@ pub fn zoomed(scale: f64, dy: f64) -> f64 {
     (scale * (dy * 0.002).exp()).clamp(0.05, 50.0)
 }
 
-struct Target {
-    id: NodeId,
-    to_local: Affine,
-    size: (f64, f64),
-    image: ImageFill,
+pub(super) struct Target {
+    pub id: NodeId,
+    pub to_local: Affine,
+    pub size: (f64, f64),
+    pub image: ImageFill,
 }
 
 impl Editor {
     /// The single selected shape whose image is being cropped, with the way from the canvas
     /// to the shape's own coordinates.
-    fn crop_target(&self) -> Option<Target> {
+    pub(super) fn crop_target(&self) -> Option<Target> {
         self.picker.as_ref()?;
         let image = self.current_image().filter(|i| i.mode == ImageMode::Crop)?;
         let s = self.session.borrow();

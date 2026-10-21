@@ -7,6 +7,7 @@ mod grad_handles;
 mod guides;
 mod handles;
 mod image_crop;
+mod image_crop_frame;
 mod interact;
 mod keys;
 mod layer_drag;

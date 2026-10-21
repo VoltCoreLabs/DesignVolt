@@ -40,6 +40,7 @@ pub enum Interaction {
     /// Dragging a gradient handle on the canvas.
     GradHandle(super::grad_handles::GradDrag),
     Crop(super::image_crop::CropDrag),
+    CropCorner(super::image_crop_frame::CornerDrag),
     /// Dragging a guide line out of a ruler, or an existing one.
     Guide(super::guides::GuideDrag),
     /// Dragging selected layers by their rows in the layers panel.
@@ -192,7 +193,11 @@ impl Editor {
         let (world, cp) = (self.world_mouse(), self.canvas_point());
         if self.space || self.tool == Tool::Hand {
             self.start_pan(false);
-        } else if self.press_grad_handle() || self.press_crop() || self.press_guides() {
+        } else if self.press_grad_handle()
+            || self.press_crop_corner()
+            || self.press_crop()
+            || self.press_guides()
+        {
         } else if let Some(kind) = self.tool.kind() {
             self.start_create(kind, world, cp);
         } else {
@@ -481,7 +486,7 @@ impl Editor {
             }
             Interaction::PickColor => self.release_picker(),
             Interaction::Guide(d) => self.finish_guide(d),
-            Interaction::GradHandle(_) | Interaction::Crop(_) => {
+            Interaction::GradHandle(_) | Interaction::Crop(_) | Interaction::CropCorner(_) => {
                 self.session.borrow_mut().exec.break_merge()
             }
             Interaction::LayerDrag { moved, id, .. } => {
@@ -586,6 +591,7 @@ impl Editor {
                 Interaction::Rotate { .. } => Cursor::Rotate,
                 Interaction::Create { .. } => Cursor::Crosshair,
                 Interaction::GradHandle(_) | Interaction::Crop(_) => Cursor::Move,
+                Interaction::CropCorner(_) => Cursor::Crosshair,
                 Interaction::Guide(d) => {
                     if d.vertical {
                         Cursor::ResizeEw
@@ -614,6 +620,9 @@ impl Editor {
         }
         if self.action_hit().is_some() {
             return Cursor::Pointer;
+        }
+        if self.crop_corner_hover() {
+            return Cursor::Crosshair;
         }
         if self.crop_hover() {
             return Cursor::Move;

@@ -61,11 +61,15 @@ impl Editor {
             (Slot::Fill(_), Look::One(Paint::Gradient(g))) => Some(g.kind),
             _ => None,
         };
-        let pattern = matches!((slot, fill), (Slot::Fill(_), Look::One(Paint::Pattern(_))));
+        let image = matches!(slot, Slot::Fill(_))
+            && (self.image_wait || matches!(fill, Look::One(Paint::Image(_))));
+        let pattern =
+            !image && matches!((slot, fill), (Slot::Fill(_), Look::One(Paint::Pattern(_))));
         Shape {
             tabs: matches!(slot, Slot::Fill(_)),
-            grad,
+            grad: if image { None } else { grad },
             pattern,
+            image,
             rows: recent_rows(super::recent::get().len()),
         }
     }
@@ -122,6 +126,7 @@ impl Editor {
         self.picker = None;
         self.pick_edit = None;
         self.eyedrop = None;
+        self.image_wait = false;
         self.pick_source = false;
     }
 
@@ -194,6 +199,7 @@ impl Editor {
                 Some(PHit::RemoveStop) => self.remove_selected_stop(),
                 Some(PHit::GField(f)) => self.start_pick_edit(PickField::Grad(f)),
                 Some(PHit::PickSource) => self.pick_source = true,
+                Some(PHit::ImageMode(k)) => self.set_image_mode(dv_core::ImageMode::ALL[k]),
                 Some(PHit::Tiling) => self.open_dropdown_for(Target::Tiling),
                 Some(PHit::PatField(f)) => self.start_pick_edit(PickField::Pat(f)),
                 Some(PHit::Eyedrop) => {

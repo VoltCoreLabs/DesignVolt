@@ -7,6 +7,7 @@ pub mod color;
 pub mod command;
 pub mod document;
 pub mod history;
+pub mod image;
 pub mod paint;
 pub mod text;
 
@@ -16,5 +17,6 @@ pub use document::{
     Stroke, StrokePos, StrokeStyle, UserGuide,
 };
 pub use history::Executor;
+pub use image::{ImageBytes, ImageFill, ImageMode};
 pub use paint::{Gradient, GradientKind, Paint, Pattern, Stop, Tiling};
 pub use text::{ParseError, from_text, to_text};

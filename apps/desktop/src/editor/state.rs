@@ -103,6 +103,8 @@ pub struct Editor {
     pub(super) selection: Vec<NodeId>,
     /// The page the editor state (selection, view) belongs to.
     pub(super) shown_page: usize,
+    /// The picker shows the image tab and waits for an image file to be dropped.
+    pub(super) image_wait: bool,
     pub(super) tooltip: dv_ui::widgets::tooltip::Tooltip,
     /// Layer rows scrolled off the top of the list.
     pub(super) layer_scroll: usize,
@@ -164,6 +166,7 @@ impl Editor {
             index,
             selection: Vec::new(),
             shown_page,
+            image_wait: false,
             tooltip: dv_ui::widgets::tooltip::Tooltip::new(),
             layer_scroll: 0,
             layer_wheel: 0.0,
@@ -415,6 +418,10 @@ impl Screen for Editor {
 
     fn mouse_up(&mut self) {
         self.release();
+    }
+
+    fn dropped_file(&mut self, path: &std::path::Path) {
+        self.drop_image_file(path);
     }
 
     fn middle_button(&mut self, pressed: bool) {

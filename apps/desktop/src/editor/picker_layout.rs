@@ -26,7 +26,7 @@ pub const STOPS_BAR_H: f64 = 16.0;
 const STOPS_H: f64 = STOPS_BAR_H + 16.0;
 pub const HANDLE_R: f64 = 7.0;
 /// Number of tabs: solid color, the gradient types and the pattern.
-pub const TABS: usize = 6;
+pub const TABS: usize = 7;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Part {
@@ -91,6 +91,8 @@ pub enum PHit {
     PickSource,
     Tiling,
     PatField(PatField),
+    /// One of the four image placement modes (fill, fit, tile, stretch).
+    ImageMode(usize),
 }
 
 /// What the popup contains: decides its height and where things are.
@@ -102,6 +104,8 @@ pub struct Shape {
     pub grad: Option<GradientKind>,
     /// A pattern is being edited: its controls replace the color editor.
     pub pattern: bool,
+    /// An image is being edited (or waited for): its controls replace the color editor.
+    pub image: bool,
     /// Rows of recent colors.
     pub rows: usize,
 }
@@ -125,7 +129,7 @@ fn offs(s: Shape) -> Offs {
     if s.tabs {
         y += TAB_H + GAP_V;
     }
-    if s.pattern {
+    if s.pattern || s.image {
         let pat_a = y;
         let pat_b = pat_a + FIELD_H + GAP_V + 8.0;
         return Offs {
@@ -293,6 +297,20 @@ pub fn pat_tiling_rect(p: Rect, s: Shape) -> Rect {
     Rect::new(p.x1 - PAD - TILING_W, y, p.x1 - PAD, y + FIELD_H)
 }
 
+/// Segment `k` of the four placement modes of the image editor.
+pub fn image_mode_rect(p: Rect, s: Shape, k: usize) -> Rect {
+    let y = p.y0 + offs(s).pat_b;
+    let w = (W - 2.0 * PAD - FIELD_GAP * 3.0) / 4.0;
+    let x = p.x0 + PAD + k as f64 * (w + FIELD_GAP);
+    Rect::new(x, y, x + w, y + FIELD_H)
+}
+
+/// The box above the modes: what image is used, or the hint to drop a file.
+pub fn image_box_rect(p: Rect, s: Shape) -> Rect {
+    let y = p.y0 + offs(s).pat_a;
+    Rect::new(p.x0 + PAD, y, p.x1 - PAD, y + FIELD_H)
+}
+
 pub fn pat_field_rect(p: Rect, s: Shape, i: usize) -> Rect {
     let n = PAT_FIELDS.len() as f64;
     let y = p.y0 + offs(s).pat_b;
@@ -311,11 +329,16 @@ pub fn recent_rect(p: Rect, s: Shape, i: usize) -> Rect {
 /// What the point hits inside the popup, if anything. `stops` are the positions of the
 /// gradient stops (empty when no gradient is edited).
 pub fn hit(p: Rect, s: Shape, at: Point, mode: Mode, recent: usize, stops: &[f64]) -> Option<PHit> {
-    if s.pattern {
+    if s.pattern || s.image {
         if s.tabs
             && let Some(i) = (0..TABS).find(|i| tab_rect(p, s, *i).contains(at))
         {
             return Some(PHit::Tab(i));
+        }
+        if s.image {
+            return (0..4)
+                .find(|k| image_mode_rect(p, s, *k).contains(at))
+                .map(PHit::ImageMode);
         }
         if pat_source_rect(p, s).contains(at) {
             return Some(PHit::PickSource);
@@ -390,12 +413,14 @@ mod tests {
         tabs: true,
         grad: None,
         pattern: false,
+        image: false,
         rows: 2,
     };
     const GRAD: Shape = Shape {
         tabs: true,
         grad: Some(GradientKind::Radial),
         pattern: false,
+        image: false,
         rows: 2,
     };
 
@@ -429,6 +454,7 @@ mod tests {
             tabs: true,
             grad: None,
             pattern: true,
+            image: false,
             rows: 3,
         };
         let p = popup(s);

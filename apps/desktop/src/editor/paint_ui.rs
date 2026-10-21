@@ -384,6 +384,10 @@ fn slot(
             swatch(cx, p.swatch_rect(which), &Paint::Gradient(g.clone()));
             value_box(cx, wide, kind_name(g.kind), "");
         }
+        Look::One(Paint::Image(i)) => {
+            swatch(cx, p.swatch_rect(which), &Paint::Image(i));
+            value_box(cx, wide, tr(Msg::PaintImage), "");
+        }
         Look::One(Paint::Pattern(_)) => {
             let sample = Paint::Pattern(dv_core::Pattern::new(dv_core::NodeId(0)));
             swatch(cx, p.swatch_rect(which), &sample);

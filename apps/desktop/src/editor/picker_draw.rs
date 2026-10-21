@@ -146,6 +146,10 @@ impl Editor {
         if shape.tabs {
             self.draw_tabs(cx, popup, shape, p);
         }
+        if shape.image {
+            self.draw_image(cx, popup, shape);
+            return;
+        }
         if shape.pattern {
             self.draw_pattern(cx, popup, shape);
             return;
@@ -163,9 +167,17 @@ impl Editor {
 
     fn draw_tabs(&self, cx: &mut Cx, popup: Rect, shape: Shape, p: &Picker) {
         let fill = self.fill_for_tabs();
-        let active = tab_of(fill.as_ref());
+        let active = if self.image_wait {
+            6
+        } else {
+            tab_of(fill.as_ref())
+        };
         for i in 0..TABS {
             let r = tab_rect(popup, shape, i);
+            if i == 6 {
+                super::picker_image::draw_image_tab(cx, r, i == active);
+                continue;
+            }
             if i == 5 {
                 draw_pattern_tab(cx, r, i == active);
                 continue;

@@ -39,7 +39,7 @@ pub fn fill_paint(
         Paint::Solid(c) => scene.fill(Fill::NonZero, world, color(*c), None, shape),
         Paint::Gradient(g) => fill_gradient(scene, world, shape, w, h, g),
         // A pattern needs the document to draw its tile: a flat stand-in here.
-        Paint::Pattern(_) => {
+        Paint::Pattern(_) | Paint::Image(_) => {
             scene.fill(Fill::NonZero, world, color(paint.main_color()), None, shape);
         }
     }

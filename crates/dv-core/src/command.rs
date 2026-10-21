@@ -71,6 +71,14 @@ pub enum Command {
         index: usize,
         name: String,
     },
+    /// Stores an image file in the page under `id` (an image fill refers to it).
+    AddImage {
+        id: u64,
+        bytes: crate::image::ImageBytes,
+    },
+    RemoveImage {
+        id: u64,
+    },
     /// Moves the page at `from` so that it ends up at `to`.
     MovePage {
         from: usize,
@@ -88,6 +96,7 @@ pub enum CommandError {
     EmptyRestore,
     /// A page index is out of range, or the last page would be removed.
     InvalidPage(usize),
+    MissingImage(u64),
 }
 
 impl Document {
@@ -136,6 +145,18 @@ impl Document {
                 })
             }
             Command::MovePage { from, to } => self.move_page(*from, *to),
+            Command::AddImage { id, bytes } => {
+                self.page_mut().images.insert(*id, bytes.clone());
+                Ok(Command::RemoveImage { id: *id })
+            }
+            Command::RemoveImage { id } => {
+                let bytes = self
+                    .page_mut()
+                    .images
+                    .remove(id)
+                    .ok_or(CommandError::MissingImage(*id))?;
+                Ok(Command::AddImage { id: *id, bytes })
+            }
             Command::Batch(cmds) => self.batch(cmds),
         }
     }

@@ -1,6 +1,7 @@
 //! What a shape is filled with: a color or a gradient.
 
 use crate::document::{Color, NodeId};
+use crate::image::ImageFill;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum GradientKind {
@@ -196,6 +197,7 @@ pub enum Paint {
     Solid(Color),
     Gradient(Gradient),
     Pattern(Pattern),
+    Image(ImageFill),
 }
 
 impl From<Color> for Paint {
@@ -210,14 +212,14 @@ impl Paint {
         match self {
             Paint::Solid(c) => *c,
             Paint::Gradient(g) => g.stops[0].color,
-            Paint::Pattern(_) => Color::rgb(160, 160, 168),
+            Paint::Pattern(_) | Paint::Image(_) => Color::rgb(160, 160, 168),
         }
     }
 
     pub fn solid(&self) -> Option<Color> {
         match self {
             Paint::Solid(c) => Some(*c),
-            Paint::Gradient(_) | Paint::Pattern(_) => None,
+            Paint::Gradient(_) | Paint::Pattern(_) | Paint::Image(_) => None,
         }
     }
 
@@ -225,6 +227,7 @@ impl Paint {
     pub fn to_code(&self) -> String {
         match self {
             Paint::Solid(c) => color_code(*c),
+            Paint::Image(i) => format!("i;{}", i.to_code()),
             Paint::Pattern(p) => format!(
                 "p;{};{};{};{};{};{}",
                 p.source.0,
@@ -254,6 +257,9 @@ impl Paint {
     }
 
     pub fn from_code(s: &str) -> Option<Paint> {
+        if let Some(rest) = s.strip_prefix("i;") {
+            return ImageFill::from_code(rest).map(Paint::Image);
+        }
         if let Some(rest) = s.strip_prefix("p;") {
             return parse_pattern(rest).map(Paint::Pattern);
         }

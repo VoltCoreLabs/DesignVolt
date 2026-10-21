@@ -327,6 +327,8 @@ pub struct Page {
     pub(crate) guides: Vec<UserGuide>,
     pub(crate) nodes: HashMap<NodeId, Node>,
     pub(crate) roots: Vec<NodeId>,
+    /// Image files used by image fills, by asset id.
+    pub(crate) images: std::collections::BTreeMap<u64, crate::image::ImageBytes>,
 }
 
 impl Page {
@@ -339,6 +341,26 @@ impl Page {
 
     pub fn node(&self, id: NodeId) -> Option<&Node> {
         self.nodes.get(&id)
+    }
+
+    pub fn image(&self, asset: u64) -> Option<&crate::image::ImageBytes> {
+        self.images.get(&asset)
+    }
+
+    /// Asset ids of the images some fill of the page shows.
+    pub fn used_images(&self) -> Vec<u64> {
+        let mut ids: Vec<u64> = self
+            .nodes
+            .values()
+            .flat_map(|n| n.fill.iter().chain(&n.extra_fills))
+            .filter_map(|p| match p {
+                crate::paint::Paint::Image(i) => Some(i.asset),
+                _ => None,
+            })
+            .collect();
+        ids.sort_unstable();
+        ids.dedup();
+        ids
     }
 
     pub fn guides(&self) -> &[UserGuide] {

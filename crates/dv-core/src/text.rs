@@ -111,6 +111,14 @@ pub fn to_text(doc: &Document) -> String {
                 g.pos
             ));
         }
+        for asset in page.used_images() {
+            if let Some(bytes) = page.image(asset) {
+                out.push_str(&format!(
+                    "image\t{asset}\t{}\n",
+                    crate::image::base64_encode(bytes)
+                ));
+            }
+        }
         for id in page.draw_order() {
             let Some(n) = page.node(id) else { continue };
             let g = n.geom;
@@ -221,6 +229,16 @@ pub fn from_text(text: &str) -> Result<Document, ParseError> {
                 let pos = f.next().and_then(|v| v.parse().ok());
                 page.guides
                     .extend(pos.map(|pos| UserGuide { vertical, pos }));
+            }
+            Some("image") => {
+                let page = pages
+                    .last_mut()
+                    .ok_or_else(|| err(n, "image before any page"))?;
+                let id = f.next().and_then(|v| v.parse::<u64>().ok());
+                let bytes = f.next().and_then(crate::image::base64_decode);
+                if let (Some(id), Some(bytes)) = (id, bytes) {
+                    page.images.insert(id, std::sync::Arc::new(bytes));
+                }
             }
             Some("node") => {
                 let page = pages
@@ -651,5 +669,47 @@ node	1	0	rect	0	0	10	10	0	0	3	ff0000ff	00ff00ff:2	old
         let back = from_text(&to_text(&doc)).unwrap();
         let n = back.page().node(a).unwrap();
         assert_eq!(n.extra_fills, [grad, Color::rgb(7, 8, 9).into()]);
+    }
+
+    #[test]
+    fn used_images_are_stored_in_the_file_and_unused_ones_are_dropped() {
+        use crate::image::ImageFill;
+        let mut doc = Document::default();
+        let a = doc.alloc_id();
+        let node = Node::new(NodeKind::Rectangle, "a", Geometry::default());
+        doc.apply(&Command::Create {
+            id: a,
+            parent: None,
+            index: 0,
+            node,
+        })
+        .unwrap();
+        let bytes = std::sync::Arc::new(vec![1u8, 2, 3, 250, 251]);
+        for id in [7, 8] {
+            doc.apply(&Command::AddImage {
+                id,
+                bytes: bytes.clone(),
+            })
+            .unwrap();
+        }
+        let props = Props {
+            fill: Some(Some(Paint::Image(ImageFill::new(7)))),
+            ..Props::default()
+        };
+        doc.apply(&Command::SetProps { id: a, props }).unwrap();
+        let back = from_text(&to_text(&doc)).unwrap();
+        assert_eq!(back.page().image(7), Some(&bytes));
+        assert!(
+            back.page().image(8).is_none(),
+            "unused image is not written"
+        );
+        assert_eq!(
+            back.page().node(a).unwrap().fill,
+            Some(Paint::Image(ImageFill::new(7)))
+        );
+        let inv = doc.apply(&Command::RemoveImage { id: 8 }).unwrap();
+        assert!(doc.page().image(8).is_none());
+        doc.apply(&inv).unwrap();
+        assert!(doc.page().image(8).is_some());
     }
 }

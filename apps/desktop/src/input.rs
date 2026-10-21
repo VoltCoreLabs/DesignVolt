@@ -83,6 +83,8 @@ pub trait Screen {
         self.scroll(dy);
     }
     fn middle_button(&mut self, _pressed: bool) {}
+    /// A file was dropped on the window.
+    fn dropped_file(&mut self, _path: &std::path::Path) {}
     fn key_up(&mut self, _key: Key) {}
     fn cursor(&self) -> Cursor {
         if self.pointer_hand() {

@@ -86,6 +86,7 @@ pub struct Projects {
     pub anchor: Option<Item>,
     /// Confirmation dialog (modal) that blocks the rest of the screen.
     pub modal: Option<super::projects_modal::Modal>,
+    pub tip: dv_ui::widgets::tooltip::Tooltip,
     /// "Delete forever" in the selection bar waits for a second click.
     pub bar_confirm: bool,
     pub next: Option<Transition>,
@@ -148,6 +149,7 @@ impl Projects {
             selected: Vec::new(),
             anchor: None,
             modal: None,
+            tip: dv_ui::widgets::tooltip::Tooltip::new(),
             bar_confirm: false,
             next: None,
         }

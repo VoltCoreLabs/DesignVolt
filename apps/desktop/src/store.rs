@@ -156,6 +156,7 @@ order={order}
     /// Removes the saved document of a deleted project.
     pub fn delete_document(&self, id: u64) {
         let _ = fs::remove_file(self.document_path(id));
+        let _ = fs::remove_file(self.document_path(id).with_extension("view"));
     }
 
     pub fn set_name(&mut self, raw: &str) {

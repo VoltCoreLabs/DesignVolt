@@ -60,6 +60,7 @@ impl Projects {
         self.paint_bar(&mut cx);
         self.paint_menu(&mut cx);
         self.paint_modal(&mut cx);
+        self.paint_tip(&mut cx);
     }
 
     fn nav_active(&self, loc: Location) -> bool {

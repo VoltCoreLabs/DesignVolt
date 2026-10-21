@@ -121,6 +121,7 @@ impl Screen for Projects {
         let hovered = self.hovered_item();
         let all = matches!(self.loc, Location::All(_));
         let mut busy = self.search.update(dt) | self.modal_update(dt);
+        busy |= self.update_tip(dt);
         busy |= self.new_project.update(
             dt,
             self.modal.is_none() && self.main_button_active() && self.at(l.new_project),

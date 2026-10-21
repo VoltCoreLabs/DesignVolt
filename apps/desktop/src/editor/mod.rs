@@ -38,6 +38,8 @@ mod state;
 mod stroke_pop;
 mod stroke_pop_layout;
 mod toolbar;
+mod tooltips;
+mod view_store;
 
 pub use session::Session;
 pub use state::Editor;

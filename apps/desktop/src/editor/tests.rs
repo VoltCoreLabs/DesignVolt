@@ -1182,3 +1182,26 @@ fn pages_switch_with_their_own_shapes_and_selection() {
     press_key(&mut ed, Key::Undo, CTRL);
     assert!(roots(&ed).is_empty());
 }
+
+#[test]
+fn the_layers_list_scrolls_with_the_wheel_and_stays_in_range() {
+    let mut ed = editor();
+    ed.tool = super::state::Tool::Rectangle;
+    for i in 0..60 {
+        ed.tool = super::state::Tool::Rectangle;
+        let x = i as f64 * 5.0;
+        drag(&mut ed, (x, 0.0), (x + 3.0, 40.0), NONE);
+    }
+    let total = ed.layer_total();
+    assert_eq!(total, 60);
+    let first = ed.layer_rows(1)[0].id;
+    let left = ed.layers_left();
+    ed.mouse_moved(left.center().x, left.y0 + 400.0);
+    ed.wheel(0.0, -120.0, NONE);
+    assert!(ed.layer_scroll > 0, "wheel down moves the list");
+    assert_ne!(ed.layer_rows(1)[0].id, first);
+    ed.wheel(0.0, -100_000.0, NONE);
+    assert_eq!(ed.layer_scroll, ed.layer_scroll_max(), "stops at the end");
+    ed.wheel(0.0, 100_000.0, NONE);
+    assert_eq!(ed.layer_scroll, 0, "and at the start");
+}

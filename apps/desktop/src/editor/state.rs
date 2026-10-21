@@ -103,6 +103,11 @@ pub struct Editor {
     pub(super) selection: Vec<NodeId>,
     /// The page the editor state (selection, view) belongs to.
     pub(super) shown_page: usize,
+    pub(super) tooltip: dv_ui::widgets::tooltip::Tooltip,
+    /// Layer rows scrolled off the top of the list.
+    pub(super) layer_scroll: usize,
+    /// Wheel distance not yet worth a whole row.
+    pub(super) layer_wheel: f64,
     pub(super) hover: Option<NodeId>,
     /// The property field of the right panel that is being typed into.
     pub(super) prop_edit: Option<super::props::PropEdit>,
@@ -159,6 +164,9 @@ impl Editor {
             index,
             selection: Vec::new(),
             shown_page,
+            tooltip: dv_ui::widgets::tooltip::Tooltip::new(),
+            layer_scroll: 0,
+            layer_wheel: 0.0,
             hover: None,
             prop_edit: None,
             guides: Vec::new(),
@@ -236,6 +244,37 @@ impl Editor {
         }
     }
 
+    /// How many rows the whole layers list has (collapsed groups hide their children).
+    pub(super) fn layer_total(&self) -> usize {
+        let s = self.session.borrow();
+        let page = s.exec.doc().page();
+        let mut stack: Vec<NodeId> = page.roots().to_vec();
+        let mut total = 0;
+        while let Some(id) = stack.pop() {
+            let Some(n) = page.node(id) else { continue };
+            total += 1;
+            if !self.collapsed.contains(&id) {
+                stack.extend(n.children.iter().copied());
+            }
+        }
+        total
+    }
+
+    /// Scrolls the layers list by a wheel movement (pixels, positive = down) and keeps the
+    /// offset inside the list.
+    pub(super) fn scroll_layers(&mut self, dy: f64) {
+        self.layer_wheel += dy;
+        let rows = (self.layer_wheel / dv_ui::theme::metrics::ROW_H).trunc();
+        self.layer_wheel -= rows * dv_ui::theme::metrics::ROW_H;
+        let max = self.layer_scroll_max();
+        self.layer_scroll = (self.layer_scroll as f64 + rows).clamp(0.0, max as f64) as usize;
+    }
+
+    pub(super) fn layer_scroll_max(&self) -> usize {
+        let fit = super::panels::max_layer_rows(self.layers_left());
+        self.layer_total().saturating_sub(fit)
+    }
+
     /// Layers panel rows, top-most first, at most `limit` of them.
     pub(super) fn layer_rows(&self, limit: usize) -> Vec<LayerRow> {
         let s = self.session.borrow();
@@ -243,7 +282,7 @@ impl Editor {
         let mut rows = Vec::new();
         let mut stack: Vec<(NodeId, usize)> = page.roots().iter().map(|id| (*id, 0)).collect();
         while let Some((id, depth)) = stack.pop() {
-            if rows.len() >= limit {
+            if rows.len() >= limit.saturating_add(self.layer_scroll) {
                 break;
             }
             let Some(n) = page.node(id) else { continue };
@@ -262,6 +301,8 @@ impl Editor {
                 stack.extend(n.children.iter().map(|c| (*c, depth + 1)));
             }
         }
+        let skip = self.layer_scroll.min(rows.len());
+        rows.drain(..skip);
         rows
     }
 
@@ -324,8 +365,11 @@ impl Screen for Editor {
                 s.centered = true;
             }
         }
+        if self.layer_scroll > 0 {
+            self.layer_scroll = self.layer_scroll.min(self.layer_scroll_max());
+        }
         let hovered = self.toolbar.hit(&self.layout(), self.mouse.x, self.mouse.y);
-        let busy = self.toolbar.update(dt, hovered);
+        let busy = self.toolbar.update(dt, hovered) | self.update_tooltip(dt);
         self.refresh_index();
         let saving = self
             .session
@@ -365,6 +409,7 @@ impl Screen for Editor {
 
     fn click(&mut self, mods: Mods) {
         self.mods = mods;
+        self.dismiss_tooltip();
         self.press(mods);
     }
 
@@ -455,6 +500,7 @@ impl Screen for Editor {
         self.draw_picker(&mut cx);
         self.draw_stroke_pop(&mut cx);
         self.draw_dropdown(&mut cx);
+        self.draw_tooltip(&mut cx);
         let p = self.intro(4.0);
         let clip = layout.toolbar.inflate(40.0, 40.0);
         cx.layer(clip, p, (0.0, 24.0 * (1.0 - p as f64)), |cx| {

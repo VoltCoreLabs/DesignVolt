@@ -14,6 +14,9 @@ use crate::store::write_atomic;
 /// Seconds a change waits before it is saved by itself.
 pub const AUTOSAVE_SECS: f32 = 1.0;
 
+/// Seconds the view rests before it is written.
+const VIEW_SAVE_SECS: f32 = 1.0;
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum SaveState {
     /// Everything is on disk.
@@ -34,6 +37,9 @@ pub struct Session {
     path: Option<PathBuf>,
     saved_revision: u64,
     unsaved_for: f32,
+    /// The view file as last written (or read), and how long the view has differed from it.
+    view_text: String,
+    view_for: f32,
 }
 
 impl Session {
@@ -45,7 +51,7 @@ impl Session {
 
     fn with(doc: Document, path: Option<PathBuf>) -> Self {
         let saved_revision = doc.revision();
-        Self {
+        let mut s = Self {
             exec: Executor::new(doc),
             vp: Viewport::default(),
             centered: false,
@@ -53,7 +59,11 @@ impl Session {
             path,
             saved_revision,
             unsaved_for: 0.0,
-        }
+            view_text: String::new(),
+            view_for: 0.0,
+        };
+        s.view_text = s.current_view_text();
+        s
     }
 
     /// Opens the document stored at `path`, or starts a new one named `name` when there is none.
@@ -70,7 +80,54 @@ impl Session {
             },
             Err(_) => Document::new(name),
         };
-        Self::with(doc, Some(path))
+        let mut s = Self::with(doc, Some(path));
+        s.restore_view();
+        s
+    }
+
+    fn view_path(&self) -> Option<PathBuf> {
+        self.path.as_ref().map(|p| p.with_extension("view"))
+    }
+
+    fn current_view_text(&self) -> String {
+        super::view_store::to_text(self.exec.doc().current_page(), &self.views, self.vp)
+    }
+
+    /// Puts the document back on the page and view it was closed with.
+    fn restore_view(&mut self) {
+        let Some(path) = self.view_path() else { return };
+        let Ok(text) = fs::read_to_string(&path) else {
+            return;
+        };
+        let saved = super::view_store::from_text(&text);
+        let clean = !self.is_dirty();
+        self.exec.set_page(saved.page);
+        if clean {
+            self.saved_revision = self.exec.doc().revision();
+        }
+        let cur = self.exec.doc().current_page();
+        self.views = saved.views;
+        if let Some(Some(v)) = self.views.get(cur) {
+            self.vp = *v;
+            self.centered = true;
+        }
+        self.view_text = self.current_view_text();
+    }
+
+    /// Writes the view file when the view changed.
+    fn save_view(&mut self) {
+        let Some(path) = self.view_path() else { return };
+        let text = self.current_view_text();
+        if text == self.view_text {
+            return;
+        }
+        if let Some(dir) = path.parent() {
+            let _ = fs::create_dir_all(dir);
+        }
+        if write_atomic(&path, &text).is_ok() {
+            self.view_text = text;
+        }
+        self.view_for = 0.0;
     }
 
     pub fn state(&self) -> SaveState {
@@ -87,6 +144,7 @@ impl Session {
 
     /// Writes the document if it changed. Returns true when something was written.
     pub fn save(&mut self) -> bool {
+        self.save_view();
         let Some(path) = &self.path else { return false };
         if !self.is_dirty() {
             return false;
@@ -110,15 +168,23 @@ impl Session {
     /// Autosave: saves once a change has been waiting for `AUTOSAVE_SECS` and the user is not in
     /// the middle of a drag (`busy`). Returns true while a save is still pending.
     pub fn tick(&mut self, dt: f32, busy: bool) -> bool {
+        let view_pending = self.path.is_some() && self.current_view_text() != self.view_text;
+        if view_pending {
+            self.view_for += dt;
+            if self.view_for >= VIEW_SAVE_SECS && !busy {
+                self.save_view();
+            }
+        }
+        let view_pending = view_pending && self.current_view_text() != self.view_text;
         if self.path.is_none() || !self.is_dirty() {
             self.unsaved_for = 0.0;
-            return false;
+            return view_pending;
         }
         self.unsaved_for += dt;
         if self.unsaved_for >= AUTOSAVE_SECS && !busy {
             self.save();
         }
-        self.is_dirty()
+        self.is_dirty() || view_pending
     }
 }
 
@@ -229,5 +295,32 @@ mod tests {
         assert_eq!(s.state(), SaveState::NoFile);
         assert!(!s.save());
         assert!(!s.tick(5.0, false));
+    }
+
+    #[test]
+    fn the_view_and_page_come_back_after_reopening() {
+        let path = temp("view");
+        let mut s = Session::open("Doc", path.clone());
+        s.exec
+            .execute(
+                "Add page",
+                Command::InsertPage {
+                    index: 1,
+                    page: Box::new(dv_core::Page::new("Two")),
+                },
+            )
+            .unwrap();
+        s.vp = Viewport {
+            zoom: 2.5,
+            pan: kurbo::Vec2::new(-40.0, 17.0),
+        };
+        s.save();
+        let back = Session::open("Doc", path.clone());
+        assert_eq!(back.exec.doc().current_page(), 1);
+        assert_eq!(back.vp.zoom, 2.5);
+        assert_eq!(back.vp.pan.x, -40.0);
+        assert!(back.centered, "a restored view is not re-centered");
+        assert_eq!(back.state(), SaveState::Saved);
+        let _ = fs::remove_dir_all(path.parent().unwrap().parent().unwrap());
     }
 }

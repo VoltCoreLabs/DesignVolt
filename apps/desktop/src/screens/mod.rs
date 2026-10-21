@@ -7,5 +7,6 @@ mod projects_input;
 mod projects_menu;
 mod projects_modal;
 mod projects_paint;
+mod projects_tip;
 pub mod settings;
 pub mod welcome;
